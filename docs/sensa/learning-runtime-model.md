@@ -149,6 +149,8 @@ Learner Sense Progress 是从同一 Sense 的全部 Retention Targets 与 Sense-
 
 界面可以保存乐观预览，但不能绕过本地 Learning Runtime 直接声明这些权威投影。
 
+恢复已保存学习库时，已存 Target 与 FSRS Memory State 是日常运行权威。恢复保留格式、字段值域、身份、精确材料 pins、版本和引用闭合、合法冲突分支与原子提交校验；普通恢复不以重新执行全部历史算法作为准入门槛。完整历史仍保留，可为修复、算法升级或专项审计显式重算。恢复保真与历史算法一致性是不同保证，后者的矛盾可能在后续审计才发现。
+
 ## 3. Learning Protocol Run
 
 每个正式学习过程固定一个 `protocolId + protocolVersion`、`purpose`、Learning Target、Effective
@@ -1182,12 +1184,13 @@ Memory Outcome、Scheduling Decision 及相应投影。断网不会降低这些�
 
 上述原子提交必须先通过 Learning System authority。普通命令使用事务的 changed-record transition 做
 增量准入，并以同一份固定 Protocol/Policy/Materialization 独立重放新 Event；只有重放得到的 Run、
-Target 与 Memory/Schedule 投影和待提交值完全一致时才可落库。完整 Sync/restore 使用该 authority 的
-全历史入口，而不是信任随快照传来的 projection。
+Target 与 Memory/Schedule 投影和待提交值完全一致时才可落库。普通自有账号 Sync/restore 接收该
+writer 已提交的日志与保存态，只检查数据完整性和直接引用。完整历史业务证明留给实际冲突的受影响
+分支、未知来源的外部导入以及显式审计/修复；已有旧裁决本身不触发普通同步的历史重放。
 
 普通账号同步以本地已经提交的版本化记录为输入，传输清单和内容寻址数据块。服务端可以保存并返回
 账号副本，但不得重新运行 Protocol、重新评分、重算 FSRS，或把同步成功本身变成学习事实。下载记录
-必须先通过摘要、引用与可重放性校验，再由本地库在提交时合并；同步记账不得触发第二次业务结算。
+必须先通过摘要、身份、保存态字段、精确材料 pins、直接引用与不可改写事实校验，再由本地库在提交时合并；同步记账不得触发第二次业务结算。
 本机提交是当前设备上的保存结果；账号副本是延迟形成的 Cloud Checkpoint，不参与逐操作确认。
 Checkpoint 以本机内容版本与已确认基线判断待同步事实，同步期间产生的新版本必须保留到下一次传输。
 Device Operation Ledger 中的命令输入和返回值都不是学习事实，只留在产生它们的设备上。Learning Event
@@ -1197,13 +1200,18 @@ Device Operation Ledger 中的命令输入和返回值都不是学习事实，�
 
 “Event is truth, State is projection”只是本系统的速记。准确规则是：已经结算的 Run、Action、Observation、
 Evidence、Transition、Completion、Memory Outcome、Scheduling Decision 与 Learning Reconciliation
-Decision 是不可改写事实；当前 progress、Memory/due 读取模型及其他运行投影由这些事实与当时固定的
-Policy、Protocol、Materialization 和算法版本验证或重建。一个缺少这些固定合同的裸事件流不具备权威性。
+Decision 是不可改写事实；本机写入验证本次 progress、Memory/due 与这些事实及固定合同一致。
+普通账号同步以已保存状态继续运行，历史事实与当时固定的 Policy、Protocol、Materialization 和
+算法版本保留给具名的审计/修复。结构完整而业务自相矛盾的历史可能在同步后才被审计发现。一个缺少这些固定合同的裸事件流不具备权威性。
 
 同一已确认基线之后，两个设备若为同一 Target 分别完成互不重叠的 Learning Run，两端 Run 与 Event
-都保留；它们不能进入普通“本机/云端”内容选择。版本化 Learning Reconciliation Decision 以最后完成
-Run 的 `(completedAt, runId)` 全序确定负责当前 Memory/Schedule 投影的分支，另一分支只作为 history-only
-事实保留，不再次贡献 Scheduling Decision。未完成、共享 Run 或结构/策略边界不一致的分支不自动裁决。
+都保留；它们不能进入普通“本机/云端”内容选择。已确认基线的因果后继直接采用保存态；共享前驱
+尚未进入基线时，可用 successor participant 固定的精确 retentionBaseline 与对端保存态直接核对，
+包含同 revision 的 Relearning 变化，不把 revision 高低当作跨分支因果证明。只有真正并发的已完成
+分支才按末端 Run 的 `(completedAt, runId)` 全序选择当前 Memory/Schedule 保存态，同一完成时间按
+Run ID 固定字节序。早期日志晚到只补历史。设备完成时间不纠正真实时钟，时钟不准时并发胜者可能
+不符合真实先后；非法时间仍拒绝。因果后继不会被祖先的未来时间永久压过。选择记录保留另一分支
+为 history-only，不叠加调度；共享 Run、未完成或结构/策略不兼容时停止自动裁决，保留完整双方。
 
 Curriculum、Personal Content、正式 Learning Runtime 与 Free Practice 使用各自的 identity、revision、
 tombstone 和幂等规则。界面、模型输出、导入器与同步适配器只能提交各模块允许的 command/fact，不能

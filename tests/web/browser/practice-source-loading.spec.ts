@@ -24,6 +24,60 @@ test.beforeAll(async()=>{
 });
 test.afterAll(async()=>{if(server?.listening)await new Promise<void>(done=>server.close(()=>done()));});
 
+test('Language settings waits for saved Routes before exposing an active choice, and persists the next selection',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();await window.practiceScopeFixture.changeLanguage('ja');await window.practiceScopeFixture.holdAndMount(true);});
+ const panel=page.getByRole('dialog',{name:'语言路线',exact:true});
+ await expect(panel.getByRole('status')).toHaveText('正在加载 Sensa…');await expect(panel.getByRole('radio')).toHaveCount(0);
+ await page.evaluate(()=>window.practiceScopeFixture.releaseRead());
+ await expect(panel.getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');
+ await expect(panel.getByRole('combobox',{name:'选择辅助语言',exact:true})).toHaveValue('ja');
+ const english=panel.getByRole('radio',{name:/English/});await expect(english).toHaveAttribute('aria-checked','false');await english.click();await expect(english).toHaveAttribute('aria-checked','true');
+ await page.reload();await page.waitForFunction(()=>!!window.practiceScopeFixture);await page.evaluate(()=>window.practiceScopeFixture.mount(true));
+ await expect(page.getByRole('dialog',{name:'语言路线',exact:true}).getByRole('radio',{name:/English/})).toHaveAttribute('aria-checked','true');await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
+test('Language settings exposes a failed saved read and retry, while failed availability never hides readable Routes',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();await window.practiceScopeFixture.changeLanguage('ja');await window.practiceScopeFixture.breakLanguageRead();window.practiceScopeFixture.mount(true);});
+ const panel=page.getByRole('dialog',{name:'语言路线',exact:true}),retry=panel.getByRole('button',{name:'重试',exact:true});
+ await expect(retry).toBeEnabled();await expect(panel.getByRole('radio')).toHaveCount(0);await expect(panel.getByText('正在加载 Sensa…',{exact:true})).toHaveCount(0);
+ await page.evaluate(()=>{window.practiceScopeFixture.repairLanguageRead();window.practiceScopeFixture.breakAvailability();});await retry.click();
+ await expect(panel.getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');await expect(retry).toBeEnabled();await expect(panel.getByRole('combobox',{name:'选择辅助语言',exact:true})).toHaveValue('ja');
+ await page.evaluate(()=>window.practiceScopeFixture.repairAvailability());await retry.click();await expect(retry).toHaveCount(0);await expect(panel.getByRole('status')).toHaveCount(0);
+ const english=panel.getByRole('radio',{name:/English/});await english.click();await expect(english).toHaveAttribute('aria-checked','true');
+ await page.evaluate(()=>window.practiceScopeFixture.breakLanguageRead());await panel.getByRole('radio',{name:/Français/}).click();
+ await expect(retry).toBeEnabled();await expect(panel.getByRole('radio')).toHaveCount(0);
+ await page.evaluate(()=>window.practiceScopeFixture.repairLanguageRead());await retry.click();await expect(english).toHaveAttribute('aria-checked','true');
+ await page.evaluate(()=>window.practiceScopeFixture.loseNextRouteCommitReply());await panel.getByRole('radio',{name:/Français/}).click();
+ await expect(panel.getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');await expect(panel.getByRole('status')).toHaveText('未能确认保存结果，请核对当前状态后再操作。');await expect(retry).toHaveCount(0);
+ expect(await page.evaluate(()=>window.practiceScopeFixture.lostRouteCommitReplyCount())).toBe(1);
+ expect(await page.evaluate(()=>window.practiceScopeFixture.routeCommitCallCount())).toBe(1);
+ await page.reload();await page.waitForFunction(()=>!!window.practiceScopeFixture);await page.evaluate(()=>window.practiceScopeFixture.mount(true));await expect(page.getByRole('dialog',{name:'语言路线',exact:true}).getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
+test('Language settings retains read recovery when an older unconfirmed refresh finishes after a newer failed observation',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();await window.practiceScopeFixture.changeLanguage('ja');window.practiceScopeFixture.mount(true);});
+ const panel=page.getByRole('dialog',{name:'语言路线',exact:true}),retry=panel.getByRole('button',{name:'重试',exact:true});
+ await expect(panel.getByRole('radio',{name:/Français/})).toHaveAttribute('aria-checked','true');
+ await page.evaluate(()=>{window.practiceScopeFixture.holdAvailabilityReads();window.dispatchEvent(new Event('sensa-library-changed'));});
+ await expect.poll(()=>page.evaluate(()=>window.practiceScopeFixture.availabilityReadsHeld())).toBe(1);
+ await page.evaluate(()=>window.practiceScopeFixture.loseNextRouteCommitReply());await panel.getByRole('radio',{name:/English/}).click();
+ await expect.poll(()=>page.evaluate(()=>window.practiceScopeFixture.availabilityReadsHeld())).toBe(2);
+ await page.evaluate(async()=>{await window.practiceScopeFixture.breakLanguageRead();window.dispatchEvent(new Event('sensa-library-changed'));window.practiceScopeFixture.releaseFirstAvailabilityRead();});
+ await expect(retry).toBeVisible();await expect(panel.getByRole('radio')).toHaveCount(0);
+ await page.evaluate(()=>window.practiceScopeFixture.releaseAvailabilityReads());
+ await expect(panel.getByRole('button',{name:'完成',exact:true})).toBeEnabled();await expect(retry).toBeEnabled();await expect(panel.getByRole('radio')).toHaveCount(0);
+ await page.evaluate(()=>window.practiceScopeFixture.repairLanguageRead());await retry.click();
+ await expect(panel.getByRole('radio',{name:/English/})).toHaveAttribute('aria-checked','true');
+ expect(await page.evaluate(()=>window.practiceScopeFixture.lostRouteCommitReplyCount())).toBe(1);expect(await page.evaluate(()=>window.practiceScopeFixture.routeCommitCallCount())).toBe(1);
+ await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
 test('saved Expression material selection survives loading, read failure and retry without fallback',async({page})=>{
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
@@ -101,4 +155,21 @@ test('changing language during the one-expression start read retires its old-lan
  await expect(page.getByText('当前没有可练内容',{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>window.practiceScopeFixture.currentExpression())).toBeNull();
  await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
+test('cancelled start and material navigation retire held reads without adopting an expression or retaining a busy state',async({page})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);
+ const preference=await page.evaluate(()=>window.practiceScopeFixture.prepare());await page.evaluate(()=>window.practiceScopeFixture.mount());const activity=page.locator('.sensa-practice-activities').getByRole('button');await expect(activity).toBeEnabled();
+ await page.evaluate(()=>window.practiceScopeFixture.holdStartRead());await activity.click();await expect(page.getByRole('button',{name:'取消启动',exact:true})).toBeVisible();await expect(activity).toBeDisabled();
+ await page.getByRole('button',{name:'取消启动',exact:true}).click();await expect(activity).toBeEnabled();await page.evaluate(()=>window.practiceScopeFixture.releaseMaterialRead());await expect(page.locator('#s-real-world-listening')).toHaveCount(0);expect(await page.evaluate(()=>window.practiceScopeFixture.currentExpression())).toBeNull();
+ await page.evaluate(()=>window.practiceScopeFixture.holdStartRead());await activity.click();await expect(page.getByRole('button',{name:'取消启动',exact:true})).toBeVisible();await page.getByRole('button',{name:'练习材料',exact:true}).click();
+ const chooser=page.locator('#s-practice-scope');await expect(chooser).toBeVisible();await page.evaluate(()=>window.practiceScopeFixture.releaseMaterialRead());await expect(chooser).toBeVisible();await chooser.getByRole('button',{name:'使用 1 个表达',exact:true}).click();await expect(activity).toBeEnabled();
+ expect(await page.evaluate(()=>window.practiceScopeFixture.currentExpression())).toBeNull();expect(await page.evaluate(()=>window.practiceScopeFixture.preference())).toEqual(preference);expect(await page.evaluate(()=>window.practiceScopeFixture.learningReadCount())).toBe(0);await page.evaluate(()=>window.practiceScopeFixture.dispose());
+});
+
+test('offline practice retains selectable local materials and states its actual external service requirement',async({page,context})=>{
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());await page.goto(origin);await page.waitForFunction(()=>!!window.practiceScopeFixture);await page.evaluate(async()=>{await window.practiceScopeFixture.prepare();window.practiceScopeFixture.mount();});
+ const activity=page.locator('.sensa-practice-activities').getByRole('button');await expect(activity).toBeEnabled();await expect(page.getByText('本模式使用 YouGlish 在线播放，无需模型服务。',{exact:true})).toBeVisible();await page.getByText('聆听说明',{exact:true}).click();await expect(page.getByText('播放器尚未检查；打开聆听后再检查。',{exact:true})).toBeVisible();
+ await context.setOffline(true);try{await expect(activity).toBeDisabled();await expect(page.getByText('当前离线；已有材料仍可选择，播放需要联网。',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'练习材料',exact:true})).toBeEnabled();await page.getByRole('button',{name:'练习材料',exact:true}).click();await expect(page.locator('#s-practice-scope')).toBeVisible();}finally{await context.setOffline(false);}
+ await page.getByRole('button',{name:'使用 1 个表达',exact:true}).click();await expect(activity).toBeEnabled();expect(await page.evaluate(()=>window.practiceScopeFixture.learningReadCount())).toBe(0);await page.evaluate(()=>window.practiceScopeFixture.dispose());
 });

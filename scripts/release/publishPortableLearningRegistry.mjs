@@ -4,7 +4,7 @@ import {mkdir, readFile, writeFile} from "node:fs/promises";
 import {dirname, resolve} from "node:path";
 
 import {createClient} from "@supabase/supabase-js";
-import {readSensaPortableBook} from "@sensa/content-validator/portable-book";
+import {createPortableBookPreview,readPortableBookPreview,readSensaPortableBook} from "@sensa/content-validator/portable-book";
 import {
   canonicalConsumerJson,
   sensaPortableBookDescriptorSchema,
@@ -104,6 +104,7 @@ async function publishInBatches(tasks, label, work) {
 }
 
 const bookTasks = [];
+const previewTasks = [];
 for (const descriptor of registry.items) {
   const bookRelative = [
     "books",
@@ -130,9 +131,18 @@ for (const descriptor of registry.items) {
     byteLength: bookBytes.byteLength,
     sha256: archive.archiveDigest,
     url: descriptor.url,
+    ...(descriptor.preview?{preview:descriptor.preview}:{}),
   });
   if (canonicalConsumerJson(expectedDescriptor) !== canonicalConsumerJson(descriptor)) {
     throw new Error("Portable Book identity does not match the Registry descriptor");
+  }
+  if(descriptor.preview){
+    const previewRelative=['books',descriptor.book.bookId,descriptor.book.bookVersionId,`${descriptor.preview.sha256}.preview.json`].join('/');
+    const previewBytes=await readFile(resolve(releaseRoot,previewRelative));
+    const preview=readPortableBookPreview(previewBytes,descriptor);
+    if(canonicalConsumerJson(preview)!==canonicalConsumerJson(createPortableBookPreview(archive)))
+      throw new Error('Public preview does not represent the admitted Book content');
+    previewTasks.push({previewRelative,previewBytes,expectedUrl:descriptor.preview.url});
   }
   bookTasks.push({bookRelative, bookBytes, memberCount: archive.members.length, expectedUrl: descriptor.url});
 }
@@ -144,6 +154,11 @@ await publishInBatches(bookTasks, "Portable Books", async ({bookRelative, bookBy
     portableBookContentType,
   );
   if (bookUrl !== expectedUrl) throw new Error("Portable Book URL does not match the publication target");
+});
+
+await publishInBatches(previewTasks,'Portable Book previews',async({previewRelative,previewBytes,expectedUrl})=>{
+  const url=await publishObject(`releases/${previewRelative}`,previewBytes,'application/json');
+  if(url!==expectedUrl)throw new Error('Preview URL does not match the publication target');
 });
 
 const packageCount = bookTasks.reduce((total, task) => total + task.memberCount, 0);

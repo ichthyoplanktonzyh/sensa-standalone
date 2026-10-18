@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { SemanticAgentTurnInput, SemanticAgentWorkingSet } from './semanticAgent';
 import type { MeaningLookupMatch } from './meaningLookup';
+import { newUuid } from './ids';
 
 const text = z.string().trim().min(1).max(4000);
 const expressionType = z.enum(['word', 'phrase', 'construction', 'sentence', 'utterance_strategy']);
@@ -9,17 +10,14 @@ const expressionType = z.enum(['word', 'phrase', 'construction', 'sentence', 'ut
 export const organizeAnswerSchema = z.object({
   context: text,
   sense: text,
-  senseKey: text.max(200),
-  scene: text,
+  scene: text.optional(),
   expression: text,
   expressionType,
-  relation: z.enum(['realizes', 'approximates', 'evokes']),
-  coverage: z.enum(['exact', 'broader', 'narrower', 'overlapping']),
   reason: text,
   changeReason: text.optional(),
 }).strict();
 
-const reusedAnswerSchema=organizeAnswerSchema.omit({sense:true,senseKey:true,scene:true}).extend({
+const reusedAnswerSchema=organizeAnswerSchema.omit({sense:true,scene:true}).extend({
   reuseSense:z.object({senseId:z.uuid(),senseVersionId:z.uuid()}).strict(),
 }).strict();
 
@@ -67,7 +65,7 @@ export function parseTeacherTurn(raw:unknown,input:SemanticAgentTurnInput,looked
           ||input.workingSet.expression?.expressionType!==fields.expressionType)))throw new Error('teacher_learner_edit_changed');
       const familiar=input.material.familiarExpression?.trim();
       if(familiar&&normalize(familiar)!==normalize(fields.expression)&&!fields.changeReason)throw new Error('teacher_expression_changed_silently');
-      proposal={...fields,reuseSense:selection,senseKey:reused.senseKey,sense:reused.semanticSpec.coreMeaningFocus,scene:reused.semanticSpec.prototypeScenes[0]!.summary};
+      proposal={...fields,reuseSense:selection,sense:reused.semanticSpec.coreMeaningFocus};
     }else proposal=parseOrganizedAnswer(result.proposal,input);
   }
   const reply=parseLearnerReply({text:result.reply},proposal,input.material.familiarExpression);
@@ -129,15 +127,15 @@ export function workingSetForAnswer(answer: OrganizedAnswer, input: SemanticAgen
     surfaceForm: answer.expression,
     expressionType: answer.expressionType,
     languageTag: input.languages.targetLanguageTag,
-    relation: answer.relation,
-    semanticCoverage: answer.coverage,
+    relation: null,
+    semanticCoverage: null,
     rationale: answer.reason,
   };
   return {
     context: { summary: answer.context, salientDetails: [], unresolvedDetails: [], rationale: answer.reason },
     focus: input.workingSet.focus,
     sense: {
-      proposedSenseKey: answer.senseKey,
+      proposedSenseKey: reused?.senseKey ?? `personal-${newUuid()}`,
       ...(reused?{reuseSense:{senseId:reused.senseId,senseVersionId:reused.senseVersionId}}:{}),
       ...(reused?structuredClone({
         coreMeaningFocus:reused.semanticSpec.coreMeaningFocus,prototypeScenes:reused.semanticSpec.prototypeScenes,
@@ -145,7 +143,7 @@ export function workingSetForAnswer(answer: OrganizedAnswer, input: SemanticAgen
         neighborContrasts:reused.semanticSpec.neighborContrasts,openQuestions:reused.semanticSpec.openQuestions,
       }):{
         coreMeaningFocus: answer.sense,
-        prototypeScenes: [{ summary: answer.scene, participantRoles: [], states: [], directionOrCausality: null }],
+        prototypeScenes: answer.scene ? [{ summary: answer.scene, participantRoles: [], states: [], directionOrCausality: null }] : [],
         includedCases: [], excludedCases: [], neighborContrasts: [], openQuestions: [],
       }),
       unresolvedQuestions: [],

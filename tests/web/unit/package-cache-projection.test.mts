@@ -135,7 +135,7 @@ test('the derived index is rebuilt from the current cache without changing sourc
  const raw=new sqlite3.oo1.DB(':memory:','c');
  const db=new SqliteRecordDatabase(sqlite3,raw,'memory');
  raw.exec(sqliteLibrarySchema);
- raw.exec('DROP TABLE sensa_package_cache_projection; PRAGMA user_version=12');
+ raw.exec(`DROP TABLE sensa_package_cache_projection; PRAGMA user_version=${sqliteLibrarySchemaVersion}`);
  for(const value of records)raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['packageCache',value.key,encoded(value)]});
  raw.exec({sql:'INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)',bind:['meta','owner-proof',encoded({value:'preserve-me'})]});
  try{

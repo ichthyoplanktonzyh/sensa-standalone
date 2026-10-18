@@ -1,9 +1,11 @@
 export type CloudSyncFailureKind='transient'|'terminal';
 
 export const cloudSyncRetryDelaysMs=[15_000,60_000,300_000] as const;
+export const cloudCheckpointSchedule={idleMs:30_000,maxDirtyMs:60_000,pullStaleMs:60_000} as const;
 
 const transientErrors=new Set([
  'library_sync_network',
+ 'library_sync_stalled',
  'library_sync_rate_limited',
  'library_sync_server_error',
  'library_sync_head_changed',
@@ -22,7 +24,8 @@ export function automaticCloudSyncRetryAt(state:{status:string;failureKind?:Clou
  const value=Date.parse(state.retryAt);return Number.isFinite(value)?value:null;
 }
 
-export function blocksAutomaticCloudSync(state:{status:string;failureKind?:CloudSyncFailureKind;retryAt?:string}|undefined){
+export function blocksAutomaticCloudSync(state:{status:string;error?:string;failureKind?:CloudSyncFailureKind;retryAt?:string}|undefined){
+ if(state?.error==='library_sync_cancelled')return true;
  if(state?.status==='conflict')return true;
  if(state?.status!=='failed')return false;
  // Releases before failureKind existed persisted every failure as `failed`.

@@ -95,18 +95,20 @@ content 支持。Learning Policy 可以协调选择这些正交对象，但不�
 
 ## 3. Learning Target
 
-Learning Target 至少固定：
+Learning Target 的稳定身份固定 learner、stable Sense 与 target Expression。每条来源至少固定：
 
 - stable Sense identity 与 Sense Version；
 - target Language Tag；
-- primary target Sense Expression Binding 及所需 form version；
+- target Expression identity、Expression Version、Sense Expression Binding identity 与 Binding Version；
 - learner、Curriculum provenance 与 Learning Entry Provenance。
 
 Learning Protocol 在创建 Protocol Run 时与 target 绑定；它不属于 target identity，因此切换学习方式
 不会悄悄创建另一个“要学的连接”。
 
-Personal Meaning 与 Personal Anchors 可以作为来源或 learner-authorized scaffold，但不成为 target
-identity。
+Personal Meaning 与 Personal Anchors 可以作为来源或 learner-authorized scaffold，但不成为 target identity。
+每个 Curriculum Membership 保存不可变的六项 source pin：Sense／Sense Version、Expression／Expression Version、
+Binding／Binding Version。材料、Study Scope 与 Scene revision 固定实际采用的来源；Run 沿自己的材料与版本回放。
+同一 Target 的新版来源追加 membership，不覆盖旧 pin。当前表达展示取当前所选材料，历史展示取实际 Run 材料。
 
 ### Language Learning Route 与语言上下文
 
@@ -126,8 +128,8 @@ support-language 解释，反向写作则以 support-language prompt 要求 targ
 Route Selection 只影响新操作，不得重绑已经开始的工作。
 
 同一个 Retention Target 可以从多个兼容 Route 或 Curriculum source 进入，但仍只有一份 Protocol
-history、Evidence 与 FSRS Memory State。若 Target Language 或 target Binding 真正改变，则产生新的
-Learning/Retention Target；只改变 Support Language 不会宣称建立了新的记忆连接。
+history、Evidence 与 FSRS Memory State。若 stable Sense 或目标 Expression identity 真正改变，则产生新的
+Learning/Retention Target；普通版本或 Binding 修订、Context 与 Support Language 改变不另建记忆连接。
 
 ### 独立入口与 Personal Semantic World bridge
 
@@ -147,7 +149,7 @@ Effective Learning Policy 与 ready plan，不读取 Personal Semantic World mem
   history、Evidence 或 FSRS State；
 - Personal Anchor 只在 learner 明确授权且当前 Materialization contract 允许时成为可选 scaffold；它
   不是 direct learning 或 personal-first learning 的运行依赖；
-- 同一 learner × Sense × target binding 无论来自 Book、direct entry 或 personal-first bridge，都解析到
+- 同一 learner × stable Sense × target Expression 无论来自 Book、direct entry 或 personal-first bridge，都解析到
   同一个 Retention Target，并按 Curriculum source provenance 去重。
 
 这是一条可选单向桥接，而不是模块绑定：
@@ -159,11 +161,11 @@ Learning ──╳──▶ implicit Personal Meaning creation
 
 ### Retention Target：长期记忆身份
 
-Learning Target 是一次正式学习意图的固定输入；Retention Target 是这条连接跨内容版本、
+Learning Target 是稳定的目标连接，具体学习意图的固定输入由不可变 membership／材料承载；Retention Target 是这条连接跨内容版本、
 Protocol Run 和多次 Session 持续存在的 learner-specific identity。其默认身份为：
 
 ```text
-learner × stable Sense × target Sense Expression Binding
+learner × stable Sense × target Expression
 ```
 
 同一 Sense 下的 `buy`、`purchase` 或 `acquire` 是不同的目标表达，必须拥有独立 Retention

@@ -71,3 +71,11 @@ test('rejected indexed candidates refill the new-learning prefix without consumi
  const expected={due:[],initialReady:[{id:fresh[2]!.id,relearnAt:null}],nextChangeAt:null};
  expect(candidates.read(query)).toEqual(expected);expect(runtimeLearningCandidatesFromRecords(projection,query)).toEqual(expected);
 });
+
+test('bounded due forecasts share exact candidate qualification, Target deduplication, language direction and record-kind filters',async()=>{
+ const {learningScheduleFromRecords}=await import('../../../apps/web/src/data/library/runtimeLearningCandidates');
+ const base={languageContext:context,clock,days:7 as const,kind:'all' as const,day:null,offset:0,limit:20,supportedPolicies};
+ for(const query of [base,{...base,days:30 as const,offset:40},{...base,kind:'retention_review' as const},{...base,kind:'relearning' as const},{...base,clock:clock+120_000},{...base,supportedPolicies:[]},{...base,languageContext:{...context,supportLanguageTag:'fr'}}]){
+  const expected=learningScheduleFromRecords(stored,query),actual=candidates.schedule(query);expect(actual).toEqual(expected);expect(actual.targets.length).toBeLessThanOrEqual(20);expect(actual.days.length).toBeLessThanOrEqual(30);expect(actual.days.reduce((sum,row)=>sum+row.retention_review+row.relearning,0)).toBe(actual.total);
+ }
+});

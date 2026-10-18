@@ -15,12 +15,15 @@ export function assertCurrentMeaningReceipt(record:MeaningJourneyRecord|undefine
 
 export function hasSceneReceiptWitness(record:MeaningJourneyRecord|undefined,receipt:CommandReceipt){
  const result=receipt.result;
- return !!record&&record.personalMeaning.personalMeaningId===result.personalMeaningId&&record.personalSemanticAnchorRevisions.some(revision=>revision.personalSemanticAnchorId===result.personalSemanticAnchorId&&revision.personalSemanticAnchorRevisionId===result.personalSemanticAnchorRevisionId&&revision.provenance.createdByOperationId===(result.acceptedByOperationId??receipt.operationId));
+ return !!record&&record.personalMeaning.personalMeaningId===result.personalMeaningId&&record.personalSemanticAnchorRevisions.some(revision=>hasSceneContextReceiptWitness(revision,receipt));
+}
+export function hasSceneContextReceiptWitness(revision:MeaningJourneyRecord['personalSemanticAnchorRevisions'][number],receipt:CommandReceipt){
+ const result=receipt.result;
+ return receipt.command==='AcceptPublishedLearningScene'&&revision.personalSemanticAnchorId===result.personalSemanticAnchorId&&revision.personalSemanticAnchorRevisionId===result.personalSemanticAnchorRevisionId&&revision.provenance.createdByOperationId===(result.acceptedByOperationId??receipt.operationId);
 }
 export function assertArchivedSceneReceipts(record:MeaningJourneyRecord,read:(id:string)=>CommandReceipt|undefined){
- if(!record.conflictHistory)return;
  for(const branch of meaningHistoryRecords(record))for(const revision of branch.personalSemanticAnchorRevisions)if(revision.structuredPayload.learningScene){
   const receipt=read(revision.provenance.createdByOperationId);
-  if(!receipt||receipt.command!=='AcceptPublishedLearningScene'||!hasSceneReceiptWitness(branch,receipt))throw Error('meaning_scene_receipt_invalid');
+  if(!receipt||!hasSceneContextReceiptWitness(revision,receipt))throw Error('meaning_scene_receipt_invalid');
  }
 }

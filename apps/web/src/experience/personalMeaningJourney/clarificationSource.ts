@@ -1,3 +1,4 @@
+import {storeMeaningContexts} from './contextRecords';
 /** Learner-only optimistic source witness. Never a teacher tool or model input. */
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {sha256Hex} from './digest';
@@ -19,18 +20,25 @@ const meaningFactCollections=[
 ] as const satisfies readonly (keyof MeaningJourneyRecord)[];
 export function meaningSourceValue(record:MeaningJourneyRecord|undefined){
  if(!record||record.personalMeaning.status!=='active')throw new ClarificationSourceChangedError();
- return canonicalMeaningFacts(record);
+ // Review binds the exact bytes the learner saw. Archive identity below uses
+ // references, but this source witness also detects a corrupt projection under
+ // an unchanged immutable Context version ID.
+ return sortedMeaningFacts(record);
 }
-export function canonicalMeaningFacts(record:MeaningJourneyRecord):MeaningJourneyRecord{
+function sortedMeaningFacts(record:MeaningJourneyRecord):MeaningJourneyRecord{
  // Only top-level fact collections are unordered. Bind every complete fact,
  // including duplicates and nested user/provenance sequences, without writing
  // a normalized record back or invalidating review on replica array ordering.
  const source:Record<string,unknown>={...record};
- for(const field of meaningFactCollections)source[field]=record[field]
+ for(const field of meaningFactCollections)source[field]=(record[field] as unknown[])
   .map(fact=>({fact,encoded:canonicalConsumerJson(fact)}))
   .sort((left,right)=>left.encoded<right.encoded?-1:left.encoded>right.encoded?1:0)
   .map(row=>row.fact);
  return source as unknown as MeaningJourneyRecord;
+}
+/** Durable conflict snapshots pin Context identities, never another body. */
+export function canonicalMeaningFacts(record:MeaningJourneyRecord):MeaningJourneyRecord{
+ return sortedMeaningFacts(storeMeaningContexts(record) as unknown as MeaningJourneyRecord);
 }
 export function intakeSourceValue(item:JourneyState['inboxItems'][number]|undefined,metadata:JourneyState['clarificationDrafts'][number]|undefined){
  if(!item)throw new ClarificationSourceChangedError();

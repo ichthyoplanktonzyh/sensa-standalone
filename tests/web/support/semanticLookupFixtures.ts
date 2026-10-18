@@ -23,11 +23,15 @@ export function syntheticSemanticWorld(seed:JourneyState,count:number):JourneySt
       }
       return value;
     })) as JourneyState;
+    // JSON replacers rewrite values, while canonical parent maps also carry
+    // immutable revision IDs in their object keys. Clone both sides.
+    clone.contexts.anchorRevisionParents=Object.fromEntries(Object.entries(clone.contexts.anchorRevisionParents).map(([key,parent])=>[ids.get(key)??key,parent]));
     clone.registry.senses[0]!.senseKey=`borrow-${index}`;
     clone.registry.expressionVersions[0]!.surfaceForm=`borrow-${index}`;
     clone.registry.expressionVersions[0]!.normalizedForm=`borrow-${index}`;
     clone.registry.senseVersions[0]!.semanticSpec.coreMeaningFocus=`临时借用编号${index}的物品。`;
     state.meanings.push(...clone.meanings);
+    state.contexts.anchors.push(...clone.contexts.anchors);state.contexts.anchorRevisions.push(...clone.contexts.anchorRevisions);Object.assign(state.contexts.anchorRevisionParents,clone.contexts.anchorRevisionParents);state.commandReceipts.push(...clone.commandReceipts);
     for(const kind of Object.keys(state.registry) as Array<keyof JourneyState['registry']>)(state.registry[kind] as unknown[]).push(...clone.registry[kind]);
   }
   return state;

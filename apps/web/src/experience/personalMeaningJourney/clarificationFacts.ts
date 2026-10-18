@@ -62,9 +62,6 @@ export function applyClarificationFacts(state:JourneyState,record:MeaningJourney
     const senseKey = input.sense.proposedSenseKey.trim();
     if (!senseKey) throw new Error('稳定意思缺少可复用的语义 key。');
     if (!input.sense.coreMeaningFocus.trim()) throw new Error('稳定意思不能为空。');
-    if (input.sense.prototypeScenes.length === 0) {
-      throw new Error('稳定意思至少需要一个原型场景。');
-    }
     if (!input.semanticPolicyVersion.trim()) throw new Error('缺少语义策略版本。');
     const semanticSpec = buildSemanticSpec(input.sense);
     if (input.sense.reuseSense && (!reused || reused.senseKey !== senseKey
@@ -86,10 +83,10 @@ export function applyClarificationFacts(state:JourneyState,record:MeaningJourney
           const languageTag = input.expression!.languageTag.trim();
           if (!languageTag) throw new Error('目标表达必须带语言标签。');
           if (input.confirmExpression) {
-            if (!['realizes', 'approximates', 'evokes'].includes(input.expression!.relation)) {
+            if (input.expression!.relation!==null&&!['realizes', 'approximates', 'evokes'].includes(input.expression!.relation)) {
               throw new Error('请明确选择目标表达与 Sense 的关系。');
             }
-            if (!['exact', 'broader', 'narrower', 'overlapping'].includes(input.expression!.semanticCoverage)) {
+            if (input.expression!.semanticCoverage!==null&&!['exact', 'broader', 'narrower', 'overlapping'].includes(input.expression!.semanticCoverage)) {
               throw new Error('请明确选择目标表达的语义覆盖范围。');
             }
           }

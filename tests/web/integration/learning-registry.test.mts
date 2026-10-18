@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 
-import {test} from 'vitest';
+import {test,vi} from 'vitest';
 import {
   canonicalConsumerJson,
+  sensaPortableBookDescriptorSchema,
   sensaPortableLearningContentRegistrySchema,
 } from '@sensa/contracts/sensa';
 
@@ -11,6 +12,9 @@ import {
   clearLearningContentRegistryCache,
   readLearningContentRegistry,
 } from '../../../apps/api/src/sensa/access/learningContentRegistry.ts';
+import {createConsumerRoutes} from '../../../apps/api/src/sensa/access/consumer.ts';
+import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system/index.ts';
+import {openLibrary,readLibrary,writeLibraryCache} from '../../../apps/web/src/data/library/store.ts';
 
 const digest=(value:Uint8Array|string)=>createHash('sha256').update(value).digest('hex');
 
@@ -47,6 +51,26 @@ test('API serves and caches only the direct Portable Book Registry v3 contract',
     ...snapshot,
     revision:digest(canonicalConsumerJson(snapshot)),
   });
+  const previewSnapshot={...snapshot,items:snapshot.items.map(item=>({...item,preview:{
+    url:'https://content.example.test/releases/previews/fixture.json',sha256:'b'.repeat(64),byteLength:123,
+  }}))};
+  const withPreview=sensaPortableLearningContentRegistrySchema.parse({
+    ...previewSnapshot,revision:digest(canonicalConsumerJson(previewSnapshot)),
+  });
+  const app=createConsumerRoutes({learningContentRegistry:async()=>withPreview,telemetry:()=>{}});
+  const legacy=await app.request('/sensa/packages');
+  assert.equal(legacy.status,200);
+  assert.deepEqual(await legacy.json(),registry);
+  sensaPortableBookDescriptorSchema.omit({preview:true}).parse(registry.items[0]);
+  assert.equal(legacy.headers.get('etag'),`"${registry.revision}"`);
+  assert.equal((await app.request('/sensa/packages',{headers:{'if-none-match':`"${registry.revision}"`}})).status,304);
+  const enhanced=await app.request('/sensa/packages?bookPreview=1',{headers:{'if-none-match':`"${registry.revision}"`}});
+  assert.equal(enhanced.status,200);
+  assert.deepEqual(await enhanced.json(),withPreview);
+  assert.equal(enhanced.headers.get('etag'),`"${withPreview.revision}"`);
+  assert.equal((await app.request('/sensa/packages?bookPreview=1',{headers:{'if-none-match':`"${withPreview.revision}"`}})).status,304);
+  assert.equal((await app.request('/sensa/packages',{headers:{'if-none-match':`"${withPreview.revision}"`}})).status,200);
+  assert.throws(()=>sensaPortableBookDescriptorSchema.omit({preview:true}).parse(withPreview.items[0]));
   const bytes=Buffer.from(canonicalConsumerJson(registry));
   const realFetch=globalThis.fetch;
   try{
@@ -82,5 +106,35 @@ test('API serves and caches only the direct Portable Book Registry v3 contract',
   }finally{
     clearLearningContentRegistryCache();
     globalThis.fetch=realFetch;
+  }
+});
+
+test('new Web negotiates previews once when an older tab left a fresh base catalog cache',async()=>{
+  const realFetch=globalThis.fetch;
+  vi.stubGlobal('window',new EventTarget());vi.stubGlobal('BroadcastChannel',undefined);
+  await openLibrary();
+  const prior=await readLibrary(tx=>tx.get<unknown>('meta','package-catalog'));
+  const snapshot={format:'sensa-learning-content-registry-v3',publishedAt:'2026-10-01T00:00:00.000Z',items:[]};
+  const revision=digest(canonicalConsumerJson(snapshot));
+  let requests=0;
+  try{
+    vi.stubEnv('VITE_SENSA_API_URL','https://catalog.fixture.invalid');
+    vi.stubEnv('VITE_SENSA_MODE','production');
+    globalThis.fetch=async(input)=>{
+      requests++;
+      assert.equal(String(input),'https://catalog.fixture.invalid/sensa/packages?bookPreview=1');
+      return Response.json({...snapshot,revision});
+    };
+    await writeLibraryCache(async tx=>tx.put('meta','package-catalog',{
+      format:'sensa-local-registry-cache-v3',items:[],revision,checkedAt:new Date().toISOString(),
+    }));
+    assert.equal((await contentSupplySystem.execute({kind:'refresh_catalog'})).status,'updated');
+    assert.equal(requests,1);
+    assert.equal((await contentSupplySystem.execute({kind:'refresh_catalog'})).status,'cached');
+    assert.equal(requests,1);
+  }finally{
+    globalThis.fetch=realFetch;vi.unstubAllEnvs();
+    await writeLibraryCache(async tx=>{if(prior===null||prior===undefined)tx.delete('meta','package-catalog');else tx.put('meta','package-catalog',prior);});
+    vi.unstubAllGlobals();
   }
 });

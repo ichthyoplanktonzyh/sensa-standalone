@@ -17,6 +17,7 @@ export type PackageCenterItem=Readonly<{
  supportLanguage:string;
  descriptor?:Descriptor;
  publicationArchiveSha256?:string;
+ installedArchiveSha256?:string;
  installed:InstalledPackage[];
  updateAvailable:boolean;
  updateDownloaded:boolean;
@@ -124,7 +125,7 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
     targetLanguage:pack.content.targetLanguage,
     supportLanguage:pack.content.supportLanguage,
     installed:[pack],
-    updateAvailable:false,
+    updateAvailable:enrolledVersion>0&&version>enrolledVersion,
     updateDownloaded:enrolledVersion>0&&version>enrolledVersion,
     enrolled:enrolledVersion>=version,
     routeMatchesActive:routeMatches(pack.content.targetLanguage,pack.content.supportLanguage,c),
@@ -184,8 +185,9 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
    descriptor.route.supportLanguage,
   ))??new Map<string,ReleaseGroup>();
   let latest:ReleaseGroup|undefined;
-  for(const group of releases.values()){
-   if(group.packages.length===group.memberCount&&(!latest||group.version>latest.version))latest=group;
+  let latestArchive:string|undefined;
+  for(const [archive,group] of releases){
+   if(group.packages.length===group.memberCount&&(!latest||group.version>latest.version)){latest=group;latestArchive=archive;}
   }
   const exact=releases.get(descriptor.sha256);
   const exactComplete=exact?.packages.length===descriptor.memberCount;
@@ -207,6 +209,7 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
    supportLanguage:descriptor.route.supportLanguage,
    descriptor,
    publicationArchiveSha256:descriptor.sha256,
+   installedArchiveSha256:exactComplete?descriptor.sha256:latestArchive,
    installed,
    updateAvailable,
    updateDownloaded:updateAvailable&&!!exactComplete,
@@ -235,6 +238,7 @@ export function buildPackageCenterItems(c:Pick<Controller,'catalog'|'packages'|'
    targetLanguage:publication.route.targetLanguage,
    supportLanguage:publication.route.supportLanguage,
    publicationArchiveSha256:publication.bookArchiveSha256,
+   installedArchiveSha256:publication.bookArchiveSha256,
    installed:latest.packages,
    updateAvailable:false,
    updateDownloaded:false,
@@ -280,7 +284,7 @@ export function projectPackageSource(
   key:publication.book.bookKey,listKey:`source:${publicationArchiveSha256}`,kind:'published',
   title:publication.book.title,description:publication.book.description,count:publication.memberCount,
   targetLanguage:publication.route.targetLanguage,supportLanguage:publication.route.supportLanguage,
-  publicationArchiveSha256,installed:group.packages,updateAvailable:false,updateDownloaded:false,
+  publicationArchiveSha256,installedArchiveSha256:publicationArchiveSha256,installed:group.packages,updateAvailable:false,updateDownloaded:false,
   enrolled:c.enrollments.some(enrollment=>enrollment.source.kind==='published_book'&&enrollment.source.publicationArchiveSha256===publicationArchiveSha256),
   routeMatchesActive:routeMatches(publication.route.targetLanguage,publication.route.supportLanguage,c),
   sourceVersion:publication.book.versionNumber,
@@ -292,6 +296,27 @@ export type PackageContentRow=Readonly<{
  entry:InstalledPackage['content']['entries'][number];
  target:LearningTarget|undefined;
 }>;
+
+/** Discovery metadata belongs to the published edition; examples and licenses
+ * belong to the actual installed edition, which may still be an older one. */
+export function projectPackageMetadata(item:PackageCenterItem){
+ const first=item.installed[0];
+ const publication=first?.portableOrigin.publications.find(source=>source.bookArchiveSha256===(item.installedArchiveSha256??item.publicationArchiveSha256))
+  ??first?.portableOrigin.publications.find(source=>source.book.bookKey===item.key
+   &&source.route.targetLanguage===item.targetLanguage&&source.route.supportLanguage===item.supportLanguage
+   &&(item.sourceVersion===undefined||source.book.versionNumber===item.sourceVersion));
+ const metadata=first?.portableOrigin.manifest.metadata;
+ const unique=<T extends {name:string;url?:string}>(values:readonly (T|undefined)[])=>[...new Map(values.filter((value):value is T=>!!value).map(value=>[JSON.stringify(value),value])).values()];
+ return {
+  version:item.sourceVersion??item.descriptor?.book.versionNumber??publication?.book.versionNumber??metadata?.version,
+  publisher:item.descriptor?.publisher??publication?.publisher,
+  publishedAt:item.descriptor?.publishedAt??publication?.publishedAt,
+  changeSummary:item.descriptor?.changeSummary??publication?.changeSummary,
+  installedVersion:publication?.book.versionNumber??metadata?.version,
+  authors:unique(item.installed.map(pack=>pack.portableOrigin.manifest.metadata.author)),
+  licenses:unique(item.installed.map(pack=>pack.portableOrigin.manifest.metadata.license)),
+ };
+}
 
 export function indexPackageTargets(targets:Controller['targets']):ReadonlyMap<string,LearningTarget>{
  const indexed=new Map<string,LearningTarget>();
@@ -307,13 +332,19 @@ export function projectPackageContentWindow(
  packages:readonly InstalledPackage[],
  targetByEntry:ReadonlyMap<string,LearningTarget>,
  requestedLimit:number,
-):Readonly<{entries:PackageContentRow[];total:number}>{
- const total=packages.reduce((count,pack)=>count+pack.content.entries.length,0);
+ browsing:{query?:string;locale?:string;offset?:number}={},
+):Readonly<{entries:PackageContentRow[];total:number;offset:number}>{
+ const query=browsing.query?.trim().toLocaleLowerCase(browsing.locale)??'';
+ const matches=(entry:InstalledPackage['content']['entries'][number])=>!query||entry.expression.toLocaleLowerCase(browsing.locale).includes(query);
+ const total=packages.reduce((count,pack)=>count+pack.content.entries.reduce((sum,entry)=>sum+Number(matches(entry)),0),0);
  const limit=Math.max(0,Math.floor(requestedLimit));
+ const offset=limit?Math.min(Math.max(0,Math.floor(browsing.offset??0)),Math.max(0,Math.ceil(total/limit)-1)*limit):0;
  const entries:PackageContentRow[]=[];
+ let position=0;
  for(const pack of packages){
   for(const entry of pack.content.entries){
-   if(entries.length>=limit)return {entries,total};
+   if(!matches(entry)||position++<offset)continue;
+   if(entries.length>=limit)return {entries,total,offset};
    entries.push({
     pack,
     entry,
@@ -321,5 +352,5 @@ export function projectPackageContentWindow(
    });
   }
  }
- return {entries,total};
+ return {entries,total,offset};
 }

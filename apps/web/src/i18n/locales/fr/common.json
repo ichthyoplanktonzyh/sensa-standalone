@@ -158,7 +158,10 @@
     "reviewOnlyHint": "Renouez avec ces sens aujourd’hui.",
     "reviewOnly": "Révisions uniquement",
     "noReview": "Aucune révision prévue",
-    "reviewCount": "Réviser uniquement {{count}} sens",
+    "reviewCount": "Réviser uniquement {{formattedCount}} sens",
+    "reviewCount_one": "Réviser uniquement {{formattedCount}} sens",
+    "reviewCount_many": "Réviser uniquement {{formattedCount}} sens",
+    "reviewCount_other": "Réviser uniquement {{formattedCount}} sens",
     "manage": "Mes apprentissages",
     "add": "Ajouter un élément à apprendre",
     "existing": "Explorer le contenu existant",
@@ -168,6 +171,8 @@
     "open": "Ouvrir",
     "emptyAction": "Ajouter du contenu",
     "resume": "Continuer l’apprentissage",
-    "resumeHint": "Vous avez une session inachevée à poursuivre."
+    "resumeHint": "Vous avez une session inachevée à poursuivre.",
+    "newCount": "Nouveaux {{formattedCount}}",
+    "dueCount": "À réviser {{formattedCount}}"
   }
 }

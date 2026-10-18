@@ -21,7 +21,7 @@ test('journey selection includes user-facing evidence and shared performance gua
 
 test('current Listening requirements select their own evidence without rewriting historical verdicts',()=>{
  const listening=journeyTestIds('LJ-15');
- for(const id of ['practice-scope','practice-source-loading','youglish-caption','youglish-lifecycle','package-center-journey','web-bundle-budget','web-bootstrap-budget','sqlite-opfs-benchmark'])assert(listening.includes(id),id);
+ for(const id of ['practice-scope','practice-source-loading','youglish-caption','youglish-lifecycle','reference-practice-journey','web-bundle-budget','web-bootstrap-budget','sqlite-opfs-benchmark'])assert(listening.includes(id),id);
  for(const scenario of currentJourneyScenarios){
   assert(!auditedScenarios.some(legacy=>legacy.id===scenario.id),'current requirements cannot replace historical audit rows');
   assert(!('baselineVerdict'in scenario),'a current requirement is not a passing result');

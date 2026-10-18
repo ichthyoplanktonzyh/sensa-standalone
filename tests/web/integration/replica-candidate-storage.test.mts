@@ -16,6 +16,11 @@ import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticL
 import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 import {candidateExpected,candidateBlocksFor} from '../support/replicaCandidateFixture.mts';
 import {verifyReplicaCandidateManifest} from '../../../apps/web/src/data/library/replicaCandidateProof';
+import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libraryRecordReader';
+import {packStoredRecord} from '../../../apps/web/src/data/library/sharedRecordContent';
+import {observeReplicaWork} from '../../../apps/web/src/data/library/replicaWork';
+import {sealedRecordReader} from '../../../apps/web/src/data/library/sealedRecordReader';
+import {cloudScratchAllocatedBytes} from '../../../apps/web/src/data/library/cloudScratchStorage';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://candidate-storage.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
@@ -38,12 +43,18 @@ const append=(id:string,records:ReplicaCandidateRecord[])=>database.replicaCandi
 const validate=(id:string)=>database.replicaCandidate({kind:'validate',id});
 const discard=(id:string)=>database.replicaCandidate({kind:'discard',id});
 
+test('candidate allocated-page overage rolls back proofs, rows and counters before acknowledgement',async()=>{
+ const records=rows(),id=await begin(records),raw=Reflect.get(database,'database'),before=await original();
+ try{const header=raw.exec({sql:'SELECT records,logical_bytes,stored_bytes FROM sensa_replica_candidates_v1 WHERE id=?',bind:[id],rowMode:'object',returnValue:'resultRows'});const allocated=(Number(raw.selectValue('PRAGMA page_count'))-Number(raw.selectValue('PRAGMA freelist_count')))*Number(raw.selectValue('PRAGMA page_size'));raw.exec({sql:'UPDATE sensa_replica_candidates_v1 SET allocated_baseline=? WHERE id=?',bind:[allocated-cloudScratchAllocatedBytes,id]});await expect(append(id,records)).rejects.toThrow('library_sync_capacity');expect(await original()).toEqual(before);expect(raw.exec({sql:'SELECT records,logical_bytes,stored_bytes FROM sensa_replica_candidates_v1 WHERE id=?',bind:[id],rowMode:'object',returnValue:'resultRows'})).toEqual(header);expect(raw.selectValue('SELECT count(*) FROM sensa_replica_candidate_records_v1')).toBe(0);expect(raw.selectValue('SELECT count(*) FROM sensa_replica_candidate_proofs_v1 WHERE plain_digest IS NOT NULL')).toBe(0);}finally{await discard(id);}
+});
+
 test('filling and validated generations stay outside ordinary facts and the confirmed baseline',async()=>{
  const records=rows(),id=await begin(records),before=await original();
  try{
   const raw=Reflect.get(database,'database');
   expect(raw.exec({sql:'PRAGMA main.synchronous',rowMode:0,returnValue:'resultRows'})).toEqual([2]);
   await append(id,records);expect(await original()).toEqual(before);
+  expect(raw.exec({sql:'SELECT count(*) FROM sensa_replica_candidate_records_v1 WHERE stored_value_bytes<>length(CAST(value_json AS BLOB))',rowMode:0,returnValue:'resultRows'})).toEqual([0]);
   const result=await validate(id);expect(result.kind).toBe('validated');
   if(result.kind!=='validated')throw Error('Expected validation');expect(result.candidate.records).toBe(records.length);expect(result.candidate.identity).toEqual(identity);
   expect(await validate(id)).toEqual(result);expect(await original()).toEqual(before);
@@ -66,6 +77,13 @@ for(const fault of ['missing-root','opaque-codec'] as const)test(`complete gener
  const records=fault==='missing-root'?rows().filter(row=>row.table!=='semanticState'):[...rows(),{table:'settings' as const,key:'opaque-preference',valueJson:'["unsupported-tag", "not a value"]',blockRefs:['a'.repeat(64)]}];
  const id=await begin(records),before=await original();
  try{await append(id,records);await expect(validate(id)).rejects.toThrow();expect(await original()).toEqual(before);await expect(append(id,[records[0]!])).rejects.toThrow('library_sync_candidate_invalid');}
+ finally{await discard(id);}
+});
+
+for(const tag of ['compressed','shared'] as const)test(`opaque transport cannot impersonate a trusted ${tag} storage envelope`,async()=>{
+ const raw=tag==='compressed'?packStoredRecord(JSON.stringify(encodeBackupValue('a'.repeat(4096)))):JSON.stringify(['sensa-shared-content-v1','a'.repeat(64)]);
+ const records=[...rows(),{table:'settings' as const,key:'opaque-storage-envelope',valueJson:raw,blockRefs:['a'.repeat(64)]}],id=await begin(records),before=await original();
+ try{await append(id,records);await expect(validate(id)).rejects.toThrow('libraryBackup.errors.format');expect(await original()).toEqual(before);}
  finally{await discard(id);}
 });
 
@@ -156,10 +174,96 @@ function isolatedDatabase(){
  return {raw,database,request,stage,storedCount};
 }
 
+test('candidate paging selects a UTF-8 bounded key prefix before loading wide bodies',async()=>{
+ const fixture=isolatedDatabase(),handler=new SqliteReplicaCandidates(fixture.raw,()=>{},()=>{});
+ try{
+  const records=rows(),id=handler.begin({owner,identity,localRevision:0,incarnation:'initial'},candidateExpected(records,identity));
+  // Exact packed storage values, including multibyte JSON and an oversized
+  // legal first row. Raw fixture writes isolate paging from compression.
+  const values=Array.from({length:137},(_,index)=>JSON.stringify(encodeBackupValue(
+   index===0?'界'.repeat(400000):index===1?'é'.repeat(230000):index===2?'字'.repeat(200000):index===3?'a'.repeat(1024*1024-JSON.stringify(encodeBackupValue('')).length):`row-${index}`)));
+  const expected=values.map((text,index)=>({key:String(index).padStart(3,'0'),text,bytes:new TextEncoder().encode(text).length}));
+  for(const row of expected)fixture.raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1(candidate_id,table_name,record_key,value_json,refs_json) VALUES(?,?,?,?,?)',bind:[id,'settings',row.key,row.text,'[]']});
+  const sizes=fixture.raw.exec({sql:"SELECT record_key,stored_value_bytes FROM sensa_replica_candidate_records_v1 WHERE candidate_id=? AND table_name='settings' ORDER BY record_key",bind:[id],rowMode:'object',returnValue:'resultRows'});
+  expect(sizes).toEqual(expected.map(row=>({record_key:row.key,stored_value_bytes:row.bytes})));
+  const plan=fixture.raw.exec({sql:"EXPLAIN QUERY PLAN SELECT record_key,stored_value_bytes FROM sensa_replica_candidate_records_v1 INDEXED BY sensa_replica_candidate_page_v1 WHERE candidate_id=? AND table_name=? ORDER BY record_key LIMIT 64",bind:[id,'settings'],rowMode:'object',returnValue:'resultRows'});
+  expect(JSON.stringify(plan)).toContain('USING INDEX sensa_replica_candidate_page_v1');
+  // SQLite does not label generated-column indexes COVERING, even when its
+  // bytecode reads both columns from the index and never seeks the body table.
+  const root=(fixture.raw.exec({sql:"SELECT rootpage FROM sqlite_schema WHERE name='sensa_replica_candidate_records_v1'",rowMode:0,returnValue:'resultRows'}) as number[])[0];
+  const program=fixture.raw.exec({sql:"EXPLAIN SELECT record_key,stored_value_bytes FROM sensa_replica_candidate_records_v1 INDEXED BY sensa_replica_candidate_page_v1 WHERE candidate_id=? AND table_name=? ORDER BY record_key LIMIT 64",bind:[id,'settings'],rowMode:'object',returnValue:'resultRows'}) as Array<{opcode:string;p1:number;p2:number}>;
+  const tableCursor=program.find(row=>row.opcode==='OpenRead'&&row.p2===root)!.p1;
+  expect(program.filter(row=>row.opcode==='Column').every(row=>row.p1!==tableCursor)).toBe(true);
+  const bodyPages:Array<Array<{record_key:string;value_json:string}>>=[],query=Reflect.get(handler,'rows').bind(handler);
+  Reflect.set(handler,'rows',(sql:string,bind:unknown[])=>{const result=query(sql,bind);if(sql.startsWith('SELECT record_key,value_json'))bodyPages.push(result);return result;});
+  const reader=Reflect.get(handler,'reader').call(handler,id,new AbortController().signal) as LibraryRecordReader;
+  expect([...reader.entries('settings')].map(row=>row.key)).toEqual(expected.map(row=>row.key));
+  expect(bodyPages[0]!.map(row=>row.record_key)).toEqual(['000']);
+  expect(bodyPages[1]!.map(row=>row.record_key)).toEqual(['001']);
+  expect(bodyPages[3]!.map(row=>row.record_key)).toEqual(['003']);
+  expect(new TextEncoder().encode(bodyPages[3]![0]!.value_json).length).toBe(1024*1024);
+  for(const page of bodyPages){expect(page.length).toBeLessThanOrEqual(64);if(page.length>1)expect(page.reduce((sum,row)=>sum+new TextEncoder().encode(row.value_json).length,0)).toBeLessThanOrEqual(1024*1024);}
+  // Repeatable iteration cannot skip or duplicate rows at byte/count edges.
+  expect([...reader.entries('settings')].map(row=>row.value)).toEqual(values.map(text=>JSON.parse(text)[1]));
+ }finally{handler.close();fixture.database.close(false);}
+});
+
+test('sealed text caching bounds retained bytes, clones values and still checks cancellation',()=>{
+ const texts=new Map(Array.from({length:3},(_,index)=>[String(index),JSON.stringify(encodeBackupValue({nested:{count:index}}))]));
+ const calls=new Map<string,number>(),controller=new AbortController();
+ const source={
+  alive(){if(controller.signal.aborted)throw controller.signal.reason;},beforePage(){},
+  get(_table:unknown,key:string){calls.set(key,(calls.get(key)??0)+1);return texts.has(key)?{record_key:key,value_json:texts.get(key)!}:undefined;},
+  has(_table:unknown,key:string){return texts.has(key);},keys(){return [];},rows(){return [];},
+  plain(_table:unknown,row:{value_json:string}){return row.value_json;},missing():never{throw Error('fixture missing');},
+ };
+ const bytes=new TextEncoder().encode(texts.get('0')!).length,reader=sealedRecordReader(source,bytes*2);
+ const first=reader.get('settings','0');first.nested.count=99;
+ expect(reader.get('settings','0')).toEqual({nested:{count:0}});expect(calls.get('0')).toBe(1);
+ reader.get('settings','1');reader.get('settings','2');reader.get('settings','0');expect(calls.get('0')).toBe(2);
+ texts.set('large',JSON.stringify(encodeBackupValue('界'.repeat(bytes))));
+ expect(texts.get('large')!.length).toBeLessThan(bytes*2);
+ expect(new TextEncoder().encode(texts.get('large')!).length).toBeGreaterThan(bytes*2);
+ reader.get('settings','large');reader.get('settings','large');expect(calls.get('large')).toBe(2);
+ controller.abort(Error('fixture cancelled'));
+ expect(()=>reader.get('settings','0')).toThrow('fixture cancelled');expect(()=>reader.has('settings','0')).toThrow('fixture cancelled');
+});
+
+test('interleaved point reads during sealed iteration do not double-count a cached row',()=>{
+ const texts=new Map(['0','1'].map(key=>[key,JSON.stringify(encodeBackupValue({nested:{count:Number(key)}}))]));
+ const calls=new Map<string,number>(),plains=new Map<string,number>(),controller=new AbortController();
+ const reader=sealedRecordReader({
+  alive(){if(controller.signal.aborted)throw controller.signal.reason;},beforePage(){},
+  get(_table,key){calls.set(key,(calls.get(key)??0)+1);return texts.has(key)?{record_key:key,value_json:texts.get(key)!}:undefined;},has(_table,key){return texts.has(key);},
+  keys(_table,after){return after===null?[...texts].map(([record_key,value])=>({record_key,stored_value_bytes:new TextEncoder().encode(value).length})):[];},
+  rows(_table,keys){return keys.map(record_key=>({record_key,value_json:texts.get(record_key)!}));},
+  plain(_table,row){const text=row.value_json;plains.set(text,(plains.get(text)??0)+1);return text;},missing():never{throw Error('fixture missing');},
+ },new TextEncoder().encode(texts.get('0')!).length*2);
+ const iterator=reader.entries('settings')[Symbol.iterator]();
+ const first=iterator.next().value;expect(first?.key).toBe('0');first!.value.nested.count=99;expect(reader.get('settings','0')).toEqual({nested:{count:0}});expect(reader.get('settings','1')).toEqual({nested:{count:1}});
+ expect(iterator.next().value?.key).toBe('1');expect(reader.get('settings','1')).toEqual({nested:{count:1}});
+ expect(calls.get('1')).toBe(1);expect(plains.get(texts.get('1')!)).toBe(1);
+ expect(iterator.next().done).toBe(true);
+ const cached=reader.entries('settings')[Symbol.iterator]();expect(cached.next().value?.key).toBe('0');
+ controller.abort(Error('fixture cancelled'));expect(()=>cached.next()).toThrow('fixture cancelled');
+});
+
+test('sealed text cache bounds small-row count independently from retained bytes',()=>{
+ const texts=new Map(Array.from({length:257},(_,index)=>[String(index),JSON.stringify(encodeBackupValue(index))]));
+ const calls=new Map<string,number>();
+ const reader=sealedRecordReader({
+  alive(){},beforePage(){},get(_table,key){calls.set(key,(calls.get(key)??0)+1);return texts.has(key)?{record_key:key,value_json:texts.get(key)!}:undefined;},
+  has(_table,key){return texts.has(key);},keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('fixture missing');},
+ });
+ for(const key of texts.keys())expect(reader.get('settings',key)).toBe(Number(key));
+ expect(reader.get('settings','0')).toBe(0);expect(calls.get('0')).toBe(2);
+ expect(reader.get('settings','256')).toBe(256);expect(calls.get('256')).toBe(1);
+});
+
 for(const interrupted of [false,true])test(`cold candidate handler replaces only abandoned clustered bodies atomically (${interrupted})`,async()=>{
  const fixture=isolatedDatabase();let handler:SqliteReplicaCandidates|undefined;
  try{
-  const raw=fixture.raw,oldRecord=replicaCandidateRecordSchema.replace(/\);$/u,') WITHOUT ROWID;'),oldId=crypto.randomUUID();
+  const raw=fixture.raw,oldRecord=replicaCandidateRecordSchema.slice(0,replicaCandidateRecordSchema.indexOf('CREATE INDEX')).replace(" representation TEXT NOT NULL DEFAULT 'packed' CHECK(representation IN ('packed','opaque')),\n",'').replace(' stored_value_bytes INTEGER GENERATED ALWAYS AS(length(CAST(value_json AS BLOB))) STORED,\n','').replace('\n);','\n) WITHOUT ROWID;'),oldId=crypto.randomUUID();
   raw.exec(replicaCandidateSchema.replace(replicaCandidateRecordSchema,oldRecord));
   raw.exec({sql:"INSERT INTO sensa_replica_candidates_v1(id,fence_json,expected_json,state) VALUES(?,'{}','{}','filling')",bind:[oldId]});
   raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1 VALUES(?,?,?,?,?)',bind:[oldId,'settings','abandoned','["string","abandoned private download"]','[]']});
@@ -168,7 +272,7 @@ for(const interrupted of [false,true])test(`cold candidate handler replaces only
   const snapshot=()=>['sensa_replica_candidates_v1','sensa_replica_candidate_records_v1','sensa_replica_candidate_manifest_v1','sensa_replica_candidate_proofs_v1'].map(table=>raw.exec({sql:`SELECT * FROM ${table} ORDER BY 1`,rowMode:'array',returnValue:'resultRows'})),before=snapshot();
   handler=new SqliteReplicaCandidates(raw,()=>{},()=>{});
   const records=rows(),expected=candidateExpected(records,identity),fence={owner,identity,localRevision:0,incarnation:'initial'};
-  if(interrupted){const exec=raw.exec.bind(raw);raw.exec=((input:any)=>{if(input==='DROP TABLE sensa_replica_candidate_records_v1')throw Error('fixture cache layout interrupted');return exec(input);}) as typeof raw.exec;
+  if(interrupted){const exec=raw.exec.bind(raw);raw.exec=((input:any)=>{if(input===replicaCandidateSchema)throw Error('fixture cache layout interrupted');return exec(input);}) as typeof raw.exec;
    try{expect(()=>handler!.begin(fence,expected)).toThrow('fixture cache layout interrupted');}finally{raw.exec=exec;}
    expect(snapshot()).toEqual(before);expect(String((raw.exec({sql:"SELECT sql FROM sqlite_schema WHERE name='sensa_replica_candidate_records_v1'",rowMode:0,returnValue:'resultRows'}) as string[])[0])).toMatch(/WITHOUT ROWID/);
   }
@@ -224,6 +328,8 @@ for(const reset of [undefined,'account-deletion','local-clear'] as const)test(`f
   expect(fixture.database.count('semanticMeanings')).toBe(0);expect(fixture.database.syncBaseEntries()).toEqual([]);
   fixture.database.commit({...mutation,deletes:reset==='local-clear'?[deletion]:[]});
   expect(fixture.database.count('semanticMeanings')).toBe(1);expect(fixture.database.syncBaseEntries().length).toBeGreaterThan(0);
+  for(const table of ['sensa_meaning_lookup_documents','sensa_world_browse','sensa_practice_expressions','sensa_journey_identities'])expect(Number(fixture.raw.selectValue(`SELECT count(*) FROM ${table}`))).toBeGreaterThan(0);
+  expect(fixture.raw.selectValue('SELECT count(*) FROM sensa_sync_admission_v1')).toBe(0);
   expect(fixture.database.get('meta','local-reset')).toBe(reset==='account-deletion'?JSON.stringify(encodeBackupValue(reset)):null);
   expect(fixture.database.get('meta','sentinel')).toBe(JSON.stringify(encodeBackupValue('Existing owner data')));
  }finally{fixture.database.close(false);}
@@ -392,4 +498,214 @@ test('ordered multi-fragment compressed Unicode rows bind every slice and retain
   await expect(database.replicaCandidate({kind:'append',id,records:[{...unicode,blockRefs:[...unicode.blockRefs].reverse()}],blocks})).rejects.toThrow();
   await append(id,records);expect((await validate(id)).kind).toBe('validated');
  }finally{await discard(id);}
+});
+
+// The certificate is disposable admission metadata, never a Library authority.
+// These mechanics use controlled descriptors, not a remote domain-admission claim.
+const {SqliteSyncDependencies,syncAdmission}=await import('../../../apps/web/src/data/library/sqliteSyncDependencies');
+const {libraryRestoreValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
+const checkpoint={owner,incarnation:'initial',revision:3,checkpointVersion:7 as const,restoreValidationVersion:libraryRestoreValidationVersion,syncedLocalRevision:0,status:'synced' as const};
+test('a no-change checkpoint after private accounting retains the same baseline proof',()=>{
+ const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
+  const admission=syncAdmission();deps.observe(admission,'settings','preference','["number",30]',30);deps.certify(admission,checkpoint,identity,0);
+  const certificate=deps.certificate()!,clean={...checkpoint,syncedLocalRevision:2},fence={owner,identity,incarnation:'initial',localRevision:2};
+  // Private commands advance live revision; an empty captured replica delta
+  // ACK advances the checkpoint without modifying baseline or its relations.
+  expect(certificate.localRevision).toBe(0);expect(deps.match(clean,fence,0)).toEqual(certificate);expect(deps.certificate()).toEqual(certificate);
+  expect(deps.match(checkpoint,fence,0)).toBeUndefined();
+ }finally{fixture.database.close();}
+});
+for(const fault of ['head','owner','state-owner','library','learner','incarnation','state-incarnation','artifact','live-edit','baseline','shared-body','protocol','missing'] as const)test(`baseline proof cannot authorize ${fault}`,()=>{
+ const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
+  const admission=syncAdmission();deps.observe(admission,'settings','preference','["number",30]',30);deps.certify(admission,checkpoint,identity,0);
+  let state={...checkpoint,syncedLocalRevision:2},fence={owner,identity,incarnation:'initial',localRevision:2},artifact=0;
+  if(fault==='head')state.revision++;
+  else if(fault==='owner')fence={...fence,owner:{...owner,accountId:crypto.randomUUID()}};
+  else if(fault==='state-owner')state={...state,owner:{...owner,subject:crypto.randomUUID()}};
+  else if(fault==='library')fence={...fence,identity:{...identity,id:crypto.randomUUID()}};
+  else if(fault==='learner')fence={...fence,identity:{...identity,learnerId:crypto.randomUUID()}};
+  else if(fault==='incarnation')fence.incarnation='changed';
+  else if(fault==='state-incarnation')state.incarnation='changed';
+  else if(fault==='artifact')artifact++;
+  else if(fault==='live-edit')fence.localRevision++;
+  else if(fault==='baseline')fixture.raw.exec({sql:'INSERT INTO sensa_sync_base VALUES(?,?,?,?)',bind:['settings','preference','["number",31]','[]']});
+  else if(fault==='shared-body'){fixture.raw.exec({sql:'INSERT INTO sensa_shared_record_content VALUES(?,?)',bind:['a'.repeat(64),'["number",30]']});fixture.raw.exec('UPDATE sensa_shared_record_content SET value_json=value_json');}
+  else if(fault==='protocol')fixture.raw.exec("INSERT INTO sensa_sync_protocol_owners_v1 VALUES('protocol','run','target')");
+  else fixture.raw.exec('UPDATE sensa_sync_dependency_state_v1 SET certificate_json=NULL');
+  expect(deps.match(state,fence,artifact)).toBeUndefined();
+ }finally{fixture.database.close();}
+});
+
+for(const interrupt of ['read','edit','baseline','artifact','owner','discard','close'] as const)test(`uncertified baseline seeding cooperates with ${interrupt} outside its transactions`,async()=>{
+ const fixture=isolatedDatabase(),records=[rows()[0]!,...Array.from({length:64},(_,i)=>({table:'settings' as const,key:'seed-'+String(i).padStart(3,'0'),valueJson:JSON.stringify(encodeBackupValue('x'.repeat(2048))),blockRefs:['a'.repeat(64)]}))];
+ const text=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
+ fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'cloud-sync',encodedValue:text(checkpoint)}],syncBaseReplacement:records.map(row=>({table:row.table,key:row.key,valueJson:row.valueJson,blockRefs:row.blockRefs}))});
+ const before=fixture.database.syncBaseReferences();
+ try{
+  const begun=await fixture.request({kind:'beginIndex',fence:{owner,identity,incarnation:'initial',localRevision:0},baseRevision:3,head:candidateExpected(records,identity,4).head});if(begun.kind!=='begun')throw Error('Expected begin');expect(begun.needsSeed).toBe(true);
+  expect(await fixture.request({kind:'seed',id:begun.id})).toEqual({kind:'seeded',done:false});
+  await expect(fixture.request({kind:'beginIndex',fence:{owner,identity,incarnation:'initial',localRevision:0},baseRevision:3,head:candidateExpected(records,identity,4).head})).rejects.toThrow('library_sync_candidate_busy');
+  await expect(fixture.request({kind:'indexPage',id:begun.id,page:{from:{revision:3,offset:0},toRevision:4,changes:[{table:'meta',key:'identity',blocks:records[0]!.blockRefs}],next:{revision:4,offset:0},done:true}})).rejects.toThrow('library_sync_candidate_invalid');
+  // SQLite accepts a separate transaction at the cooperative boundary. A
+  // yield while the seed transaction is open would fail BEGIN IMMEDIATE.
+  fixture.raw.exec('BEGIN IMMEDIATE');fixture.raw.exec('COMMIT');expect(fixture.database.get('meta','sentinel')).toBe(text('Existing owner data'));
+  if(interrupt==='read'){for(;;){const result=await fixture.request({kind:'seed',id:begun.id});if(result.kind!=='seeded')throw Error('Expected seed');if(result.done)break;}}
+  else{
+   if(interrupt==='edit')fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-content-revision',encodedValue:text(1)}],contentRevision:1});
+   else if(interrupt==='baseline')fixture.raw.exec('UPDATE sensa_sync_base SET value_json=value_json');
+   else if(interrupt==='artifact')fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-artifact-revision',encodedValue:text(1)}]});
+   else if(interrupt==='owner')fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'service-owner',encodedValue:text({...owner,subject:crypto.randomUUID()})}]});
+   else if(interrupt==='discard'){const id=(fixture.raw.exec({sql:'SELECT id FROM sensa_replica_candidates_v1',rowMode:0,returnValue:'resultRows'}) as string[])[0]!;await fixture.request({kind:'discard',id});}
+   else await fixture.database.settleReplicaCandidates();
+   await expect(fixture.request({kind:'seed',id:begun.id})).rejects.toThrow(interrupt==='edit'||interrupt==='baseline'||interrupt==='artifact'?'library_sync_local_changed':interrupt==='close'?'sqlite_database_closed':undefined);
+  }
+  expect(fixture.database.syncBaseReferences()).toEqual(before);expect(fixture.database.count('settings')).toBe(0);
+ }finally{fixture.database.close();}
+});
+test('current dependency stored budgets replace old rows and subtract deletions over repeated certification',()=>{
+ const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
+  const make=(key:string,text:string,size:number)=>{const admission=syncAdmission();deps.observe(admission,'settings',key,JSON.stringify(encodeBackupValue(text)),text,undefined,size);return admission;};
+  deps.certify(make('a','initial',200),checkpoint,identity,0);expect(deps.certificate()?.storedBytes).toBe(200);
+  for(let i=0;i<100;i++){const previous=deps.certificate()!;deps.certify(make('a','replacement '+i,150+i),checkpoint,identity,0,previous);expect(deps.certificate()?.storedBytes).toBe(150+i);expect(deps.certificate()?.records).toBe(1);}
+  deps.certify(make('b','independent',90),checkpoint,identity,0,deps.certificate());expect(deps.certificate()?.storedBytes).toBe(339);
+  const deletion=syncAdmission();deletion.deletes=[{table:'settings',key:'a'}];deps.certify(deletion,checkpoint,identity,0,deps.certificate());expect(deps.certificate()?.storedBytes).toBe(90);expect(deps.certificate()?.records).toBe(1);
+ }finally{fixture.database.close();}
+});
+for(const damage of ['bad-json','missing-trigger','edge-write'] as const)test(`dependency certificate rejects ${damage} and never treats coverage alone as proof`,()=>{
+ const fixture=isolatedDatabase(),deps=new SqliteSyncDependencies(fixture.raw);try{
+  const admission=syncAdmission();deps.observe(admission,'learningRuns','controlled','["null"]',{targetIds:['target'],participants:{}});deps.observe(admission,'learningSessions','controlled-session','["null"]',{startedByOperationId:'operation',startedAt:'time'});deps.certify(admission,checkpoint,identity,0);const prior=deps.certificate()!;expect(prior).toBeDefined();
+  if(damage==='bad-json')fixture.raw.exec("UPDATE sensa_sync_dependency_state_v1 SET certificate_json='{' WHERE id=1");
+  else if(damage==='missing-trigger')fixture.raw.exec('DROP TRIGGER sensa_sync_base_generation_update_v1');
+  else fixture.raw.exec('DELETE FROM sensa_sync_dependency_edges_v1');
+  expect(deps.certificate()).toBeUndefined();expect(()=>deps.assert(prior)).toThrow('library_sync_local_changed');
+ }finally{fixture.database.close();}
+});
+
+
+test('Learning snapshot memo strictly decodes once, gives independent Dates and obeys byte eviction',()=>{
+ const value={when:new Date('2026-10-14T00:00:00Z'),missing:undefined,nested:{items:[1,2]}},text=JSON.stringify(encodeBackupValue(value));
+ const work:Record<string,number>={};observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;});
+ try{
+  const reader=sealedRecordReader({cloneDecoded:true,alive(){},beforePage(){},get(_table,key){return {record_key:key,value_json:text};},has(){return true;},keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing');}},new TextEncoder().encode(text).length);
+  const first=reader.get('settings','a');first.when.setUTCFullYear(2000);first.nested.items.push(3);delete first.missing;
+  expect(reader.get('settings','a')).toEqual(value);expect(work['reader.wireDecode']).toBe(1);expect(work['reader.decodeHit']).toBe(1);
+  reader.get('settings','b');expect(reader.get('settings','a')).toEqual(value);expect(work['reader.wireDecode']).toBe(3);expect(work['reader.eviction']).toBe(2);
+ }finally{observeReplicaWork(undefined);}
+});
+
+
+test('protected slice expires at microtasks and detects synchronous DML including rollback before reuse',async()=>{
+ const fixture=isolatedDatabase(),work:Record<string,number>={},controller=new AbortController();
+ try{
+  fixture.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'cloud-sync',encodedValue:JSON.stringify(encodeBackupValue(checkpoint))}]});
+  const id=await fixture.stage(1);await fixture.request({kind:'validate',id});
+  const handler=Reflect.get(fixture.database,'replicaCandidateStore'),read=()=>Reflect.get(handler,'protectedRead').call(handler,id,3,controller.signal);
+  observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;});
+  for(let i=0;i<20;i++)read();expect(work['fence.check']).toBe(1);expect(work['fence.hit']).toBe(19);
+  fixture.raw.exec('BEGIN');fixture.raw.exec("UPDATE sensa_records SET value_json=value_json WHERE table_name='meta' AND record_key='sentinel'");fixture.raw.exec('ROLLBACK');
+  read();expect(work['fence.check']).toBe(2);await Promise.resolve();read();expect(work['fence.check']).toBe(3);
+  // This microtask was queued before the expiration callback. Its direct
+  // mutation still cannot pass through a live synchronous-slice proof.
+  const stale=new Promise<void>(resolve=>queueMicrotask(()=>{
+   fixture.raw.exec({sql:"UPDATE sensa_records SET value_json=? WHERE table_name='meta' AND record_key='cloud-sync'",bind:[JSON.stringify(encodeBackupValue({...checkpoint,revision:4}))]});
+   expect(read).toThrow('library_sync_local_changed');resolve();
+  }));
+  read();await stale;controller.abort(Error('cancelled cached read'));expect(read).toThrow('cancelled cached read');
+ }finally{observeReplicaWork(undefined);fixture.database.close(false);}
+});
+
+
+test('decoded limits bypass memo without bypassing strict decoding or changing ordinary readers',()=>{
+ const work:Record<string,number>={};observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;});
+ const source=(text:string,cloneDecoded:boolean)=>({cloneDecoded,alive(){},beforePage(){},get(_table:unknown,key:string){return {record_key:key,value_json:text};},has(){return true;},keys(){return [];},rows(){return [];},plain(_table:unknown,row:{value_json:string}){return row.value_json;},missing():never{throw Error('missing');}});
+ try{
+  const large=sealedRecordReader(source(JSON.stringify(encodeBackupValue('界'.repeat(88000))),true));large.get('settings','a');large.get('settings','a');
+  expect(work['reader.wireDecode']).toBe(2);expect(work['reader.decodeBypass']).toBe(2);expect(work['reader.bodyLoad']).toBe(1);
+  for(const k of Object.keys(work))delete work[k];
+  const bounded=sealedRecordReader(source(JSON.stringify(encodeBackupValue('x'.repeat(256000))),true));for(let i=0;i<17;i++)bounded.get('settings',String(i));
+  bounded.get('settings','0');bounded.get('settings','16');expect(work['reader.wireDecode']).toBe(18);expect(work['reader.decodeHit']).toBe(1);expect(work['reader.decodeBypass']).toBe(2);
+  for(const k of Object.keys(work))delete work[k];
+  const ordinary=sealedRecordReader(source(JSON.stringify(encodeBackupValue({at:new Date('2026-10-14T00:00:00Z')})),false));ordinary.get('settings','a').at.setTime(0);expect(ordinary.get('settings','a').at.toISOString()).toBe('2026-10-14T00:00:00.000Z');expect(work['reader.wireDecode']).toBe(2);expect(work['reader.decodeHit']).toBeUndefined();
+ }finally{observeReplicaWork(undefined);}
+});
+
+
+test('component windows retain each fitting row once across passes, clone every caller and release at the boundary',()=>{
+ let held=0,peak=0,reads=0;const work:Record<string,number>={};
+ observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;if(kind==='window.heldBytes'){held+=n;peak=Math.max(peak,held);}});
+ const controller=new AbortController(),value={when:new Date('2026-10-14T00:00:00Z'),nested:{items:[1,2]}},text=JSON.stringify(encodeBackupValue(value));
+ const reader=sealedRecordReader({cloneDecoded:true,alive(){controller.signal.throwIfAborted();},beforePage(){},get(_table,key){reads++;return {record_key:key,value_json:text};},has(){return true;},keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing');}});
+ try{
+  const release=reader.beginWindow();expect(()=>reader.beginWindow()).toThrow('sqlite_record_window_busy');
+  for(let pass=0;pass<3;pass++)for(let i=0;i<900;i++){
+   const row=reader.get('settings',String(i));expect(row.when.toISOString()).toBe(value.when.toISOString());expect(row.nested.items).toEqual([1,2]);row.when.setTime(0);row.nested.items.push(3);
+   expect(reader.canonical('settings',String(i))).toBe(text);expect(reader.text('settings',String(i))).toBe(text);
+  }
+  expect(reads).toBe(900);expect(work['reader.wireDecode']).toBe(900);expect(peak).toBeLessThanOrEqual(4*1024*1024);
+  controller.abort(Error('cancelled window'));expect(()=>reader.get('settings','0')).toThrow('cancelled window');expect(()=>reader.canonical('settings','0')).toThrow('cancelled window');
+  release();release();expect(held).toBe(0);expect(work['window.release']).toBe(1);
+ }finally{observeReplicaWork(undefined);}
+});
+
+test('window row and aggregate byte limits keep strict fallback and dispose before a new component',()=>{
+ let held=0,peak=0,reads=0;const work:Record<string,number>={};
+ observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;if(kind==='window.heldBytes'){held+=n;peak=Math.max(peak,held);}});
+ const texts=new Map(Array.from({length:9},(_,i)=>[String(i),JSON.stringify(encodeBackupValue({text:'x'.repeat(i===8?270000:240000)}))]));
+ const reader=sealedRecordReader({cloneDecoded:true,alive(){},beforePage(){},get(_table,key){reads++;return {record_key:key,value_json:texts.get(key)!};},has(){return true;},keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing');}});
+ try{
+  const release=reader.beginWindow();for(let pass=0;pass<2;pass++)for(let i=0;i<9;i++)expect(reader.get('settings',String(i)).text.length).toBe(i===8?270000:240000);
+  expect(peak).toBeLessThanOrEqual(4*1024*1024);expect(work['window.bypass']).toBeGreaterThan(0);expect(reads).toBeGreaterThan(9);
+  release();expect(held).toBe(0);const next=reader.beginWindow();const before=reads;reader.get('settings','0');expect(reads).toBe(before+1);next();expect(held).toBe(0);
+ }finally{observeReplicaWork(undefined);}
+});
+
+const {contextDeltaFixture}=await import('../support/contextDeltaFixture.mts');
+async function contextCandidateFixture(){
+ const fixture=isolatedDatabase(),world=await contextDeltaFixture(),text=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
+ for(const side of [world.before,world.after])side.find(row=>row.table==='meta')!.value=identity as any;
+ const encode=(source:typeof world.before)=>source.map(row=>({table:row.table,key:row.key,valueJson:text(row.value),blockRefs:[] as string[]}));
+ const before=encode(world.before),after=encode(world.after);candidateExpected(before,identity,3);const expected=candidateExpected(after,identity,4);
+ fixture.database.commit({clears:[],deletes:[],puts:[...before.filter(row=>row.table!=='meta').map(row=>({table:row.table,key:row.key,encodedValue:row.valueJson})),{table:'meta',key:'cloud-sync',encodedValue:text(checkpoint)}],syncBaseReplacement:before});
+ const deps=new SqliteSyncDependencies(fixture.raw),admission=syncAdmission();for(const row of world.before)deps.observe(admission,row.table,row.key,text(row.value),row.value);deps.certify(admission,checkpoint,identity,0);
+ return {...fixture,world,before,after,expected,deps,text,changed:after.filter(row=>world.changes.some(key=>key.table===row.table&&key.key===row.key))};
+}
+for(const fault of ['none','final-rollback','local-edit'] as const)test(`four-row Context candidate ${fault} uses sparse facts/projection/baseline activation`,async()=>{
+ const f=await contextCandidateFixture();try{
+  const begun=await f.request({kind:'beginIndex',fence:{owner,identity,incarnation:'initial',localRevision:0},baseRevision:3,head:f.expected.head});if(begun.kind!=='begun')throw Error('Expected candidate');expect(begun.needsSeed).toBe(false);
+  await f.request({kind:'indexPage',id:begun.id,page:{from:{revision:3,offset:0},toRevision:4,changes:f.changed.map(row=>({table:row.table,key:row.key,blocks:row.blockRefs})),next:{revision:4,offset:0},done:true}});
+  await f.request({kind:'append',id:begun.id,records:f.changed,blocks:candidateBlocksFor(f.changed)});
+  const validated=await f.request({kind:'validate',id:begun.id});if(validated.kind!=='validated')throw Error('Expected validation');expect(validated.candidate.receive).toMatchObject({mode:'incremental',changedRecords:4,baselineBuildRecords:0});expect(f.storedCount()).toBe(4);
+  const prepared=await f.request({kind:'prepareUpdate',id:begun.id,baseRevision:3});if(prepared.kind!=='updatePrepared'||!prepared.update)throw Error('Expected prepared update');expect(prepared.update.records).toHaveLength(4);
+  const state={...checkpoint,revision:4,syncedLocalRevision:1,restoreOperationId:begun.id},mutation={clears:[],deletes:[],puts:[{table:'meta' as const,key:'cloud-sync',encodedValue:f.text(state)},{table:'meta' as const,key:'local-content-revision',encodedValue:f.text(1)}],contentRevision:1,replicaCandidateRestore:{id:begun.id,tables:validated.candidate.tables,update:prepared.update}};
+  const base=f.database.syncBaseEntries(),certificate=f.deps.certificate(),prior=f.database.entries('semanticMeanings');
+  const priorProjection=f.raw.selectValue('SELECT revision_id FROM sensa_context_browse');expect(priorProjection).toBeTruthy();expect(f.database.entries('semanticMeanings')).toEqual(f.before.filter(row=>row.table==='semanticMeanings').map(row=>({key:row.key,encodedValue:row.valueJson})));
+  if(fault==='local-edit'){
+   f.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-content-revision',encodedValue:f.text(1)},{table:'settings',key:'kept-local-edit',encodedValue:f.text('kept')}],contentRevision:1});expect(()=>f.database.commit(mutation)).toThrow('library_sync_local_changed');expect(f.database.get('settings','kept-local-edit')).toBe(f.text('kept'));expect(f.database.syncBaseEntries()).toEqual(base);return;
+  }
+  if(fault==='final-rollback'){
+   const exec=f.raw.exec;f.raw.exec=(function(this:typeof f.raw,...args:any[]){if(args[0]==='COMMIT')throw Error('context commit fault');return (exec as any).apply(this,args);}) as typeof exec;try{expect(()=>f.database.commit(mutation)).toThrow('context commit fault');}finally{f.raw.exec=exec;}
+   expect(f.database.entries('semanticMeanings')).toEqual(prior);expect(f.raw.selectValue('SELECT revision_id FROM sensa_context_browse')).toBe(priorProjection);expect(f.database.syncBaseEntries()).toEqual(base);expect(f.deps.certificate()).toEqual(certificate);expect(f.database.get('meta','cloud-sync')).toBe(f.text(checkpoint));
+  }
+  f.database.commit(mutation);expect(f.deps.certificate()).toMatchObject({revision:4,records:f.after.length});expect(f.database.get('meta','cloud-sync')).toBe(f.text(state));
+  for(const row of f.after)expect(f.database.syncBaseEntries([{table:row.table,key:row.key}])[0]!.valueJson).toBe(row.valueJson);
+  const head=f.world.after.find(row=>row.table==='semanticContexts'&&row.key.startsWith('anchors:'))!.value as any;
+  expect(f.raw.selectValue('SELECT revision_id FROM sensa_context_browse WHERE context_id='+"'"+head.value.personalSemanticAnchorId+"'")).toBe(head.value.currentRevisionId);
+ }finally{f.deps.close();f.database.close();}
+});
+for(const fault of ['none','ack-source-advanced','artifact-invalidated','changed-patch'] as const)test(`Context producer ACK ${fault} continues only an admitted baseline successor`,async()=>{
+ const f=await contextCandidateFixture();try{
+  f.database.commit({clears:[],deletes:[],puts:[...f.changed.map(row=>({table:row.table,key:row.key,encodedValue:row.valueJson})),{table:'meta',key:'local-content-revision',encodedValue:f.text(1)}],contentRevision:1});
+  if(fault==='ack-source-advanced')f.database.commit({clears:[],deletes:[],puts:[{table:'settings',key:'later-local-edit',encodedValue:f.text('kept')},{table:'meta',key:'local-content-revision',encodedValue:f.text(2)}],contentRevision:2});
+  if(fault==='artifact-invalidated')f.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'local-artifact-revision',encodedValue:f.text(1)}]});
+  const changed=structuredClone(f.changed);if(fault==='changed-patch')changed.find(row=>row.table==='semanticMeanings')!.valueJson='["null"]';
+  const state={...checkpoint,revision:4,syncedLocalRevision:1,status:fault==='ack-source-advanced'?'pending' as const:'synced' as const},ack=()=>f.database.commit({clears:[],deletes:[],puts:[{table:'meta',key:'cloud-sync',encodedValue:f.text(state)}],syncBaseValidated:true,syncBasePatch:{puts:changed,deletes:[]}});
+  if(fault==='changed-patch'){ack();expect(f.deps.certificate()).toBeUndefined();for(const row of f.changed)expect(f.database.get(row.table,row.key)).toBe(row.valueJson);return;}
+  ack();const proof=f.deps.certificate();if(fault==='artifact-invalidated')expect(proof).toBeUndefined();else{expect(proof).toMatchObject({revision:4,records:f.after.length});expect(f.deps.match(state,{owner,identity,incarnation:'initial',localRevision:fault==='ack-source-advanced'?2:1},0)!==undefined).toBe(fault!=='ack-source-advanced');}
+  if(fault==='ack-source-advanced')expect(f.database.get('settings','later-local-edit')).toBe(f.text('kept'));
+ }finally{f.deps.close();f.database.close();}
+});
+
+for(const representation of ['opaque','packed'] as const)test(`a bounded remote read rejects oversized ${representation} text before decoding its body`,async()=>{
+ const records=rows(),id=await begin(records),raw=Reflect.get(database,'database'),plain=JSON.stringify(encodeBackupValue('Budget witness '.repeat(4096))),stored=representation==='packed'?packStoredRecord(plain):plain;
+ try{raw.exec({sql:'INSERT INTO sensa_replica_candidate_records_v1(candidate_id,table_name,record_key,value_json,refs_json,representation) VALUES(?,?,?,?,?,?)',bind:[id,'settings','budget-witness',stored,'[]',representation]});const candidate=Reflect.get(database,'replicaCandidateStore');expect(()=>Reflect.get(candidate,'candidateBody').call(candidate,id,'settings','budget-witness',1024)).toThrow();expect(Reflect.get(candidate,'candidateBody').call(candidate,id,'settings','budget-witness',1024*1024)).toBe(plain);}finally{await discard(id);}
 });

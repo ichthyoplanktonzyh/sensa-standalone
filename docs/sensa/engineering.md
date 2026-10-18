@@ -36,7 +36,7 @@ presentation type 的纯呈现装配，`apps/web/src/data/library/learning*.ts` 
 历史摘要是设备侧可重建索引，从正式完成的 Run 与固定呈现材料生成；它不创造 Completion 或 Memory Outcome，
 与源事实同一 SQLite 事务维护，并在所有源 rows 写入后更新，不能依赖云恢复的表顺序。读取失败时不显示虚假空状态。
 紧凑历史当前仍返回全部可用摘要，不等于无限历史的有界读取或容量通过。执行中的 `runtime` 只精确读取当前 Run 和参与目标，在 Run 边界才
-计算后续候选，不随每个步骤重新读取课程集合或历史。学习包目录界面在对应页面进入时加载，不进入
+计算后续候选，不随每个步骤重新读取课程集合或历史源记录。本轮已完成计数通过历史索引按 Session 的精确 Run ID 聚合；当前待处理与最近复习时间通过路线／语言对的候选索引汇总，不冻结总任务或读取整库材料。学习包目录界面在对应页面进入时加载，不进入
 恢复学习的同步模块闭包。Runtime 进入、恢复和重新获得焦点不执行整库资源恢复或完整内容库存读取；
 个人场景保存需要的来源摘要只按当前固定内容的 Package key 读取，不向页面运输其他内容或执行、媒体结构。
 Learning 操作回执只保存有界的 Run identity、原始 revision 与时间/语言元数据，
@@ -132,13 +132,17 @@ Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求
 接入页等待 owner 时继续尝试同一规范锁，不依赖已经关闭页面再次广播。确认 owner 更换后，立即结束发往
 旧 owner 的挂起请求；只读请求可向新 owner 重读，提交结果不确定时不自动重放底层写入，仍由原命令回执恢复。
 SDK 初始化失败不得删除 pool 数据，构建中的版本和源片段检查必须阻止未审核依赖绕过保护。真实句柄冲突与 Worker 突然终止另由隔离 Chromium 回归验证。
-pool 关联头的摘要或读取长度异常、无路径却仍含数据时，初始化拒绝打开并保留原文件，不能通过截断槽位
-创建新空库。合法临时文件只在完整关联头通过校验后按 SDK 语义回收。隔离 OPFS 回归通过单字节故障注入、
+pool 关联头的摘要或读取长度异常、无路径但头部不规范或文件短于完整保留区时，初始化拒绝打开并保留原文件。
+完整规范空头（路径区全部为零、flags=0、完整摘要为规范空值）且至少 4096 字节的无关联槽，按 SQLite SAH pool
+语义继续截断回收残留载荷并 flush；这会丢弃已不可达的物理尾部，不凭固定零摘要或猜测 WAL 归属回收。已关联的
+数据库和 WAL 继续交由 SQLite 处理，不通过截断创建替代空库。合法临时文件只在完整关联头通过校验后按 SDK 语义回收。
+隔离 OPFS 回归验证规范空槽回收后原命名数据库摘要及记录不变，并通过单字节故障注入、
 失败前后完整文件摘要对比和还原后的原记录读取验证此保护；建库回执缺失也不会覆盖现有资料库身份。
 `openLibrary` 在同一事务中核对当前身份，不用孤立的建库回执冒充身份仍存在。先前打开线索、回执、账号 owner
 或其他 learner-owned 记录存在而身份缺失时，拒绝自动创建新身份。浏览器线索只用于保守阻止首次建库，不是内容
 权威；仅剩元数据或非初始化操作也属于先前使用线索。账号已确认删除后的本机重置由设备私有 witness 标记，
 不凭缺失身份猜测清空意图，该标记不导出或同步。
+清空本机会生成新的 deviceId，并暂停自动拉回云端资料。只有带该私有清空见证的明确手动重连，才在恢复时保留清空后新建的 deviceId；普通新设备恢复继续生成自己的 deviceId。两种恢复都不能采用源快照的设备身份，或复活清空前身份、登录授权和 signout epoch；恢复期间账号、epoch、incarnation 或本机内容变化仍拒绝旧响应激活。
 独立恢复入口复用加密备份检查与原子恢复，禁止导出假空库；身份缺失的空目的地不先创建
 占位 learner。账号备份在此路径额外核验当前登录及同一时刻缓存的 subject，恢复的 owner 来自已校验备份，
 不会授予在线服务权限。解密、预览后写锁内仍重查目的地占用；原身份和领域事实保留，设备身份更新，成功后再重开。
@@ -188,18 +192,36 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 普通命令或诊断修复失败后的回滚错误保留在 cause 链中，不能因原错误不致命而掩盖回滚的 I/O／损坏错误。包装器构造成功前也持有原生数据库引用，构造失败须先关闭原生句柄，再暂停池、验证并释放租约；未确认清理成功时保留引用和锁供重试，不创建新库。
 普通重开复用已有结构与统计，不重放 DDL、重写版本或制造缺失的空源表。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
-`WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 使用受控传输在真实 Chromium/OPFS 上执行 1k/10k 合成 Draft 的同步，检查单记录变化只上传记录块与受影响的 manifest 分片；它不是成熟学习历史、真实 API/网络或账号容量验收。
+`WITHOUT ROWID`；内容事务维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 `.sensa` identity、语言方向、长度、digest 与来源 Book archive digest；完整 Portable artifact 与编译后的设备 Runtime content 只进入本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用 Registry 中的 `.sensa-book` 位置一次重新取得，验证外层摘要及全部成员，再只恢复已有安装事实对应的缓存；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 使用受控传输在真实 Chromium/OPFS 上执行 1k/10k 合成 Draft 的同步，检查单记录变化只上传记录块与引用 patch；它不是成熟学习历史、真实 API/网络或账号容量验收。
 内容摘要、key/digest 和语言方向数量使用同事务维护的设备侧投影；它们不进入备份或账号同步，可以从真实缓存重建。
+自有云 `sensa-own-cloud-db-v2` 快照使用独立协商的描述符，v1 制品和外部文件导入保持各自入口。
+生成端只复用同账号、同 H 的现行 v9 准入：受控源的完整 portable facts 与 baseline 必须双向键集及存储值相等，
+保留依赖失效规则，并在有界原生文件复制及发布前复核 owner、incarnation、设备 epoch、内容／缓存版本和证书。
+私有副本删除设备资料后保留完整 baseline、依赖索引和投影，清除缓存完整声明；最终文件单独计算完整 SHA。
+显式 `publishSnapshot` 才准备和上传这一整库制品，普通无变化检查不触发构建。
+服务端在既有账号锁与 H/CAS 内绑定不可变有序块描述符、账号／库身份及现有 snapshot owner；描述符摘要只绑定声明，
+不替代整文件校验。接收端在新隔离库中验证分块与整文件 SHA／长度、精确 schema／投影版本、SQLite integrity／FK
+及必要 native 关系，再将该 H 的准入重绑定到新设备；不重复完整领域重放。这一信任边界依赖源端既有完整准入与受控写入，
+不适用于外部文件。最终激活仍复核目标账号、epoch、身份及未同步更改，旧库保留到新指针切换成功之后。
+只有明确的制品拒绝可以在同一 H 回到 refs 恢复，记录 `restore.path=refs` 和失败原因；取消、本地连接／清理故障、账号或 H 变化不能降级为该回退。
+当前 v2 只直接激活覆盖最新 H 的制品；有 tail 时沿用既有完整恢复路径。4GiB 物理文件上限不增加生产 1GiB stored 配额，
+较大隔离容量的链路证据不能当作生产容量验收。
 整库三方合并共用一个可分步执行的领域合并实现：普通同步调用与云同步协作调度不维护两套规则。
 个人意义分支校验按 Meaning 解码相关操作回执，分组只保留记录引用；可重复的按需正文读取若失败，
 原错误必须穿透领域冲突处理，不能误报为用户可裁决的冲突。合并校验失败后的冲突状态写入也在
 写事务内核对捕获的本机内容版本；期间新增内容时保留原事实与基线，回到待同步，不发布旧冲突快照。
-协作调度不等于整体资源有界：
-双方变化或冲突等完整回退仍持有整库 wire 正文，排序、单个 Meaning 与 Learning reconciliation 也仍有同步工作段。
+有效 baseline 上的本地未上传变化与远端前进共用磁盘候选：固定远端 H 分页准入，SQL 对比双方 refs，并读取基线之后的分页 revision／tombstone journal。
+候选只保留完整变化依赖闭包的三方正文，双向关系和 enrollment route、Session-start、Registry 同槽等合并 cohort 共同确定闭包；闭包外由 refs 与 journal 证明三方一致。
+闭包沿用 16,384 key／64MiB 预算及既有 merger、冲突分区和明确选择规则，不提高阈值或回到整库 capture。与 B 精确匹配的完整同版准入证书可支持差量证明：逐页校验 B 的全部行摘要和键覆盖，在候选私有表派生快路径 cohort 及全局唯一性见证，再以 SQL refs 差异和 revision／tombstone journal 证明闭包外 B=L=R。普通纯文本 Context 的批量后代复用既有单步 shape 和 revision 构造器，保留旧事实、回执及精确父链；学习记录沿用原差量形状与保存态校验，新增 reconciliation 仍执行既有历史校验。R、L、最终本地和上传 overlay 各自验证；Scene／生命周期历史、无 Context pin 的受影响消费者及 Registry／来源／结构变化不取得该快速准入，回到完整候选校验。补集见证不升级 B 证书，混合冲突 baseline 也不取得完整证书。快路径发现冲突后，完整 R 准入的原始关系与所有变化根的 B/L/R 关系共同重建旧冲突图，不为 B 重复保存原始全图。
+专属 dirty-rebase receipt 在同一事务内复核账号、身份、incarnation、退出 epoch、云端与本地基线 revision 及捕获的本机 revision，再激活事实、投影、baseline 与状态。
+冲突分区保留旧 baseline，未冲突补集继续合入；混合 baseline 仅维护逐行摘要，不取得完整准入证书。上传仍须 CAS 与 operation receipt 确认，确认前不标记 synced。
+未经过冲突选择的 dirty rebase 在激活及保存 pending 时原子记录本机应用 revision 与 operation 绑定；刷新摘要后封存 baseline generation／dependency epoch。再次激活及 ACK 都检查旧标记，依赖表／触发器损坏也持久失效，普通同步收敛时一并清除残留标记。丢失上传 ACK 后，仅从已校验 receipt 对应的持久化 patch 读取有界精确正文，原子更新 baseline、云 revision 与状态，不重新下载整库，也不生成完整证书；本机期间继续修改则保留待同步状态。无冲突 ACK 同样一次提交 baseline 与最终状态；冲突补集上传仍先持久化已确认的比较头，再完成冲突状态。
+普通增量的 ACK 丢失同样先精确重试原 operation 并验证请求 digest，在任何整库 capture 前有界解码原 patch、原子更新基线与云 revision。恢复保留旧本机 cursor，后续 delta 用新基线比较中断后的编辑；历史回执不能代替重新读取当前 head。缺块或无效回执保留 pending，不通过放宽整库上限恢复。
+未取得有效 baseline 的完整回退仍受整库 capture 上限约束；排序、单个 Meaning 与 Learning reconciliation 也仍有同步工作段。
 已完整恢复的内容缓存复用一次一致的安装／来源快照；下载或缓存修复后重新读取当前快照，避免把期间新增但未恢复的来源误报为就绪。
 学习状态变化只刷新学习投影，语言选择只读取当前语言方向；通知按记录 key 过滤，当前页面不重复处理自己发出的跨页通知。
 数据结构调整不要求保留历史格式兼容层；当前源事实和可重建索引分开处理，不通过清空用户库恢复初始化错误。
-物理 schema 18 沿用共享摘要存储材料内容、协议绑定和步骤定义，记录仍独立保存身份、版本、时间、provenance
+物理 schema 19 沿用共享摘要存储材料内容、协议绑定和步骤定义，并将 learner-owned Context 头、不可变版本和父链保存为独立 `semanticContexts` 源事实；Meaning 和冲突历史只持准确版本引用。Worker RPC 60 与 Cloud manifest 8 共同验证这些引用、接受回执依赖和正文一致性。记录仍独立保存身份、版本、时间、provenance
 及结算事实。`sharedRecordContent.ts` 只改变无损存储表示；普通 record 接口读取还原后的原值，页面和协议
 不解析存储引用。共享 body 与 record／sync baseline 的直接 owner 关系同事务写入；只回收本次事务解除引用
 后确实无 owner 的 body，不在日常评分时扫描全部 body。同一无损压缩 envelope 也用于普通记录与基线，
@@ -207,9 +229,7 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 可用时用标准 Uint8Array Base64 字节方法代替逐字节字符串转换；缺少方法的平台仍使用既有 btoa／atob 路径，
 不改变 envelope、压缩、长度预算或摘要校验，参见
 [原生字节转换规范](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-uint8array.frombase64)。
-16／17→18 只在完整源结构上原子调整 sync baseline 的 B-tree 布局并推进版本；基线以普通 rowid 表保存较大正文，
-保留两列 NOT NULL 与复合唯一主键。影子表原样复制 value/ref 字节、交换表名并保留显式索引，与版本号同事务；
-不解码、重编码或改变源 facts／共享正文所有权，失败保留原版本、字节和索引。
+当前实现只接受 schema 19 或完整的新空库，不猜测迁移历史格式。发现不支持版本时显式拒绝，保留原数据库、基线、媒体与恢复文件；失败连接关闭也不得回收旧候选。既有 v12 OPFS 文件池名称继续用于定位原数据，不代表 schema 12 可被接受。基线以普通 rowid 表保存较大正文，保留两列 NOT NULL 与复合唯一主键。
 大正文与紧凑关系表分别实测布局，不一律使用 `WITHOUT ROWID`，参见
 [SQLite 适用条件](https://sqlite.org/withoutrowid.html)。暂存候选的正文同样使用 rowid；冷连接只在私有候选事务内
 清理旧代及重建正文表，manifest／proof 随父记录级联清除，不触及本机事实。
@@ -290,7 +310,8 @@ Context 与捕获来源文本，但分页只返回列表需要的摘要，单条
 或被旧编辑静默覆盖。已退出当前 Context 的捕获来源仍来自原始事实，详情展示与私有检索不因 Anchor 退休而丢失来源。
 批量选择复用同一私有查询条件，从同事务维护的派生 choice 索引读取精确 Alignment/Binding pins 与标题，不携带完整 Context、媒体或生成材料。列表窗口有界；明确全选按分页收集完整过滤结果，跨 revision/incarnation 或被取消时不提交部分选择。已选项跨搜索保留、按语言路线隔离；明确确认之后才逐项解析完整 source。批量执行先保存意图，再按固定并发准备材料，任务读取按精确 ID；停止只取消运行项，核实持久停止结果，保留尚待执行的意图。进度通知合并，不能用每条意图触发全量父树刷新。重试使用原批次的 Context 授权，不能把旧批次静默转移到另一语言路线。
 Inbox 使用独立的同事务快照读取待处理材料与未完成条目的摘要，不订阅完整命令网关；未完成条目的筛选、计数和下一项使用专用部分索引。原材料继续保留候选、来源与媒体引用，进入对话时按 ID 读取详情。抽屉独立呈现加载、失败重试与已核实的空状态；外部更新时重新核实快照。该读取成本随待处理条目数量增长，不随已确认世界的数量增长。
-图谱仍有完整读取路径；普通列表与批量选择的有界读取不证明首次写命令、全量批次执行或显式全局视图已满足规模要求。
+图谱复用同事务 World 浏览索引中的独立窄投影：全图读取完整 Expression identity、当前展示解释与 Sense／Personal Meaning 关系凭据，私有检索和语言／收藏／笔记条件仍由同一 SQLite 查询选择。图页不初始化完整命令网关、不传输整库 Context、提案、历史或媒体；选点后按 Meaning ID 读取 Context 与来源，配对同一 revision／incarnation，不装载学习来源图片。窄投影可重建且与源事实同事务更新；无效源仍是读取失败，重试不写学习事实。Cytoscape 保留原 breadthfirst／grid 布局、绘制与手势，按 identity／成员索引查找并批量更新样式；普通列表或全图读取通过均不证明首次写命令、全量批次执行或所有图形规模已满足性能要求。
+表达语言筛选读取当前已接受 Binding 对应的 Expression identity/语言摘要，不给 Meaning 或 Context 指定单一语言；同一私有查询同时约束普通列表与批量 choice。收藏和笔记条件使用已保存的当前 Sense 引用，不把历史笔记改挂到新解释。点图按稳定 Expression identity 合并其多个当前已接受解释，同形不同 identity 保持分离；稀疏连线的凭据是共同 Sense/Personal Meaning，坐标不表达语义距离。
 澄清提案同时保存生成时的本机材料见证（Library incarnation、来源 identity 与摘要），不发送给模型。
 模型发起前，材料和见证从同一读取快照取得；普通的读取修订与其他条目变更不会替换它。
 确认必须携带该见证：网关检查当前源事实，并在保存事务内再次比较所依赖的 Meaning 或 Inbox／草稿行。
@@ -307,8 +328,8 @@ Target/Memory/Schedule 投影重放。API 对 Learning Event 与裁决记录都�
 学习运行时只在 Web 本机执行：目标选择、Protocol/Policy、步骤、评价、Completion、Memory Outcome 与
 FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，也不重新计算从云同步取回的学习事实。
 
-普通账号云同步以本机已提交的 Personal Library Facts 为输入。云端保存版本化清单和按内容寻址的数据块；
-下载按响应字节预算分页，客户端消费服务端返回的 deferred 列表。`operations` 是 Device Operation Ledger，
+普通账号云同步以本机已提交的 Personal Library Facts 为输入。云端以账号锁下的 revision 作为唯一提交 cursor，保存当前 `(table,key) → ordered refs` 索引、不可变引用差分日志、固定 cursor 的索引快照和按内容寻址的数据块。首次发布的 v8 完整 manifest 只用于建立索引；日常 commit 提交变化行的引用 patch，不再重建或传输全目录。索引页同时限制 512 行、4096 次引用与 4 MiB UTF-8，pull 绑定 head 的 read lease 和固定上界，连续分页只进入私有候选。越过 floor 或租约过期明确要求完整快照恢复；完整领域准入、历史保护和首次跨设备信任合同继续保留。
+正文下载按响应字节预算分页，客户端消费服务端返回的 deferred 列表。`operations` 是 Device Operation Ledger，
 只用于同一设备上的命令幂等，不进入同步清单；Learning Event 直接以自身 Action、Materialization、
 Evaluation 与 Transition 数据完成不可改写验证和重放。Remote Intake 重投可从 Draft 保存的 canonical
 Intake 重建本地结果，不需要同步完整命令输入或返回值。同一份 base64 媒体按内容边界切块，使重复引用
@@ -319,17 +340,40 @@ Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入
 `librarySyncBlocks.ts` 提供 Web 与 API 共用的无损块编码：相同材料、步骤定义与协议内容按精确文本边界
 复用块，块可确定性 gzip 压缩；拼接解码后仍是原始 tagged wire。API 在接收时验证压缩块，Event／裁决
 不可改写保护比较解码后的完整文本，不比较压缩表示。客户端限制同时保留的传输块为 96 MiB，并分窗口
-消费、在最后引用后释放；解码行上限 90 MiB、累计新增解码事实上限保持 64 MiB 是不同保护，不是 JS heap
-承诺或已通过的大规模云端性能结论。账号存储边界仍为 256 MiB。不兼容 checkpoint 停止同步并保留原副本，
-不会为编码升级自动覆盖旧 head。
+消费、在最后引用后释放；解码行上限 90 MiB、日常增量 prepare 累计新增解码事实上限保持 64 MiB 是不同保护，不是 JS heap
+承诺或已通过的大规模云端性能结论。账号 encoded 存储 guard 为有限的 1 GiB；当前只在本地代码与隔离合成账号验证，尚未部署或修改线上账号配额。不兼容 checkpoint 停止同步并保留原副本，
+不会为编码升级自动覆盖旧 head。首次发布使用私有固定 revision staging：逐表 keyset 捕获至本机不可变 scratch，64 行／4 MiB 展开工作页（保留既有 90 MiB 单行例外），共享正文按 digest 复用，逐页暂存远端 refs；全部捕获及自库结构准入后，一次锁头 CAS 同事务安装已有 current rows、snapshot、membership 与 durable receipt。未完成 staging 不进入 head，接收端只恢复已发布 authority。捕获期间 revision 改变立即拒绝；封存后允许后续编辑，最终 baseline 只确认捕获版并保留后续 pending，网络期间不持本机 writer lock。owner、identity、incarnation 与签出状态在捕获、发送和本机确认处继续检查。丢最终 ACK 由原 operation receipt 恢复；本机 pending 写入 ACK 不确定时保留 scratch。分页 digest、页序与全 workspace key 唯一性拒绝不同 payload／跨页重复 key。失败可安全从新 scratch 重启原 operation 的相同页，过期 workspace 可重新开始。
+snapshot 的 `table_name`／`record_key` 固定为 `C` collation，使 `(account_id,generation,revision,table_name,record_key)` 主键同时保证精确唯一性和有界 keyset 顺序；独立的重复分页索引已移除，按 revision 退休的索引保留。迁移会重建相关索引并取得表锁，需计入发布窗口与临时空间。
+membership 采用规范化的内部外键：`library_cloud_owners` 只保存一次精确的 `(account_id,owner_kind,owner)`，owner 使用 `C` collation，不改写原 UUID 大小写、JSON、Unicode 或旧身份；membership 的每条实际 pin 只保存 `(account_id,owner_id,block_id)` 整数引用，主键保证唯一性，`(account_id,block_id)` 支持反向 GC。blocks 的 TEXT hash 主键、block_refs 和传输协议不变；新增的 block ID 和 owner ID 都通过包含 account 的复合外键约束。不是引用计数，owner 删除不级联 pin。日志／snapshot 的退休索引放在 owner 字典；先按原 current、reader、lease、receipt 保护删除有界 pin，再只删除本片触达且已无 pin 的 owner。缺少 block 的映射明确失败，不能让 JOIN 静默漏掉引用。普通 patch 的 row pins 每 128 行在同一提交事务内写入。
+0052 保留每条原逻辑边并重写 membership 为紧凑行；blocks 增加 identity 也需要重写，owner 字典及新增 block 索引的空间必须计入净收益。它不改写 refs、块正文或领域事实。已配置的 orphan 运维角色只把原 hash 元数据访问和原 DELETE／UPDATE 保护等价迁到 block ID，不获得 owner、正文、head 写入或历史退休权限；生产迁移和这组表示变更仍须明确授权。0049 重建 snapshot 索引；0050 校验 CHECK 时在 ACCESS EXCLUSIVE 锁下扫描现有行，锁持有至事务结束。0052 同样需要维护窗口与新旧表示并存的临时空间；5 秒锁等待、各迁移的单语句时限均不是总迁移或读阻塞时长保证，满表时长须另行验证。
+新首发 workspace 的 `prepared_version=2` 直接逐页写私有 current generation 与初始 snapshot，不再写第三份 `staging_rows` refs；header、page digest、prepared 计数、union pins 与原子 receipt／CAS 保留。跨页 key 唯一性和 identity 在私有 generation 核验。已有 v1 workspace 保留原双写合同并继续完成，旧 handler 对 v2 明确拒绝，不能将缺失第三份 refs 误判为可提交；未知逻辑字节计数从对应版本的原始 refs 按窗口重算。
+checkpoint 准备复用私有 staging generation、页见证、prepared 计数和 reader lease：捕获源 snapshot S／generation、固定上界 H、floor 及 tail 计数，按同一恢复 keyset／连续 tail 读到 H。每次 `/compact` 只写一个 128 行／512 refs 目标窗口，单行仍允许合同内最多 2048 refs；不复制 current 或 `staging_rows`。封存后下一请求只核验常量规模见证、写 durable receipt 并选择 snapshot generation／floor=H；current revision N、rows generation、事实计数与 H→N tail 保持。初次 current 选择和 snapshot-only 选择分别有数据库 guard，不能互换用途。源 lease 过期或源根已改变则拒绝发布，将旧私有 work 立即标为到期并复用既有分片退出；新请求重新捕获源。首发与 checkpoint 共用最多四个未发布私有 workspace 的门限；满时 HEAD 和事实 ACK 继续，准备请求提交维护切片后返回容量错误，后续重试释放槽位再开始。已发布 header／页／receipt 不占私有槽位。G 的逐页 union pins 直接保护已发布 H，不在 CAS 重扫／复制全量 pins；tail 中间出现的 refs 保守保留到 H 被替代并越过所有 reader，可能增加暂存峰值。native 工件仍为可选派生恢复，native-only 准备也用 G pins，按发布 H 与 reader 下界退休；超过既有 200k whole-export 分支时，显式准备只发布 refs checkpoint。
+云同步派生传输状态通过已有账号锁／请求事务渐进退休：`/head` 在发出新 read lease 前、`/compact` 每个准备窗口，以及 `/blocks/store` 的既有维护入口，各执行一片。每个历史清理片最多删除 128 条已发布 `staging_rows`、128 条过期 reader、128 条 floor 以下 log、128 条旧 snapshot rows 和 512 条退休 membership；中断后下一请求从余下行继续，不新增清理队列。只有已被 head 选中的 generation 加 durable receipt 才能证明 staging 发布成功；header、全部 page digest、prepared 计数和 receipt 保留，页重试即使越过 upload lease 也只返回原摘要，同 ID 不同 payload 仍拒绝。初始 stage union pins 独立保护初始 H，直到它低于当前及所有活 reader 的 H 才可分片释放；当前 rows pins 始终保留。
+
+log 的清理上界是当前 floor 与所有有效 reader 的 `from_revision` 的最小值；snapshot 只退休低于当前及有效 reader 最小 H 的版本。新 reader 不能重新获得已过期的旧 H；旧 cursor 越过 floor 后重新取 checkpoint 加连续 tail，仍以保留的本机 baseline 正文做三方合并，不能覆写未同步事实。业务学习历史是当前事实的一部分，不属于传输 GC。未启用下述定时续作时，未重新访问的账号不推进这类历史清理；每片行数限制也意味着大库需要多次请求或定时切片才能排空，不是整库清理时延或空间硬上界。旧格式 checkpoint 不纳入自动退休；`library_id` 为空且 revision 大于零的账号，其全部块也不进入 orphan GC，即使旧 pins 不完整仍保留，直到另行批准检查／恢复。
+
+默认的定时维护只回收过期且无任何 membership／head／有效 retired 引用的块及有界过期租约；现有受限凭据不获得账号 head 锁、generation 或事实的写入权限。运维权限配置只补足 membership 的 account/hash、head 的 account/library_id/revision 元数据只读与过期 reader 的删除，不读取 block 正文或删除 root。部署代码不等于已重新配置或执行线上维护；正式删除／权限更新按 owner 授权单独进行。PostgreSQL 删除后普通 VACUUM 主要提供 relation 页重用；已分配 total 不等于 live payload，也不能承诺立即缩盘或由此推导共享 Free 项目的用户容量。分批 DELETE 与页重用分别参考 [PostgreSQL DELETE](https://www.postgresql.org/docs/current/sql-delete.html) 和 [routine vacuuming](https://www.postgresql.org/docs/current/routine-vacuuming.html)。
+
+这些请求路径部署后会在正常请求内自动执行，没有另一个 maintenance 启用开关：已提交 staging 正文可在下一次 `/head` 或 `/blocks/store` 回收；旧 log/snapshot 的窗口由 floor/H 和有效 reader 决定，没有按天保留期。首次发布直接选择逐页准备的初始根；显式准备和 tail 达到 4 MiB／128 commits 使用同一分页 checkpoint 路径。普通 commit 先确认事实与 receipt，仅返回准备提示；客户端释放普通同步锁后逐页推进，后续事实同步可取消该 HTTP 循环，重开再从服务端游标续作。新版 Web 以 `x-sensa-sync-protocol: sensa-checkpoint-pages-v1` 协商分页；未协商的严格旧 head／commit／receipt 响应省略准备字段，旧 compact 明确要求升级，不回退全表事务。read lease 默认 10 分钟，私有上传 workspace 和块 upload lease 默认 24 小时（页面上传或 missing/store 确认可续期）。旧 retired 引用按其已保存 expires_at 判断，代码中未使用的两分钟常量不构成现代同步历史的额外宽限期。受保护引用未解除、账号未再请求且未启用定时续作，或切片未排空，都可能使实际回收更晚。
+
+仓库已有的 `sensa-web-monitor.yml` 每小时第 17 分钟触发，retention job 另受 `SENSA_RETENTION_ENABLED == 'true'` 限制，通过受限角色调用 `libraryCloudRetention.mts`。默认仍只扫孤块与过期租约。可选 `SENSA_LIBRARY_HISTORY_RETENTION_ENABLED == 'true'` 在同一任务中续作现有历史／过期私有 generation 清理：按持久 `maintenance_at`、account key 公平选择一个 head，跳过正在锁定的账号，原切片和 cursor 推进在同一事务提交；每片使用数据库时钟及保留微秒精度的时间上界选择并推进 cursor，后续片重新选择最久未服务者；预算内可以公平轮转多次，不把小账号数变成每小时只处理一片的上限。不自动创建 checkpoint，不改变频率或退休边界。每轮最多 100 个事务，90 秒后不再接收新片；当前片可继续完成，20 秒是单条 SQL 超时，不是整个事务时限。SIGTERM／SIGINT 在当前片提交或回滚后退出；宿主 job 仍有五分钟上界。日志分别记录真实已提交事务、服务账号和删除块计数，不能把一次服务当作排空或缩盘。
+
+此续作默认关闭，现有运维凭据权限不足以启用；0051 只加 cursor／索引，不加角色、policy 或 grant。生产启用前须另行批准最小元数据 ACL 与 RLS：head 的 cursor 读写及锁定；staging 的描述符／状态读取、到期私有状态更新／删除；rows、snapshot、log、membership、staging rows/pages 的受保护退休读取／删除；reader 下界读取与过期删除；commit receipt 的只读见证。需要将现有 helper 中的 current／活 reader／未过期上传／opaque legacy 保护同样约束在权限边界，不能给运维角色 blanket DELETE、backend_app 或 block 正文读取权限。本地 backend_app 合成测试不证明该生产角色可执行。尚未设计或授予这组新权限，不能仅设置开关便宣称已上线。
+
+本地代码与合成测试通过不等于已上线。未部署、未配置线上变量或角色、未执行线上回收，也未核验线上 job 的启用状态；上线这段自动删除路径前仍须 owner 单独确认实际生产删除并遵循 CI/CD。
+
+正常认证账号的自己库复制采用受控 Sensa writer 信任边界：写入时各 owner 维护领域关系，首发／二进制接收无需再做全库领域审计；摘要只证明字节完整，不证明语义正确，writer 缺陷仍可能由独立健康审计发现。任意备份、文件和跨作者 Package 导入继续完整领域准入及 projection 重建比较，保留完整审计／诊断入口；并发分支仍执行原有冲突与受影响依赖闭包规则。自库 producer 从同一固定 revision 构造白名单 clean DB、构建当前投影，保留全部历史 Run 材料；receiver 执行版本、精确 schema 白名单、SQLite integrity/FK、body/hash/owners、严格 tagged wire、账号/library/learner/H 绑定。事实和正文按 64-key／1 MiB 已存页读取，decoded body LRU 16 MiB／256 项，单条解压 96 MiB、clean 文件 90 MiB、唯一展开累计 512 MiB；serialized 预算不等于 JS heap。接收端投影版本或 Target 缓存计数不匹配时拒绝，不默默重建。
+已有旧式二进制工件在其原 staging CAS 中原子绑定 cursor snapshot H，使用既有 block store、账号配额及 snapshot membership／read lease；`library_cloud.binary_snapshot` 只描述该 H 的 bytes，不建立另一 head。原始 SQLite 段最多 176 KiB，直接使用 gzip 二进制编码，解压固定分配且拒绝 CRC／digest／ISIZE 损坏、额外成员和输出越界；保留 block hash、3 MiB store 和 4 MiB fetch 边界。本机捕获页同时建立 reverse index，只有成功页事务才合入计数与依赖，不再封存后重扫全部材料。封存后按 64 行／4096 refs／4 MiB 读取原 scratch 的 refs；在原配额能容纳 refs 及二进制保守上界时，refs 暂存与单批二进制编码／传输重叠，无完整 refs 常驻集合。工件越过 90 MiB 文件界限或剩余配额不足时，仍可发布原 refs 权威，head 不附加工件；不放宽任何配额。首次发布统一使用既有有界分页 refs 路径，不在首发前构建 whole-file 工件；可选工件的文件界限不能阻塞事实首发或占住日常 SQLite 读队列。显式“为新设备准备资料”仍采用既有独立准备路径，较大库仍只准备 refs checkpoint；已有二进制／native 工件接收边界不变。refs 新设备恢复也使用独立 namespace：SQL 唯一性见证替代整库 JS 集合，事实／基线按 keyset 流式应用，投影在同一最终事务分页重建。新设备仅在 replicated facts／baseline 真正为空且无 pending／冲突时创建独立 namespace，先载入 H、分页建立现有 sync baseline／reverse relations，再应用连续 tail 至已核验 head。完整封存、账号/signout epoch/revision/incarnation 与原空库再验通过后，持 selection 和旧 transaction exclusive locks 作一次 durable selection 写入；旧 namespace 保留，其他页面及旧 namespace 的排队工作受 fence 拒绝。本页面采用新 incarnation 并重绑定通知；重新打开同一 selection 可恢复 pointer ACK 丢失。下载、tail、门控或 pointer 写失败不激活半成品；仅清理本次新建且已确认关闭、未被选择或保留的 namespace。retention floor 超过工件 H 时不再提供它，不能越过 floor。
+日常增量继续使用 90 秒整体 pass；首次自库发布与空设备全量恢复改为 90 秒无实际进展终止，单次请求仍限 15 秒。完成快照阶段、推进已校验的页、每 64 次成功完成冻结事实读取／依赖观察或实际已发送／接收字节才更新进度，重复计数不续期。首次校验进度以独立 Worker 消息跨 adapter／coordinator 转发，绑定 request、phase、namespace 与当前 owner；取消或迟到消息不能续期，最终 ACK 与 fence 仍决定成功。冷首发校验沿用 64 行批读取，同步批内复用 owner 检查、每次让出后与最终提交前重查，已存 admission 存在性与新增行预算随同批读取，不省略冻结事实解码；本机准备不消耗固定整体网络 pass。显式取消、停滞或请求超时保留可重试的私有 staging／durable receipt，迟到 CAS 不确认本机 baseline，取消的私有 generation 不激活。资源上限独立执行，持续进展不代表整体耗时达标。
+首发与完整 own-account 候选采用有限的 600k 行／1 GiB 累计逻辑展开量合同，本机自库 scratch retained text payload 上限为 1536 MiB（1 GiB 逻辑正文＋128 MiB 有序 refs 合同额度＋384 MiB 指针、owners、准入与恢复元数据），独立磁盘包络 2 GiB；其中 allocated SQLite 页增长限 1792 MiB，另留 256 MiB 日志余量。开始替换前要求浏览器 origin 剩余 quota 2 GiB，新增页／候选写入前保留至少 512 MiB；storage estimate 是含应用缓存的 advisory 值，物理写入仍由 SQLite／OPFS 拒绝。幂等重放和已封存读取不因新增空间预检被拒绝。新首发块只存冻结 row/shared body 的 UTF-16 片段指针、hash 与 plain/stored 长度，按请求窗口从不可变源重建并复核；不保留全量编码块、不从活跃源补读。旧不确定 ACK 所需的块正文仍保留可读。上述数字不是 SQLite 文件/WAL 全峰值或 heap 证明。唯一块 plain／encoded bytes 由页事务实际插入增量计数，重复页不重复计数，失败回滚 rows 与计数。`maximumPageBytes` 是页展开量加唯一编码正文的工作 payload 口径，不是 JS heap 峰值。source physical window 1 MiB、共享正文预取 4 MiB、metadata 512 行／4096 refs／4 MiB；单条独立上限仍为 90 MiB。store 128 块同时保留 3 MiB 字符及实际 JSON UTF-8 上限、route 4 MiB；块解压与账号独立 1 GiB encoded guard 继续执行。服务端从实际解码的不可变 block 测量 UTF-8 字节，按 refs 的顺序及重复次数计入单行 90 MiB 与整库 1 GiB；历史 head／stage 的未知计量用 NULL 区分并在下一次写入前分页补计，只写派生 witness，不重写事实或 refs。服务器最多 4 个未发布 private workspace；首发上传的 workspace 累计 staging payload metadata 128 MiB，沿用 upload lease；清理仅删除过期 private staging／pins，不删除已发布历史或 receipt。服务端每累计 128 次提交或 4 MiB tail 提示准备冻结索引快照，旧 snapshot／log owners 按上述 floor／reader 保护和请求切片逐步退休，幂等回执继续保留；受保护版本仍占账号容量。该请求清理能力尚未部署，不能据本地验证认定线上已发生删除。
 已由当前 replica validation version 完整校验并确认的 v6 基线，在相同远端 revision 下复用本机 owner 事务准入：
 无变化只读取轻量身份、同步游标并核对 head；本机增量只读取变化事实和对应基线正文，保留其余 block refs，
-确认 CAS commit 后在同一 SQLite 事务中 patch 受影响基线与同步状态。后续本机写入保留 pending，不能把游标
+确认带原 operation ID／请求 digest 的 CAS 回执后，在同一 SQLite 事务中 patch 受影响基线与同步状态。远端 tail 从已验证 baseline 建立 Worker overlay，完整或保存态增量准入后在一次本地事务提交事实、baseline 和 cursor；冲突的混合 baseline 仍走完整三方收敛。后续本机写入保留 pending，不能把游标
 推进到未上传版本；丢失或无法确认 ACK 仍用原 operation 重试。服务端明确在提交前拒绝的历史／身份错误
 才清除该 pending receipt，保留本机事实与原基线，避免反复重放必败请求。普通物理删除继续交由领域 Replica
 的许可规则裁决。
-`validationVersion` 是设备内完整性合同版本，不是 wire version；该版本缺失/过期、首次发布、双方变化、
-pending commit 恢复或冲突均保留完整 capture／merge／领域验证。验证合同变更时须更新其版本；泛型 store 写口
+`validationVersion` 是设备内完整性合同版本，不是 wire version；该版本缺失/过期、双方变化、
+非自库 pending commit 恢复或冲突均保留完整 capture／merge／领域验证。正常受控 writer 的首次自库发布使用上述专用入口。验证合同变更时须更新其版本；泛型 store 写口
 是内部接口，生产事实仍必须经各 owner 准入或已完整校验的恢复入口，不把同步当作语义/学习事实创建者。
 PSW 完整副本验证复用 `SemanticWorldRecordReader` 的逐行规则与精确键查询，不再为校验重建完整 JourneyState；
 Registry head/parent、Meaning 内部历史、全局 scene owner，以及 lifecycle/correction 的正反向凭据检查均保留。
@@ -355,6 +399,8 @@ schema version 或既有事实。只保留一个候选代，同 fence／预期 h
 用共用 codec、传输 SHA 和严格 Manifest schema 验证后固定完整的 key／有序 refs 集合，不接受自报记录数。
 append 的 raw block 经相同校验后只保留解码文本 SHA／字符数，逐片验证 row JSON 与有序 refs 的完整覆盖，
 不长期保留另一份已解码媒体；缺片、错序、正文／摘要／key 不符均拒绝。proof 元数据与事实批次同事务回滚。
+候选行显式标记本机 packed 表示与不透明外部 wire；未知 wire 原文不解包存储压缩 envelope，
+不能借 `sensa-record-gzip-v1` 或共享引用保留 tag 绕过逐行完整解码。
 Manifest 原始及解码 UTF-8 均受 64 MiB 上限保护；单块先检查字符长度，批级累计解压在保留文本前检查。
 append 只接收本批 rows 引用的 proof，原始 proof 批次受 4 MiB 保护，累计解压不能超过已预检的 row 字节量。
 单行的正文、proof 数量或传输量超出 append 批次时，prove 只接受该 Manifest row 的 refs，分批限制原始与累计
@@ -366,22 +412,26 @@ begin／append 在写事务内重验 owner fence，避免预检与暂存写入�
 原始校验与 SQL 原因，重试 begin 不复用已经停止校验的 sealed 代。fatal 时不再尝试 SQL 清理，
 留待健康重开清除。换代以事务移除旧私有副本，连接重开清除遗留候选，正式事实不变。
 批次精确重试不重复计数，不同正文的同 key 拒绝；部分候选不能封存，完整候选
-先封存再通过同一完整 authority 校验。校验期间本机 revision／身份／owner 或 incarnation 改变即拒绝；
-候选正文和基线一直不可见，取消只移除对应私有副本。owner／identity／incarnation／signed-out 变化及清库
+先封存再通过同一完整 authority 校验。
+候选保留完整 packed 行供校验读取，不在每次重放时逐摘要查询另一套私有正文。首次空库激活中，
+共享基线按既有 writer 外化并检查一次；仅对全表 Replica Module 无 restore 转换的共享记录，
+再在同一事务将该基线的 compact bytes 和 sync owners 复制到 source／record owners，避免再次外化。
+identity 等转换和派生投影仍走完整值路径；事实／基线／owner／索引／候选清理一并回滚。校验期间本机 revision／身份／owner 或 incarnation 改变即拒绝；
+封存校验期间按 16 MiB UTF-8 文本／256 条 LRU 复用不可变正文；每次读仍独立 JSON 解析和 wire 解码，缓存命中也重查取消与连接健康，分页保留原 fence。此预算不等于 JS heap；大行不缓存。候选正文和基线一直不可见，取消只移除对应私有副本。owner／identity／incarnation／signed-out 变化及清库
 在同一源事务清除私有副本，成功后停止在途校验；事务失败不清正式资料或已存副本。Worker 关闭先取消并等待
 校验结束再关闭 native handles，fatal quarantine 同时停止在途读；失效连接不能继续写失败或已校验状态。
 完整协调器保留 reader 的原始失败，不把取消、并发 fence 变化或存储故障误报成领域资料损坏。
 Worker 的候选校验不占据普通请求队列，按记录让出，
 允许本机读取继续；校验仍绑定同一不可变候选。SQL keyset 页同时限制 64 行与 1 MiB 已存编码，允许单个
 超页记录单独处理；单记录原始正文保护仍为 90 MiB。多行批次在任何解析／压缩前预检原始 4 MiB 字节预算，
-随后逐行编码写入，不同时保留整批压缩／解码对象。单代逻辑正文保护为 512 MiB、已存编码预算为 256 MiB；
+随后逐行编码写入，不同时保留整批压缩／解码对象。完整 own-account 单代逻辑正文保护为 1 GiB、本地候选正文／refs／proof／apply-plan 暂存预算为 1536 MiB；账号实际编码块 guard 为独立 1 GiB，仅在本地隔离验证，外部文件导入边界不变。
 它们不是账号容量、实际 OPFS 占用或峰值内存证明，单个巨型事实仍需单独验证响应性。
 Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell 预缓存所有构建的 JS／Wasm 代码块。
 正常 synchronizer 的新设备恢复已使用该内核：只在无 baseline、无 pending／冲突，且本机 replicated facts
 仅有 identity 时准入；同库 identity 分叉及不改变内容的 identity-only head 保留原 merge／确认路径。
 正文分批由正常 HTTP block fetch 进入私有候选，每次预取最多请求 512 个不同 hash，但只接收一页、最多
 4 MiB 的块正文；超额响应拒绝，deferred 留待后续消费，不先追完全部 hash 或加载任意大小的一批行。
-当前大行前释放无关预取块，最后一次引用后释放，换 head 重试也清缓存。多行 append 限制 512 条／4 MiB，
+预取块保留到最后一次引用；96 MiB 传输工作集遇到压力时只驱逐当前行保护集之外的块，换 head 重试清缓存。多行 append 限制 512 条／4 MiB，
 同时累计最多 4096 次 block 引用（包括重复引用）；引用密集的合法资料分批，不去重或截断原有有序 refs。
 生产者与 Worker 共用批次计数合同，在解析正文或写入前核对。较大有界事务摊薄提交开销，仍保留 FULL，
 参见 [SQLite 事务批量写入说明](https://sqlite.org/faq.html#q19)；它不是容量或恢复时长已达标的证明。
@@ -390,7 +440,14 @@ Worker 按 ES module 分块构建，完整 validator 延迟加载；离线 shell
 新设备应用在 source SQLite commit 内重验 owner、identity、revision、空 facts 和空 baseline，惰性读取单行
 正文并复用既有 restore／索引／媒体引用管线。没有 owner restore transform、也不涉及共享正文的表，
 可在同一事务以 INSERT SELECT 直接复制候选已校验的存储字节到 facts 与对应 baseline，不再逐行解压／对象化／
-重编码。一个表内任一 key 需要转换则整表保留原值路径；身份和共享学习正文仍复用既有 owner／共享存储处理。
+重编码。一个表内任一 key 需要转换则整表保留原值路径。共享学习表先通过既有编码器生成基线、逐字节核对
+正文碰撞，再在同一源事务复制该基线的准确编码与完整 owner 集合；身份继续执行 owner restore。
+全量基线已统一解除 sync owners，不逐行重复解除；共享正文 lookup、缺失正文与 owner 插入使用最多 128 项
+的既有批次，仍受原单记录保护约束。新设备激活仅在该同步事务内保留不可变文本 memo，输入＋结果 UTF-8
+合计最多 16 MiB／256 项，所有 miss 保留原摘要及精确正文检查，成功与回滚均清除。
+已完整校验并复制的 Run 索引只读生成存储帧的 completedAt／targetIds，后续历史投影仍完整解码准确 Run
+材料。Target 完整投影读取后暂存语言字段，标识＋语言 UTF-8 合计最多 8 MiB；未命中时保留完整源读取。
+这些文本预算不是 JS heap／峰值内存或恢复时长证明，其他写入与冷重建仍保留原读取路径。
 派生索引与媒体引用继续从已应用的精确事实更新，与同步状态、deviceId、本机建库回执和候选清理同事务。
 未确认基线的本机 deletion witness 命中 incoming key 时，暂存应用与常规收敛均拒绝自动复活，保留原资料与
 墓碑并报告 history conflict；重试不能绕过。明确全库 reset 在同一事务清除旧 baseline／共享 owner 和墓碑，
@@ -402,18 +459,39 @@ incarnation fence，清除后的旧点击不能变成新授权。普通尝试失
 清除通知使已暂停的空库成为本机 authoritative，不请求云端或继续阻挡资料页；准入失败后的手动重连
 只重试准入，真正成功后才允许同步。
 暂存应用、完整回退应用或空账号确认在同一源事务内解除暂停；失败不消费，新的本机资料仍须走身份冲突。
-新设备候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；协调协议为 58。
+新设备候选应用只额外允许删除这一确切的现存 marker，不开放其他 metadata 或删除操作；当前协调协议为 68。
 同事务 restoreOperationId 回执确认协调器丢失 ACK／候选重放后的实际提交，确认后才发送资料变化通知；
-无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；256 MiB 暂存估计不是峰值磁盘证明。
-已有当前版本验证的 checkpoint 且本机 revision 未变化时，远端新 head 也进入同一私有候选。每批最多 512 key
-在 Worker 内比对当前 baseline 与 manifest 的完整 refs，逐条复用已确认正文，避免未变内容重新下载或跨 RPC。
-共享正文引用在本地还原；候选完整校验后，Worker 仍以 baseline／baseline／remote 执行领域三方合并，不能
-只凭本机未修改而略过不可变历史、删除和冲突规则。仅无冲突且合并结果等于 remote 时生成私有增量应用计划；
-否则保留原完整合并／裁决路径。准备合并让出时普通请求仍可执行，每次惰性读取与最终提交都受原 source fence 保护。
-应用在同一源事务内复核当前验证 stamp、基线版本、内容 revision 与私有计划，按需读取变化正文，原子更新
-facts、baseline patch、派生索引与状态。仅 transport refs 改变时不制造内容 revision；丢 ACK 仍检查同事务回执。
-HTTP head 期间更换并退休旧块时，新设备与增量接收共用最多三次重读／重试。该路径避免整库正文跨页面消息，
-但仍复制未变基线到私有候选并执行全域检查，工作量并非完全只随变化量增长，亦不证明全进程峰值内存或性能达标。
+无法读取该回执时不能冒充成功。候选、live、baseline 和 WAL 可同时占磁盘；1536 MiB 暂存 payload 计量不是峰值磁盘证明，页增长与 origin 空间检查独立执行。
+已有当前版本验证的 checkpoint 且本机 revision 未变化时，远端新 head 进入同一私有候选。
+完整准入从实际候选正文建立行摘要、存储预算、全局 protocolRunId 归属与 Session-start 索引。
+该快照收据绑定 owner/library/learner/incarnation/H、本机与材料版本及 baseline generation；它只保护
+数据完整性，不证明历史结算正确。对应 SQL mutation 使收据失效，最终事务再次复核 fence。
+缺少可信快照收据时，有界 seed RPC 每块最多 16 行，使用 8ms 协作预算，事务外返回 Worker；不在
+最终源事务中 yield。普通自有账号的完整候选也只做保存态和直接引用准入，完整业务证明由外部导入、
+实际学习冲突和显式审计/修复入口承担。
+
+普通复习的 Target、Run/Event、Scope/Session、active pointers、每日数量设置及不可改写的新裁决只暂存
+变化行，以已确认 baseline 的惰性点读组成候选 overlay。准入枚举变化记录及直接引用的 Run/Target；
+不再从 Target 反向查询全部 Run/Event，不构建历史分量图，不因存在旧 reconciliation 重放旧决议谱系。
+Scope 的成员、Session 声明的 Run、Run 的实际参与者/前驱、材料来源及场景 pins 仍核对直接引用；共享
+Scope 不扩展其他成员的旧历史。全局 Protocol Run 归属与 Session-switch 配对使用索引，变化记录的
+保存态值域、精确不可改写字段、追加与版本保护保留。每日数量设置完整核对 route/revision/数量/时间。
+本机 pending 使用完整三方合并；同 Target 真正并发的已完成分支由专用裁决处理，新产生的裁决触发
+受影响 Target/cohort 谱系的历史业务核验。仅一端推进的因果保存态与晚到旧日志不触发该重算。
+
+准入与变化行精确比较复用 8ms 协作预算。候选点读每次检查活跃 fence，封存候选的只读窗口合计最多
+8 MiB serialized 输入，每条最多 256 KiB；每次消费克隆内部解码值，窗口退出释放原对象。超出窗口
+保留严格解码，不把 serialized 预算冒充 heap 峰值。正常路径不再复制、比较整个历史分量的 wire 输入。
+变化计划在私有候选内预先恢复、编码和压缩 facts/baseline，共享 body 按 digest 暂存并核对精确内容与
+原存储见证。私有编码使用 lossless packed 格式，副本与候选一起计入本机 1536 MiB 暂存上限，私有事务提交前同步复核 allocated 页增长。只有
+候选自身的精确插入推进封存代次；其他写入、取消或 fence 变化使旧准备失效。编码/SQL 写入队列使用
+16 条/1 MiB 有界批次，批内编码按正文去重；正式事务复核完整身份、内容、baseline fence 和 body 见证，
+一次提交 facts、projection、baseline、cursor、receipt 和快照收据，不分批暴露正式状态。
+
+依赖证书 v2 包含 Meaning→receipt 反向关系；旧证书不能授权稀疏复用，完整成功准入后重建，领域准入版本不变。小型命令观察仍限 16 MiB/200k 行；完整捕获／候选观察在 private SQLite scope 中按 64 行／1 MiB 批次持久化，随成功认证、取消或失败清理，不常驻整库摘要集合。观察文本计入本机 1536 MiB 暂存预算。稀疏变化正文和直接 baseline 点读分别限 32 MiB，完整展开总量限 1 GiB。
+预算不确定或内容/PSW/source 结构变化回退完整保存态准入，记录实际原因；回退不能绕过失效 fence。
+首次恢复、结构变化和真正冲突的专门证明仍随资料增长，普通接收不承诺任意分布下常数耗时。
+仅 refs 改变不制造内容 revision；丢 ACK 检查同事务回执，HTTP head 更换/块退休最多三次重读/重试。
 异步存储 RPC 不能冒充同步 get；受控 5k Draft HTTP／OPFS 恢复也不能代替 10k Meaning、账号 UI、
 全进程峰值内存或完整账号容量验收。
 `node --import tsx scripts/benchmarkSemanticReplicaValidation.mts` 在 Node 的 SQLite/Wasm 候选库上度量完整 PSW
@@ -465,7 +543,7 @@ revision。完整路径只在首次捕获及 pending 重放改变基线后读取
 生产同步统一经 `syncAccountLibrary` 的单飞与跨标签页 Web Lock；底层注入传输接口不承担并发同步任务调度。
 同步完成后的公共内容恢复使用独立超时信号，不继承已经被下载／本机校验耗尽的同步 deadline；公共内容
 不可用仍独立呈现，不把已完成的个人资料同步改成失败。
-上述已有资料 fallback 仍读取完整事实与基线，64 MiB 解码保护与 256 MiB 账号容量尚有差距；增量优化或分块压缩不证明
+上述已有资料 fallback 仍读取完整事实与基线，64 MiB 解码保护与 1 GiB encoded guard 尚有差距；增量优化或分块压缩不证明
 大规模跨设备恢复的内存或容量达标。
 Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud Sync Coordinator 负责；记录的
 跨设备归一化、三方收敛、完整性验证、历史 replay 与删除许可由领域 Replica Module 负责。Personal
@@ -543,6 +621,13 @@ Registry 依赖，重新构造已接受的来源。调用者携带相同 ID 但�
 去重，准备意图不能遮住另一来源提供的同目标。覆盖引用在本机写入与恢复时均校验真实 membership 和固定身份。
 保存的 coverage 结果可作为历史保留；准备查询仍重新检查当前 active membership，并订阅 Target 变化。
 Book 更新移除覆盖时，查询显示 waiting 而不在读取中改写事实；用户再次明确加入时才持久化新的待准备状态。
+Target 身份由 learner、稳定 Sense 和 Expression ID 共同确定；Sense、Expression 与 Binding 的版本不进入
+长期记忆身份。membership、materialization、Scope source 与 Scene revision 各自固定六个来源 ID，旧 Run
+继续使用实际呈现的 membership 和材料；公共包升级或普通描述修订不能重置进度或把旧记录解释成最新版本。
+私人 Sense 的自然语言说明足以保存，prototype 可空，relation／coverage 可空；空值不声明全球同义或精确覆盖。
+新建与复用由明确意图区分，描述摘要只验证内容。普通编辑默认保留 Sense／Expression／Binding 身份，
+无变化保存不追加事实；实质改义需明确操作。私人版本以不可变 UUID 和 parent 引用保留离线分支，revision
+是分支深度；同深度不是同一版本，较深的旁支不能自动覆盖另一分支，显式冲突选择保留所有原版本及来源引用。
 个人准备任务与每次尝试分别保存 `contextPin`，固定该次选中的 Anchor Revision ID 列表；它不改变 Alignment、
 Sense 或 Binding 引用。新的来源预览读取当前 active Context，普通等待、重试和在途进度按任务 pins 重构输入。
 明确更新才选择新 pins 与 plan revision，失败继续保留原材料；恢复校验允许历史 pins 引用已退役 Anchor。
@@ -586,19 +671,29 @@ Learning System 使用相同的单一准入模式：逻辑事务在 SQLite commi
 交给 Learning authority；authority 只读取改变的 Target、Run、Event、active Run / Study Plan 及直接依赖，
 重放新 Event 并核对 Target、Run、Evidence、Completion 与 Memory/Schedule 投影。Run/Event history 的
 物理删除、旧 Event 改写、无 Event 的派生进度以及本地伪造 Reconciliation 都在提交前拒绝。Cloud Sync
-与手动备份继续通过同一个 authority 的完整状态入口 replay 全部历史；日常学习动作不扫描所有 Run 或
+与手动备份的恢复准入以已保存 Target / Memory State 为运行权威，校验格式、字段值域、身份、材料精确 pins、直接引用、变化修订和 Session，保留哈希、fence、CAS、ACK 和原子提交；普通恢复不重新执行全部历史 Protocol/reducer/scheduler。完整历史重算保留为显式审计入口，用于修复、算法升级或专项审计，不证明每次恢复时历史与当前算法一致；该类矛盾可能延后发现。现有冲突分支连续性证明仍依赖完整 Memory 输出，因此仅对冲突涉及 Target 及其 cohort 闭合谱系保留重算。缓存缺失的 Structured Run 保留受限材料准入，待精确资源恢复后完成 runtime 校验，不自动收敛这类未经完整重放的分叉。设备收据 `restoreValidationVersion` 只证明恢复保真准入，不证明历史算法审计通过；收据不证明历史业务正确性；同版本且仍匹配所有身份/代次/fence 的较强既有收据可保护保存态接收，不跨版本猜测或转换。日常学习动作不扫描所有 Run 或
 Event。具体规则见 [ADR 0005](../adr/0005-concurrent-learning-history-reconciliation.md)。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。
 
 同步记账和业务内容使用不同事件：只有真实业务写入广播内容变化，单纯更新同步状态不能再次触发
-内容同步。本机写入立即完成并形成新的内容版本；存在待同步版本时，停止操作两分钟、连续使用五分钟、
-完成学习会话、页面隐藏、恢复联网或手动操作触发 Checkpoint。页面回到前台只在最近云端检查超过
-五分钟时拉取。账号接通后在后台执行首次拉取；无待同步版本且检查未过期时没有整库请求。
+内容同步。本机写入立即完成并形成新的内容版本；一个协调器在停止修改三十秒、持续修改最多一分钟、
+完成学习会话或页面隐藏时触发 Checkpoint。可见页面每分钟核对轻量 head；启动、focus／恢复可见、
+联网恢复与手动操作也进入同一协调器。跨标签同步锁内重读当前账号、incarnation、内容版本和已校验
+checkpoint；近期确认且无修改时自动请求可复用确认，手动请求仍检查 head。状态广播只提示重读，
+不能作为收敛凭据。冲突／终端失败不自动重试，暂时失败服从持久退避；恢复事件只可对同一未成功
+checkpoint 链提前尝试一次，锁后产生的新失败不能被旧事件绕过。隐藏且无修改时不定期检查。
+过期会话由 Supabase SDK 的正常刷新机制恢复；SDK 明确返回的可重试认证网络错误沿用同步网络失败的
+退避策略，不能因暂时没有 session 而保存为永久登录失效。被拒绝的 refresh token、确实缺失的会话及
+账号不匹配继续要求登录或拒绝跨 owner 访问；本机事实不依赖在线刷新成功。业务时间模拟须区分页面
+认证时钟与服务端时钟，固定 `Date` 也会固定 SDK 的失败冷却截止，不能据此声称真实离线天数。
+无变化自动验证只提交一次本机状态；发现远端变化后先记录 syncing，再恢复／合并。公共资源恢复
+可复用同账号、incarnation 与本机 artifact generation 下已全部成功的结果；缓存、安装事实、catalog
+与候选恢复在 SQLite 提交内递增 generation，异步广播不决定新鲜度。这些本机记账不进入同步或备份。
 Remote Intake Delivery 在账号库身份稳定后独立拉取，不主动启动整库同步。服务用量和其他在线状态
 按需读取。
 
-下载内容在应用前验证摘要、引用和运行时可重放性，并在提交事务时重新检查账号、库和本机版本。冲突不得覆盖同步期间出现的新修改；无法自动合并时保留失败状态和明确重试入口。
+下载内容在应用前验证摘要、保存态字段与直接引用，并在提交事务时重新检查账号、库和本机版本。冲突不得覆盖同步期间出现的新修改；无法自动合并时保留失败状态和明确重试入口。
 
 协议和保护上限以以下源码为准：
 
@@ -660,6 +755,21 @@ Point manifest、摘要、大小、library/learner/schema identity 与 `account_
 账号、空目标库与 incarnation 恢复检查。压缩明文上限仍为 64 MiB，文件上限仍为 90 MiB，record 上限仍为
 200k；解压总量和单帧另有 512 MiB／96 MiB 的防护边界，不能把这些字节上限当作实际 JS heap 承诺。
 本机压缩表示与手动恢复格式不自动改变 Cloud Checkpoint 的分块协议或证明其容量通过。
+`sqlitePortableSnapshot.ts` 提供本机 DB snapshot 生产与隔离准入原语：在固定 source revision 和身份边界下，
+从现有 replica allowlist 写入全新可信 schema，排除设备凭据、providers、operations、pending、公共缓存和同步基线，
+通过 `VACUUM INTO` 生成包含查询投影的独立一致文件。接收端用官方 SAHPool chunk import 写入未打开的新 namespace，
+先禁用不可信 schema、triggers 和 views 并比对完整 schema allowlist，再执行 integrity、FK、共享正文摘要／所有权和领域引用／pins 校验。
+接收准入把每条事实及共享正文完整解码一次，并让学习投影复用已解码对象；投影在同一 generation 内用正式写入器重建并比对原投影值，不再建事实候选库或复制一遍事实。
+快照投影的 DDL、基础写入、全部 cache 初始化、前后值核对、FK 与结构检查在同一 `BEGIN IMMEDIATE` 事务中完成。
+WAL／FULL、连接级 PRAGMA 与 FK 开关在事务外配置；checkpoint 在 commit 后执行并计入投影耗时。失败回滚并隔离该 wrapper，不能凭回滚后的旧 cache version 继续开放目标库。
+文件上限 90 MiB、实际展开总量 512 MiB、单压缩正文 96 MiB、事实与共享正文各 200k；gzip 按实际输出累计限额，不能信任 ISIZE。
+`openIsolatedLocalSnapshot` 与 `openIsolatedLocalGeneration` 只操作已准入的独立 generation，持续拒绝 active／preserved owner namespace；
+重开缺失文件时拒绝而不创建空库。它们不切换 active pointer，不写 cloud cursor／checkpoint，不改变媒体协议，也不进入当前账号恢复 UI。
+`local-portable-snapshot` 与 `local-portable-snapshot-browser` 分别验证真实 schema 准入和 Chromium Worker／OPFS 往返；
+`node --import tsx scripts/assessment/measureLocalSnapshot.mts --fixture=.tmp/retention-capacity-facts-<冻结目录> --label=<新名称>`
+专门测量当前合同有效的 1000 Targets／2001 Runs／4000 Events 基线，准备、生产、导入、准入、投影与原值核对单列。
+专项测量以 1 秒间隔采样本任务的浏览器及测量进程树 RSS，共享页可能重复计数，观测最大值不是分配峰值。
+上述测量不证明远端传输、owner 切换崩溃顺序或移动端资源预算，首次空设备的云快照接口与 cursor 绑定仍须另行实现和验证。
 备份目的地占用检查与事务内恢复共用同一规则：结果严格为空数组的无事实 `learning.materialize` 回执不算资料，其他非启动操作与领域记录仍受保护。
 没有可准备课程时首页不提交空准备回执。备份页检查文件时先读取目的地状态，非空库可看摘要但不提供确认；实际恢复再次原子核对。
 恢复后的新 incarnation 保持旧页面写入保护；零学习包不加载资源重取模块，需要公共资源的恢复可在重新打开后继续取得，已提交事实不随重取失败回滚。
@@ -705,6 +815,7 @@ YouGlish 使用官方 Widget 直接嵌入真实语境聆听页面；提供方脚
 
 每组表达／语言／口音拥有独立 Widget 生命周期，退役后忽略其全部事件并关闭媒体。结果非零与 `onPlayerReady` 同时成立才开放控制，速度使用 `onSpeedChange` 确认值；载入失败或超时退役该 Widget，不接受晚到成功。字幕适配器保留高亮标记，并分别处理实际观察到的旧式字节编码及 UTF-8。嵌入 DOM 按供应商高度参与正常布局，仅约束最大宽度，不以 `height:100% !important` 覆盖供应商像素高度。
 控件可接收命令不代表媒体已载入：未开始／缓冲仍显示加载，播放状态确认后才撤下加载层；初次媒体等待、换片段与请求重播等操作使用有界的媒体等待期限，重复供应商状态不延长同一次等待。超时关闭旧媒体并开放显式重试，不依赖供应商一定发出 `onError`。键盘跳转可绕过第三方 iframe 的推荐链接直接到达自有播放控制。
+启动读取的取消或材料切换退役旧读取，晚到结果不能开启播放器或保留忙碌状态。结束反馈在当前挂载中按不同表达去重，直接在有效 Widget 的实际播放事件中记录，避免快速返回先于 React 效果而丢失确认；未收到确认时不显示播放成果。此反馈不持久化为练习历史，不写正式 Learning、Evidence、Completion 或 FSRS。
 练习由独立 `PracticeWorkspace` 承载，不挂载 Learning workspace、Planner 或材料准备。私有表达索引从当前个人 Expression Anchor 的明确表达引用与已下载 Package 的公开表达字段增量维护，不遍历 Sense 依赖；界面读取只包含表达、语言与代表来源引用，不携带 Context、媒体或学习状态。相同语言与形式合并为表达材料，原始来源事实完整保留。入口只读少量预览与计数，浏览使用已有有界窗口与分页列表；整个来源保存为来源选择，自选子集保存不含原文的稳定 UUID。带排除项的全选按页枚举身份，不读取表达正文；播放前只重新核验预览中的一个表达，不传递完整选择集合。选择与当前表达的设备偏好不成为学习事实；失败保留原选择，不静默换来源。当前播放保持表达文本与语言，重开及下一次选词重新核验来源，不复制整库或完整 Scope。此模块复用身份引用与按需行读取的成熟模式，参见 [Anki 浏览表实现](https://github.com/ankitects/anki/blob/main/qt/aqt/browser/table/model.py)。派生索引可以重建，不改写原意义、接受、学习或媒体事实。
 YouGlish 商业使用须在发布前取得并核对供应商明确许可；本地非发布验收不代表已取得许可。参见[官方开发者政策](https://youglish.com/api/doc/js-api)。
 
@@ -877,7 +988,9 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 
 Personal Meaning 与 Package Center 重旅程的单次受控 UI 耗时区分产品目标和发布硬上限：原目标、实测值与条件继续记录；超过目标即输出明确 `PERFORMANCE_WARNING`，不认领该样本已达到目标。发布容差为 `max(100ms, 目标 × 20%)`，避免用很窄的百分比边界阻挡亚秒交互；超过目标加容差的样本以及无效测量仍失败。这是显式工程发布约定，不是实测噪声置信区间，也不代替持续性能基线。功能、权限、数据保存、原子性、完整性、无全库读取与有界 DOM 的断言保持严格；不得通过容差隐藏持续退化或大规模架构问题。
 
-浏览器 CI 通过 `--shard=1/3`、`2/3`、`3/3` 按目录文件无重叠分组；每个文件保持原隔离准备、逐例执行与交互预算。全部分组成功才通过同名 Chromium 汇总门禁。目录入口继续执行剩余文件并汇总非零结果，不因第一处失败遗漏后续证据；本机不带 shard 时仍执行完整目录。
+浏览器 CI 通过 `--shard=1/3`、`2/3`、`3/3` 按目录文件无重叠分组；每个文件保持独立服务器、浏览器状态、逐例执行与交互预算。全部分组成功才通过同名 Chromium 汇总门禁。目录入口继续执行剩余文件并汇总非零结果，不因第一处失败遗漏后续证据；本机不带 shard 时仍执行完整目录。
+
+`--suite=browser --depth=quick` 是 PR 的日常反馈层：不选择目录中 `browserDepth:full` 的成熟历史／大 Book 文件，并由原生 Playwright 排除具名 `@capacity` 大规模用例。普通规模的真实保存、并发、失败恢复、持久化和生命周期回归仍运行。主分支 CI 必须使用 `--depth=full`，发布资格仍依赖包括容量检查在内的全部分片；本机默认也是 full。快速报告明确记录 depth 和排除 tag，不是完整旅程或容量验收证据，不把历史绿色结果代入本次运行。
 
 长旅程是产品收敛与验收 checkpoint 的基本单位。`user-journeys.md` 定义目标和合法出口；
 `tests/web/journeyMapping.mts` 保存稳定的 Journey → Phase → Scenario → Test Evidence 关联及共享风险检查。
@@ -895,6 +1008,45 @@ node --import tsx tests/web/run.mts --journey=LJ-01 --suite=browser
 node --import tsx tests/web/run.mts --journey=SJ-01 --list
 node --import tsx tests/web/run.mts --journey=OJ-04 --suite=fast
 ```
+
+### 证据保存与任务接续
+
+旅程定义、能力／场景关联和执行结果分开保存。`journeyMapping.mts` 说明一个断言证明什么与剩余边界，
+`catalog.mts` 选择执行环境；checkpoint 的 Git 提交、CI run／attempt、发布 manifest 和实际使用报告记录
+发生过的结果。历史矩阵的 verdict、报告中的旧失败以及独立验收结论均按原版本保留，不改写为当前通过。
+检查覆盖不能仅由文件存在、提交标题、当前绿色 CI 或一次真实用户顺利使用推导。
+
+新任务先按旅程列出证据，再按改动风险与执行环境选跑。快速回归不需要浏览器或费用；OPFS、离线、
+生命周期和真实扩展行为使用 Chromium；账号数据／RLS 使用隔离 PostgreSQL；真实 Provider、TTS、邮件、
+安装权限和生产发布另行授权、执行与留证。独立使用验收给予用户目标与必要边界，不预先提供操作答案，
+不让审查者修改生产实现。不同旅程使用新的独立审查视角，发现的问题由主智能体核实和固化回归。
+
+复用规模夹具时保存生成器、输入规模、实际产生的事实种类与完整性检查；性能记录注明正文与媒体、
+硬件／浏览器、网络、冷暖状态、测量起止及原预算。准备耗时、传输、校验、提交和可交互时间不混为一个数字。
+失败样本与告警保留原结果；告警不等于性能达标，供应商接收邮件不等于用户收件箱验收。
+
+原始证据可在本机建立不可覆盖的归档。归档工具只复制文件并核验字节与 SHA-256，不解释报告、判定通过、
+执行所复制脚本或调用网络。自动发现用于仓库内的 `LJ-*` 报告、历史审计、选定规模日志与发布证据；可用
+JSON 路径数组明确选择其他证据。自动发现不是“全部证据齐全”的证明，归档前应核对来源列表。
+
+```sh
+node --import tsx scripts/archiveJourneyEvidence.mts --discover \
+  --output=output/playwright/evidence-archives/<new-name>
+node --import tsx scripts/archiveJourneyEvidence.mts --sources=<paths.json> \
+  --output=output/playwright/evidence-archives/<new-name>
+node --import tsx scripts/archiveJourneyEvidence.mts \
+  --verify=output/playwright/evidence-archives/<name>/manifest.json
+```
+
+归档原文不做内容脱敏，目录与文件使用本机私有权限并保持 Git ignored；完整 profile、凭据文件和
+填充的环境文件不纳入归档。`manifest.json` 记录原路径、字节数与摘要；`inventoryGitCommit` 是整理时的
+源码版本，不自动成为报告的被测版本；路径中的 Journey hint 也不是验收结论。只有所有复制完成后才写
+manifest，重复命名或摘要不一致直接失败，不覆盖原文件或旧归档。归档应随本机工作资料另行备份；Git
+只保存工具和操作规则，不保存原始报告、生成内容、媒体或私有状态。
+
+重要 CI 证据在其配置的保留期到期前下载并核验；期限以相应 workflow 为准。任务交接只引用源码入口、
+checkpoint 提交、运行记录、归档 manifest 与 issue，不维护第二份手工通过表。保留事项区分已知缺陷、
+未验证的发布准备与明确范围外能力；把它们登记到 issue tracking，不在资料整理阶段自动扩展实施范围。
 
 旅程性能证据必须注明规模、设备/CPU、网络条件、预算和测量范围。构建大小、SQLite/OPFS 查询预算、
 慢账号恢复期间的 Shell 响应以及受控浏览器交互是不同证据，不互相冒充，也不据此宣称真实设备 CWV 达标。
@@ -923,6 +1075,7 @@ Study 的计划摘要与学习历史分开查询；Stats 不重建内容/准备�
 汇总和按日/语言分组针对整个选中范围计算，不由已加载前缀推算。分页链固定首次读取的时钟；Library revision、
 incarnation 或设备时区变化时重新读取前缀，筛选/路线/页面切换后的晚响应不能回写新视图。历史缓存只是同事务更新的
 本机可重建投影，重建按小批次读已有 Run，不修改正式事实；统计排除晚于读取时钟的记录，跨语言不混成同一每日计数。
+Stats 的年度日历和趋势只消费整范围标量汇总；年度渲染至多 366 日，长期趋势合并成至多 24 个相邻月份区间。到期预测复用 Runtime candidate 的来源、暂停、声明已会、语言方向和策略资格条件，SQLite 按 Target 去重后返回最多 30 个按日汇总和一页 20 个身份，只有这一页读取目标展示。两种读模型均不修改排程或正式学习事实。
 
 历史到 Target 详情只读取指定 Target、当前 Run 与每日设置，不重新准备队列、恢复内容或读取全库历史。
 详情仍使用正式 membership/readiness 与同一展示投影，按当前冻结语言方向选择；页面、路线、目标的读取版本隔离
@@ -930,8 +1083,8 @@ incarnation 或设备时区变化时重新读取前缀，筛选/路线/页面切
 不能仅 reset 路由后再次展示已被模块加载器缓存的同一失败；该恢复不改动本机学习事实。
 
 Run 的材料目录保存不可变 body、Step 引用和 participant 首次绑定顺序。Action 明确保存其 before Run
-revision 及后继 presentation（完成则为显式 null）；lifecycle fact 引用同一修订流。恢复从计划基线和初始 Step
-重放，严格合并连续、唯一的每 Run revision，再比较材料目录、映射、顺序与最终 Run；不能把最终映射直接当作
+revision 及后继 presentation（完成则为显式 null）；lifecycle fact 引用同一修订流。恢复从计划基线及保存的展示／刷新见证
+核对连续、唯一的每 Run revision、材料目录、映射与顺序；完整 Protocol 行为与最终 Run 的算法重算另属历史审计。不能把最终映射直接当作
 历史输入。当前格式不猜测或补写旧 Run 缺失的顺序与因果字段；旧来源事实不迁移、不清除，格式验收使用隔离新库。
 
 Content Supply 保存独立的来源准入时点 `provenance.sourceReadyAt`；个人准备的 `ContentAttempt.readyAt`
@@ -956,12 +1109,28 @@ Event Timing、最长任务和页面加载指标分别测量，不能互相替�
 
 `npm run test:coverage` 只生成当前 Vitest 用例所触及
 Web 学习投影的覆盖率报告，不设置全局覆盖率门槛；Playwright Test 失败时按测试项隔离保留 trace 和截图在被 Git 忽略的
-`.tmp/playwright-results/<test-id>` 中，CI 失败时上传这些诊断产物，不重试。Playwright Test 用例必须只使用合成、非敏感数据。
+`.tmp/playwright-results/<suite>-<shard>-<invocation>-<group>` 中，CI 失败时上传这些诊断产物，不重试。Playwright Test 用例必须只使用合成、非敏感数据。
 平台用例仍通过目录进入既有 CI 分层，不额外执行一遍。
 风险标签是筛选维度，不是独立的 CI job：`foundation`/`fast` 的 Vitest 与构建产物检查进入主 CI 的 `npm test`；
 Chromium 的 Playwright Test 检查进入 `npm run test:browser`；PostgreSQL 的 Vitest 和 Chromium+PostgreSQL 的 Playwright Test 检查进入 `npm run test:db`。
 运行器会拒绝把自动化测试登记到错误的 CI 环境边界。`manual` 的实际 Book 检查依赖另行生成的
 `release-candidate/portable-catalog.json`，不在普通 CI 中；普通 CI 的 `package-learning` 等测试覆盖同一安装、结算和复习代码路径，但不替代实际发布包验收。
+
+目录运行器按 runner、环境和精确环境变量分组调用原生测试引擎，不再为每个文件启动独立进程。
+Vitest 保持文件隔离与单 worker；Playwright 保持每个 spec 的 fixture 边界，不增加 worker 或拆散共享生命周期中的用例。
+原 package-center 大型 spec 已按词书、账号恢复、表达练习、学习运行和学习安排拆为独立文件，
+共享 fixture 只复用实现，各文件的可变状态与输出目录独立；相同配置的只读构建按下述规则复用。
+Browser shard 按已观察的文件耗时估计确定性分配；未采样文件使用保守默认权重，不将估计当作 SLO 或实际提速结果。
+
+相同 worker 调用内，Package Center 各文件复用 `webTestBuild.ts` 生成的只读产物。它按完整公开构建配置区分，固定本次调用中首次分配的临时 Web/API 端口；每个文件关闭旧服务器后才建立自己的新 handler，浏览器 context、OPFS、账号和可变夹具不共享。不同配置仍构建新产物，失败构建不会成为成功缓存；缓存不跨 invocation，也不是生产候选。开发态 Skin Lab 显式使用 `NODE_ENV=development`，不继承前一文件的 Vite 构建模式。
+
+完整 CI 中，`prepareRetentionCapacity.mts` 使用原生 GitHub Actions cache 保存纯合成成熟历史数据。key 固定生成／校验的源码依赖、workspace package source、lockfile、Node 版本、平台和输入规模，没有跨版本 restore-key。命中后仍执行当前 digest、数量和完整领域 replay 校验；不一致、非数据文件、symlink 或不完整准备直接失败，不静默覆盖、清空或重建旧缓存。每个浏览器用例仍复制到自己的空隔离 OPFS，复制耗时与交互耗时分开报告。缓存减少正式历史的重复生成，不能省略浏览器写入、恢复或性能测量。
+
+每次调用在 `.tmp/test-results/<selection>/shard-<shard>/<invocation>/` 保存原生 JSON／blob 报告与目录选择回执，
+同时记录 GitHub attempt。成功要求原生引擎退出成功且报告包含全部、仅包含本次选择的测试文件；
+不存在的报告、遗漏文件或其他调用留下的旧产物不能代替执行结果。CI 在成功与失败时都上传原生报告，
+并用 Playwright 自带的合并器生成同一 CI run（含局部重跑 attempt）的浏览器 HTML 报告。
+聚合报告不放宽各 shard 的成功门禁；失败 trace 与重跑前的失败报告保留，诊断产物保留七天。
 
 `tests/web/support/libraryConvergenceWorld.mts` 通过一个小型测试 Interface 封装每台设备的 confirmed base、当前
 本地快照、云端发布、领域 Replica Module 合并与冲突分区。场景只提交领域有效快照、指定同步顺序，并可在确定时点
@@ -1031,7 +1200,11 @@ SQL、正文、邮箱、token、堆栈或嵌套 cause。连接池连接／idle�
 提供的隐式全局。受控回归仅在应用工作范围移除全局 Buffer，保留 Node HTTP 自身依赖，验证上传、容量拒绝
 及相同块重试；Edge 编译和真实托管运行另行验证，不用 Node 回归冒充 Deno 运行证据。
 
-`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
+`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>-attempt-<BUILD_ATTEMPT>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
+
+候选的构建 attempt 与全套检查通过的验证 attempt 分开记录。只重跑失败测试时，候选仍属于原构建；完整重跑会上传新的独立候选，不覆盖旧产物。`candidateSource.mjs` 只读核验精确仓库、绿色 main/push run、验证 attempt、未过期 artifact ID/digest，以及生成它的成功构建 job 和时间边界。部署按 artifact ID 下载，并继续校验原构建 provenance、目标和全部文件摘要，不把测试重跑当作重新构建。
+
+Workflow 是执行规则，不是平台级合并保护。只有在 GitHub 分支保护／ruleset 实际启用并核验 required checks 后，才能认领强制合并门禁；Environment 的审批规则也需要独立核验。私有仓库的计划限制不能通过脚本或一个 `owner_accepted` 参数宣称已经解决，不默认更改仓库可见性或购买计划。
 
 整个生产系统只有一个发布编排器：`.github/workflows/sensa-release.yml`。正常路径由成功的同仓库
 `Sensa CI` main run 通过 `workflow_run` 自动触发，不需要人员或 Agent 再点击发布按钮。编排器先核对
@@ -1044,26 +1217,59 @@ SQL、正文、邮箱、token、堆栈或嵌套 cause。连接池连接／idle�
 自动路径受版本化的 `sensa-automatic-release-policy-v1` 约束，只批准已经具备绿色、不可变 CI 候选的普通
 application-only 变化。数据库迁移、`infra/`、Supabase/Cloudflare 生产配置、服务环境合同、学习内容与共享
 内容合同、Supabase Edge 入口以及 API authentication/access authority 都代表新的数据、权限、基础设施或内容发布授权，自动路径会停止并要求 owner 对精确 revision 使用
-备用 dispatch 显式授权。当前没有真实用户不会放宽这些边界；该策略就是后续存在真实用户时继续使用的
+备用 dispatch 显式授权。政策等待输出 `requires-approval`／`awaiting-approval`，不部署组件，不生成成功系统清单，也不冒充已上线；它与执行故障分别报告。当前没有真实用户不会放宽这些边界；该策略就是后续存在真实用户时继续使用的
 默认保护。手动入口只用于上述策略例外、完整 bootstrap、明确重发和灾难恢复，不是日常发布步骤。
 
 统一发布流程：
 
 1. 正常路径接收已完成的绿色 `Sensa CI` main run；备用路径接收 owner 明确授权的完整 main SHA；
-2. 固定产生候选的 CI run id / attempt；自动路径不重新查询或替换触发它的 run；
+2. 固定绿色验证的 CI run id / attempt，再独立核验候选 artifact ID 与构建 attempt；不替换触发它的 run；
 3. 读取上一份 `sensa-system-release-manifest-v1|v2`，按路径影响生成最小安全 Release Plan；新成功记录写为带授权证据的 v2；
-4. 如需发布内容，先构建、验证、上传不可变 Book/Registry 并提升 Registry；
-5. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
-6. 应用前向数据库迁移、对齐 Supabase Auth、部署 Supabase Edge Function；
-7. 上传 Cloudflare Worker 版本，先验证预览，再提升到生产，并用 `wrangler triggers deploy` 应用域名路由；
-8. 执行公网非模型 smoke；
-9. 生成同时固定 Application、公开配置目标、前向 migration 集合与 Learning Content 身份的系统清单并保存发布证据。
+4. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
+5. 完整应用发布才应用前向数据库迁移、对齐 Supabase Auth／服务配置并部署 Supabase Edge Function；
+6. 上传 Cloudflare Worker 版本，先核验预览文件，再提升到生产；完整发布才用 `wrangler triggers deploy` 应用域名路由；
+7. 执行公网非模型 smoke，并核验 API 构建身份、生产 Web 文件摘要和 Cloudflare 实际 100% 流量版本；
+8. 如需发布内容，在所需应用通过核验后构建、验证、上传不可变 Book/Registry 并提升 Registry；
+9. 生成同时固定 Application、公开配置目标、前向 migration 集合与 Learning Content 身份的系统清单；
+10. 独立 archive job 将已核验的候选 ZIP 与系统清单保存到 GitHub 原生 Release，核验回读摘要后发布归档。
 
-联动发布按 Content → Application 排序；共享合同必须在旧应用/新内容和新应用/新内容的滚动窗口中保持
-兼容。任一组件未成功时不会生成成功的系统清单。首次使用统一入口，或上一份系统清单已经不可用时，
+仅 `scope=auto` 且生产变化全部位于 `apps/web/`，并已有真实核验的应用基线时，Planner 才选择
+`web-only`。它保留原 API、数据库迁移集和生产配置，跳过 Supabase 写入与域名路由更新；执行前仍须
+核对候选与基线的公开目标、迁移摘要、原 API 身份及原 Web 实际流量。基线缺少证明、显式重发、
+API／扩展／共享／配置或未知路径变化均保持完整发布。目标漂移直接拒绝，不能把 Web-only 自动升级为更大写入权限。
+
+`releaseCandidate.mjs` 在密封前将完整源码 SHA 写入编译后的 API identity module；本地源码默认返回 null，
+运行时环境变量不能覆盖这个身份。公开 `/sensa/release` 只返回构建身份，不认证、不访问资料或调用模型。
+`liveVerification.mjs` 回读预览／生产的 index、Service Worker 与 assets/integrations 中的 JS、CSS、WASM、HTML
+实际解码字节，按候选校验大小和 SHA-256，并查询 Cloudflare 最新部署的精确版本及 100% 流量。
+最终系统记录必须带匹配的 live verification；Web 与 API 可以来自不同的已核验源码版本。
+
+联动发布按 Application → Content 排序；候选应用必须先接受当前正式 Registry，应用通过线上核验后才
+推广新内容，避免旧 API 提前读取新增合同字段。独立 Content 发布仍须与当前应用兼容。任一组件未成功时
+不会生成成功的系统清单。首次使用统一入口，或上一份系统清单已经不可用时，
 Planner 会要求 `scope=all` 的完整 bootstrap，而不是猜测线上组件状态。
 
-应用交付遵循 `build once → verify once → promote once`：生产 workflow 没有应用 build job，也不会接受其他 run、其他 attempt 或只有相同文件名的 artifact。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。
+`/sensa/packages` 默认返回不含可选 Book 预览字段的目录，供仍打开的旧 Web 客户端读取；新版 Web 通过
+`bookPreview=1` 请求完整目录。两种表示分别按实际响应重算 revision 与 ETag，Book archive identity 不变。
+本机目录缓存区分该表示；旧标签页写回基础目录后，新版会重新请求完整表示。
+
+应用交付遵循 `build once → verify → promote`：生产 workflow 没有应用 build job，不接受其他仓库／SHA／run 的候选，也不拿验证 attempt 冒充构建 attempt。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。备用入口只接受已完成的绿色 CI；未完成时立即给出可操作状态，不在发布 job 内等待一个短于实际 CI 时长的固定窗口。
+
+发布计划、组件回执和完整系统清单使用独立产物身份；重跑组件后，记录器接收该成功执行返回的 artifact ID，不按同名文件猜测最新结果。`releaseStatus.mjs` 在失败后记录有限允许列表内的步骤 outcome，并区分 `not-deployed`、`partial-or-unverified` 与完成状态。迁移／配置命令失败也可能留下部分变更，不能认领“生产未变化”或“已自动回滚”。统一报告分别展示等待授权、no-op、完整记录与 incomplete；实际应用已核验但归档失败时显示 `verified-but-unarchived`，重跑 archive job，不重跑部署。命令 outcome、线上构建证明和用户旅程验收是不同证据。
+
+`releaseArchive.mjs` 使用原生 GitHub Releases，不增加备份数据库。候选归档 tag 为
+`sensa-application-<FULL_SHA>-<BUILD_RUN>-<BUILD_ATTEMPT>`，保留 Actions ZIP 的精确原字节、摘要和密封 manifest；
+系统归档沿用 `sensa-system-<SHA_PREFIX>-<RUN>-<PLAN_ATTEMPT>`，保存完整清单与独立 checksum。
+草稿上传并回读校验后才发布；同名不同字节拒绝覆盖，部分重试保留第一份精确回执。
+GitHub token 只发送到固定 API／上传域名，签名存储下载不转发 token。
+归档 receipt 如实记录平台 `immutable` 属性，不将脚本“不覆盖”策略冒称已启用平台不可变保护。
+
+规划优先读取可核验的长期系统归档，并检查较近 Actions run 的完整记录；整体 workflow 因 archive 失败而红，
+不代表已经核验的生产状态消失，不能静默退回更旧清单。原生发现有界，较旧记录可指定精确 system tag。
+Actions candidate 过期后不允许临时构建未测代码来发布；已保存的原字节仍可用于受控恢复及配置迁移。
+恢复只读取 manifest 明确列出的成员并逐文件核验，不执行归档脚本、不按 ZIP 路径解压或创建 symlink，
+目标目录已存在时拒绝覆盖。Web-only 清单保留原 API 的独立候选归档引用，不能把新 Web ZIP 中未部署的 API 当作线上 API。
+旧组件没有归档时 receipt 明确保留缺口，不伪造恢复点；归档不会回滚数据库或替代实际恢复演练。
 
 普通 application-only 变化不需要运行发布命令。策略例外、明确重发或恢复时才使用备用入口：
 
@@ -1213,7 +1419,9 @@ digest 和内嵌 Manifest，再校验全部 `.sensa` 成员并用一个 transact
 Portable 准入、编译、安装和导出 authority。区别只在信任来源：Catalog 路径可依据 Registry 对 Book
 archive 的精确 digest 采用官方 semantic declaration，本地文件只能形成 Package-local
 identity。UI 不解析 ZIP、Manifest 或媒体，也不能绕过 Content Supply 直接构造 Runtime content。
-浏览器中的 Book 准入、独立 `.sensa` 导入预览和安装准备共用单任务 Worker，把 ZIP、摘要与内容编译移出
+Registry 描述符可携带固定 URL、byteLength 与 SHA-256 的只读 `preview` 文本制品（最多 8 MiB）。构建器从通过验证的 Book 生成完整表达目录及最多三个真实场景、意思和例句；发布器再次与原 Book 比较后先上传制品，最后发布 Registry。`book_preview` query 校验制品字节与精确版本身份，不访问学习库。旧描述符仍有效：无预览制品且原 archive 不超过 8 MiB 时，在内存中读取、完整校验并提取同一文本投影；较大的旧包明确显示预览不可用。页面离开、版本切换或超时终止读取与 Worker，不写安装、媒体或学习事实。
+
+浏览器中的 Book 准入、下载前内容预览、独立 `.sensa` 导入预览和安装准备共用单任务 Worker，把 ZIP、摘要与内容编译移出
 UI 主线程；预览只返回已校验的 Manifest 和媒体统计，不把解码媒体传回界面。确认安装仍校验原归档摘要，
 Worker 不访问学习库；安装事实只由主流程的统一事务提交。无 Worker 的 Node 验证使用同一纯计算实现。
 

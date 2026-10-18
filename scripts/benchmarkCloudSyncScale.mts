@@ -40,6 +40,7 @@ try{
     assert.equal(result.sourceTableReads,0,'a single local edit enumerated source tables');
     assert.equal(result.changedBaselineBodies,1,'a single local edit read unrelated baseline bodies');
     assert.equal(result.changedBaselineWrites,1,'a single local edit wrote unrelated baseline bodies');
+    assert.equal(result.metadataRows,0,'a single local edit read the entire reference directory');
     assert.equal(result.changedCheckpointRecords,1,`${scenario.records} records did not narrow a single-record edit`);
     assert(result.journalRowsRead<=2,`${scenario.records} records read ${result.journalRowsRead} journal rows for one edit`);
     assert(result.stateBytes<16*1024,`${scenario.records} records leaked the checkpoint baseline back into cloud-sync state`);
@@ -55,7 +56,7 @@ try{
     journalRowsRead:row.journalRowsRead,uploadedBlocks:row.uploadedBlocks,uploadedKiB:Number((Number(row.uploadedChars)/1024).toFixed(1)),fetchedBlocks:row.fetchedBlocks,stateKiB:Number((Number(row.stateBytes)/1024).toFixed(1)),
     heapDeltaMiB:row.heapDeltaBytes===null?null:Number((Number(row.heapDeltaBytes)/1048576).toFixed(2)),
   })));
-  console.log('PASS: real Chromium/OPFS sync at 1k/10k scale has zero unchanged baseline body reads/writes and one changed baseline body read/write. The v6 complete manifest still reads all key/block references. Controlled Draft/media/transport, not Sense or Learning-history capacity; timings and end-of-operation heap delta are not CWV or peak memory guarantees.');
+  console.log('PASS: real Chromium/OPFS sync at 1k/10k scale has zero unchanged baseline body reads/writes and one changed baseline body read/write. The cursor patch reads no complete key/block reference directory. Controlled Draft/media/transport, not Sense or Learning-history capacity; timings and end-of-operation heap delta are not CWV or peak memory guarantees.');
 }finally{
   await browser.close();
   await new Promise<void>(resolve=>server.close(()=>resolve()));

@@ -1,4 +1,4 @@
-import {sensaLanguageForDeclaredTag} from '@sensa/contracts/sensa';
+import {sensaLanguageForDeclaredTag} from '@sensa/contracts/sensa/language';
 import type {InterfaceLocale} from './localeRegistry';
 
 /** Language names are presentation data. The learning catalogue supplies the

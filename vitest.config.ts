@@ -2,6 +2,8 @@ import {defineConfig} from 'vitest/config';
 
 export default defineConfig({
   test: {
+    isolate: true,
+    maxWorkers: 1,
     include: ['tests/web/**/*.test.{ts,tsx,mts,mjs}'],
     environment: 'node',
     testTimeout: 120_000,

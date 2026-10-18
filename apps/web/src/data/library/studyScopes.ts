@@ -1,3 +1,4 @@
+import {learningSourcePinSchema} from '../../learning/runtime/learningIdentity';
 import {z} from 'zod';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {sensaFormalPinnedLanguageContextSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
@@ -24,13 +25,13 @@ const sourceSchema=z.object({
  membershipId:uuid,membershipRevision:z.number().int().positive(),sourceKind:z.enum(['sense_learning_package','personal_meaning_alignment','stable_sense']),
  membershipStatus:z.enum(['active','superseded']),
  enrollmentId:uuid.nullable(),packageKey:z.string().nullable(),assurancePackageKey:z.string().optional(),
- provenance:z.record(z.string(),z.unknown()),introduce:z.boolean(),ongoing:z.boolean(),
+ sourcePin:learningSourcePinSchema,provenance:z.record(z.string(),z.unknown()),introduce:z.boolean(),ongoing:z.boolean(),
  supplementalState:supplementalMembershipStateSchema.optional(),
  plans:z.array(planSchema).length(LEARNING_PROTOCOL_PURPOSES.length),
 }).strict();
 const memberSchema=z.object({
  targetId:uuid,retentionTargetId:uuid,
- senseId:z.string().min(1),senseVersionId:uuid,bindingId:z.string().min(1),bindingVersionId:uuid,
+ senseId:uuid,expressionId:uuid,
  policy:z.object({assignmentId:uuid,assignmentRevision:z.number().int().positive(),profileId:z.string().min(1),profileVersion:z.string().min(1)}).strict(),
  sources:z.array(sourceSchema).min(1),
 }).strict();

@@ -12,6 +12,26 @@ import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personal
 import type {PublishedLearningSceneAcceptanceInput} from '../../../apps/web/src/experience/personalMeaningJourney/types.ts';
 import {worldItemFromRegistry} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
 import {assertPersonalSemanticWorldState} from '../../../apps/web/src/experience/personalMeaningJourney/authority';
+import {meaningCorrectionPayload} from '../../../apps/web/src/experience/personalMeaningJourney/meaningCorrection';
+import {indexRegistry} from '../../../apps/web/src/experience/personalMeaningJourney/registryRead';
+import {directPublishedFixture} from '../support/directPublishedFixture';
+import {buildPersonalMeaningLearningSources} from '../../../apps/web/src/experience/personalMeaningJourney/learningSource';
+
+test('ordinary published wording is a personal description and preserves all issued semantic facts',async()=>{
+ const id=()=>crypto.randomUUID(),repository=new MemoryJourneyRepository(),gateway=createJourneyGateway({repository,clock:createSeededClock('2026-10-11T08:00:00.000Z')}),pack=directPublishedFixture().pack,entry=pack.content.entries[0]!;
+ const accepted=await gateway.acceptPublishedLearningScene({operationId:id(),existingPersonalMeaningId:null,source:{packageKey:pack.key,bookId:id(),bookVersionId:id(),contentReleaseId:id(),publishedAt:'2026-10-10T08:00:00.000Z',title:'Borrowing'},target:{learningTargetId:id(),curriculumMembershipId:id(),senseId:entry.senseId,senseVersionId:entry.senseVersionId,bindingId:entry.bindingId,bindingVersionId:entry.bindingVersionId,expression:entry.expression,targetLanguageTag:'en'},semantic:entry.semantic!,scene:{sceneId:id(),revisionId:id(),revision:1,body:'向同事借一把伞。',media:[],createdAt:Date.parse('2026-10-11T07:00:00.000Z')}});
+ const before=await repository.load(),record=before.meanings[0]!,alignment=record.alignments[0]!,payload=meaningCorrectionPayload(record,indexRegistry(before.registry),alignment.personalMeaningAlignmentId),operationId=id();
+ const changedSceneId=id();
+ await assert.rejects(gateway.correctPersonalMeaning({operationId:changedSceneId,personalMeaningId:accepted.personalMeaningId,personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,source:await repository.captureSource('personal_meaning',accepted.personalMeaningId),payload:{...payload,operationId:changedSceneId,acceptance:{mode:'learner_direct'},sense:{...payload.sense!,semanticSpec:{...payload.sense!.semanticSpec,prototypeScenes:[]}}}}),/annotationInvalid/);
+ assert.deepEqual(await repository.load(),before);
+ await gateway.correctPersonalMeaning({operationId,personalMeaningId:accepted.personalMeaningId,personalMeaningAlignmentId:alignment.personalMeaningAlignmentId,source:await repository.captureSource('personal_meaning',accepted.personalMeaningId),senseEdit:'wording',reuseSense:{senseId:alignment.senseId,senseVersionId:alignment.senseVersionId},payload:{...payload,operationId,acceptance:{mode:'learner_direct'},sense:{...payload.sense!,semanticSpec:{...payload.sense!.semanticSpec,coreMeaningFocus:'我理解为临时借来，用完归还。'}}}});
+ const after=await repository.load(),updated=after.meanings[0]!;
+ assert.deepEqual(after.registry.senses,before.registry.senses);assert.deepEqual(after.registry.senseVersions,before.registry.senseVersions);
+ assert.deepEqual(after.registry.bindings,before.registry.bindings);assert.deepEqual(after.registry.bindingVersions,before.registry.bindingVersions);
+ assert.equal(updated.alignments.at(-1)!.senseId,alignment.senseId);assert.equal(updated.alignments.at(-1)!.senseVersionId,alignment.senseVersionId);
+ assert.equal(updated.personalMeaningRevisions.at(-1)!.personalSenseWording,'我理解为临时借来，用完归还。');
+ assertPersonalSemanticWorldState(after);
+});
 
 test("learning-scene-bridge", async () => {
 
@@ -99,13 +119,71 @@ assert.equal(retired.status,'deleted');
 const third={...second,operationId:id(),existingPersonalMeaningId:accepted.personalMeaningId,scene:{...second.scene,revisionId:id(),revision:3,body:'学习页里另一次明确保存的蓝盘子经历。'}};
 const reintroduced=await gateway.acceptPublishedLearningScene(third);
 assert.equal(reintroduced.personalMeaningId,accepted.personalMeaningId);
-assert.notEqual(reintroduced.personalSemanticAnchorId,accepted.personalSemanticAnchorId,'a retired Context anchor must not be revived in place');
+assert.notEqual(reintroduced.personalSemanticAnchorId,accepted.personalSemanticAnchorId,'reintroduction preserves the retired association and creates a new Context');
 state=await read();record=state.meanings[0];
-assert.deepEqual(record.personalSemanticAnchors.find((anchor:any)=>anchor.personalSemanticAnchorId===accepted.personalSemanticAnchorId),retired);
-assert.deepEqual(gateway.getDetail(accepted.personalMeaningId)!.materialBlocks.filter(block=>block.kind==='text').map(block=>block.bodyText),[authoredContext,third.scene.body],'explicit reacceptance preserves the independently authored current Context and adds the reviewed scene');
+assert.equal(record.personalSemanticAnchors.find((anchor:any)=>anchor.personalSemanticAnchorId===accepted.personalSemanticAnchorId).status,'deleted');
+assert.equal(state.contexts.anchors.find((anchor:any)=>anchor.personalSemanticAnchorId===accepted.personalSemanticAnchorId).status,'active','detaching one Meaning never deletes the independently saved Context');
+assert.deepEqual(gateway.getDetail(accepted.personalMeaningId)!.materialBlocks.filter(block=>block.kind==='text').map(block=>block.bodyText),[authoredContext,third.scene.body],'reassociation retains the original Context order and the independently authored material');
 const fourth=await gateway.acceptPublishedLearningScene({...third,operationId:id(),scene:{...third.scene,revisionId:id(),revision:4,body:'这次更新同一条新场景锚点。'}});
 assert.equal(fourth.personalSemanticAnchorId,reintroduced.personalSemanticAnchorId);
 assert.deepEqual(gateway.getDetail(accepted.personalMeaningId)!.materialBlocks.filter(block=>block.kind==='text').map(block=>block.bodyText),[authoredContext,'这次更新同一条新场景锚点。']);
+
+// Scene-managed Context lifecycle advances the canonical lineage independently
+// of the Meaning's old pin. A later acceptance extends that exact restored head.
+const contextBeforeLifecycle=(await read()).contexts.anchors.find((row:any)=>row.personalSemanticAnchorId===fourth.personalSemanticAnchorId);
+const deletedContext=await gateway.changeContextLifecycle({operationId:id(),contextId:fourth.personalSemanticAnchorId,expectedRevisionId:contextBeforeLifecycle.currentRevisionId,action:'delete'});
+await assert.rejects(gateway.acceptPublishedLearningScene({...third,operationId:id(),scene:{...third.scene,revisionId:id(),revision:5,body:'回收站中的情境不能被接受。'}}),/meaningChanged/);
+const restoredContext=await gateway.changeContextLifecycle({operationId:id(),contextId:fourth.personalSemanticAnchorId,expectedRevisionId:deletedContext.revisionId,action:'restore'});
+const afterRestore=await gateway.acceptPublishedLearningScene({...third,operationId:id(),scene:{...third.scene,revisionId:id(),revision:5,body:'恢复后接受的新经历。'}});
+state=await read();
+const canonical=(state.contexts.anchorRevisions as any[]).find(row=>row.personalSemanticAnchorRevisionId===afterRestore.personalSemanticAnchorRevisionId);
+assert.equal(canonical.revision,contextBeforeLifecycle.currentRevision+3);
+assert.equal(state.contexts.anchorRevisionParents[canonical.personalSemanticAnchorRevisionId],restoredContext.revisionId);
+assertPersonalSemanticWorldState(state);
+
+const beforeUpgrade=structuredClone(state),priorMeaning=beforeUpgrade.meanings[0];
+const upgrade={...first,operationId:id(),existingPersonalMeaningId:accepted.personalMeaningId,
+ source:{...first.source,bookVersionId:id(),contentReleaseId:id(),publishedAt:'2026-09-15T00:00:00.000Z'},
+ target:{...target,senseVersionId:id(),bindingVersionId:id()},
+ semantic:{...semantic,senseVersionNumber:4,bindingVersionNumber:5,semanticSpec:{...semantic.semanticSpec,coreMeaningFocus:'餐桌上盛放食物的浅而平的器皿。'}},
+ scene:{...first.scene,revisionId:id(),revision:6,body:'升级公共说明之后，我明确接受的私人盘子经历。'}};
+const upgraded=await gateway.acceptPublishedLearningScene(upgrade);
+assert.equal(upgraded.personalMeaningId,accepted.personalMeaningId);
+assert.equal(upgraded.personalSemanticAnchorId,afterRestore.personalSemanticAnchorId);
+state=await read();record=state.meanings[0];
+for(const field of ['semanticAcceptances','alignments','bindingConfirmations','personalSemanticAnchorRevisions']){
+ for(const fact of priorMeaning[field])assert.deepEqual(record[field].find((row:any)=>JSON.stringify(row)===JSON.stringify(fact)),fact,'published adoption preserves each issued fact');
+}
+for(const field of ['senseVersions','expressionVersions','bindingVersions'])for(const fact of beforeUpgrade.registry[field])assert(state.registry[field].some((row:any)=>JSON.stringify(row)===JSON.stringify(fact)));
+const sources=buildPersonalMeaningLearningSources(record,state.registry);
+assert.equal(sources.length,1);assert.equal(sources[0]!.reference.senseVersionId,upgrade.target.senseVersionId);assert.equal(sources[0]!.reference.bindingVersionId,upgrade.target.bindingVersionId);
+assert.equal(sources[0]!.context.text.includes(upgrade.scene.body),true);
+const upgradedFacts=structuredClone(state.meanings);
+await gateway.acceptPublishedLearningScene({...upgrade,operationId:id()});
+assert.deepEqual((await read()).meanings,upgradedFacts,'confirming the same version again adds no semantic or Context facts');
+const rejectedUpgrade={...upgrade,operationId:id(),target:{...upgrade.target,bindingId:id(),bindingVersionId:id()},semantic:{...upgrade.semantic,expressionId:id(),expressionVersionId:id()},scene:{...upgrade.scene,revisionId:id(),revision:7}};
+await assert.rejects(gateway.acceptPublishedLearningScene(rejectedUpgrade),/另一个意思或表达/);
+assert.deepEqual((await read()).meanings,upgradedFacts);
+assertPersonalSemanticWorldState(await read());
+
+let currentVersion=upgrade;
+for(const changeExpressionVersion of [false,true]){
+ const before=await read(),oldFacts=structuredClone(before.meanings[0]);
+ const next={...currentVersion,operationId:id(),source:{...currentVersion.source,bookVersionId:id(),contentReleaseId:id()},target:{...currentVersion.target,bindingVersionId:id()},semantic:{...currentVersion.semantic,bindingVersionNumber:currentVersion.semantic.bindingVersionNumber+1,...(changeExpressionVersion?{expressionVersionId:id(),expressionVersionNumber:currentVersion.semantic.expressionVersionNumber+1}:{} )},scene:{...currentVersion.scene}};
+ await gateway.acceptPublishedLearningScene(next);
+ const after=await read(),activeSources=buildPersonalMeaningLearningSources(after.meanings[0],after.registry);
+ assert.equal(activeSources.length,1,'Binding-only adoption has one unambiguous current source');
+ assert.equal(activeSources[0]!.reference.senseVersionId,next.target.senseVersionId);
+ assert.equal(activeSources[0]!.reference.bindingVersionId,next.target.bindingVersionId);
+ assert.equal(activeSources[0]!.reference.expressionVersionId,next.semantic.expressionVersionId);
+ for(const field of ['alignments','semanticAcceptances','bindingConfirmations'])for(const fact of oldFacts[field])assert(after.meanings[0][field].some((row:any)=>JSON.stringify(row)===JSON.stringify(fact)));
+ const facts=structuredClone(after.meanings);await gateway.acceptPublishedLearningScene({...next,operationId:id()});assert.deepEqual((await read()).meanings,facts);
+ assert.throws(()=>assertPersonalSemanticWorldState({...after,commandReceipts:after.commandReceipts.filter((row:any)=>row.operationId!==next.operationId)}),/见证|invalid/,'the version replacement cannot restore without its explicit Scene acceptance receipt');
+ currentVersion=next;
+}
+const beforeDowngrade=await read();
+await assert.rejects(gateway.acceptPublishedLearningScene({...upgrade,operationId:id(),scene:{...upgrade.scene,revisionId:id(),revision:currentVersion.scene.revision+1}}),/meaningChanged/);
+assert.deepEqual(await read(),beforeDowngrade,'an old published version cannot reactivate an earlier understanding');
 
 const foreignRepository=new MemoryJourneyRepository(),foreignGateway=createJourneyGateway({repository:foreignRepository});
 await foreignGateway.acceptPublishedLearningScene({...first,operationId:id(),scene:{...first.scene,sceneId:id(),revisionId:id()}});

@@ -198,7 +198,7 @@
     "feedback": "Commentaires et corrections",
     "feedbackText": "Contactez l’assistance pour vos commentaires sur le produit, les corrections de contenu, la récupération du compte ou les questions de suppression. Joignez le fichier de diagnostic uniquement si cela est utile ; il contient l’état d’exécution et des décomptes, mais ni contenu d’apprentissage, adresses e-mail, identifiants d’enregistrement, URL, jetons ni piles d’appels.",
     "contact": "Contacter l’assistance",
-    "unavailable": "Le contact de l’assistance n’est pas configuré pour cette version. Ne la mettez pas à la disposition des utilisateurs.",
+    "unavailable": "Les coordonnées du support sont actuellement indisponibles.",
     "diagnostics": "Diagnostics expurgés",
     "diagnosticsText": "Téléchargez un rapport JSON local contenant la version, les capacités du navigateur, l’espace utilisé et l’état de synchronisation. Examinez-le avant de le joindre à une demande d’assistance.",
     "diagnosticsDownload": "Télécharger les diagnostics",
@@ -218,7 +218,7 @@
     "storageBudget": "Estimation du navigateur pour ce site : {{used}} Mio sur {{quota}} Mio utilisés. Cela peut également inclure les fichiers de l’application.",
     "storageBudgetWarning": "Ce site utilise plus de 80 % de l’espace estimé par le navigateur : {{used}} Mio sur {{quota}} Mio. Exportez une sauvegarde et libérez de l’espace sur l’appareil rapidement.",
     "clearTitle": "Effacer le contenu local",
-    "clearIntro": "Effacez uniquement le contenu, la progression d’apprentissage et les paramètres de modèles de ce navigateur. Votre compte ne sera pas supprimé. Exportez une sauvegarde ci-dessus si vous souhaitez conserver ce contenu.",
+    "clearIntro": "Effacez uniquement le contenu, la progression d’apprentissage et les paramètres de modèles de ce navigateur. Votre compte ne sera pas supprimé. Exportez une sauvegarde au préalable si vous souhaitez conserver ce contenu.",
     "clearInspect": "Examiner le contenu local",
     "clearSummary": "Cela supprimera {{drafts}} sources, {{meanings}} sens, {{packages}} parcours, {{targets}} éléments d’apprentissage et {{events}} événements.",
     "clearPending": "{{count}} préparations inachevées ne pourront pas continuer après l’effacement.",
@@ -226,5 +226,24 @@
     "clearConfirm": "J’ai enregistré les sauvegardes nécessaires et confirme l’effacement de ce contenu local.",
     "clearAction": "Effacer le contenu local",
     "clearDone": "Contenu local effacé. Rouvrez l’application pour utiliser la bibliothèque vide."
+  },
+  "syncRecovery": {
+    "blocked": "La synchronisation doit être vérifiée avant de continuer. Vos données locales sont enregistrées. Exportez une sauvegarde, téléchargez le diagnostic, puis contactez l’assistance.",
+    "hint": "Une sauvegarde contient uniquement les données de cet appareil. Elle ne résout pas le problème de synchronisation et n’inclut pas les modifications du cloud qui n’ont pas encore été téléchargées.",
+    "backup": "Sauvegarder cet appareil",
+    "hideBackup": "Masquer la sauvegarde"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Préparer les données pour un autre appareil",
+    "preparing": "Préparation des données du compte pour les autres appareils…",
+    "preparingUpload": "Envoi des données nécessaires au nouvel appareil…",
+    "receiving": "Réception des données du compte…",
+    "prepared": "Les données du compte sont prêtes pour un autre appareil.",
+    "preparationFailed": "La préparation a échoué. Réessayez plus tard. Les données synchronisées sont conservées.",
+    "preparationCancelled": "Préparation arrêtée. Les données synchronisées sont conservées.",
+    "stop": "Arrêter cette synchronisation",
+    "stopping": "Arrêt en cours…",
+    "cancelled": "Synchronisation arrêtée. Vous pouvez réessayer.",
+    "processed": "Données traitées : {{amount}} MiB"
   }
 }

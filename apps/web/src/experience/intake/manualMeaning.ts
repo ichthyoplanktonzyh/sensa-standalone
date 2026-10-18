@@ -32,13 +32,17 @@ export function capturedMediaOccurrence(draft:ManualMeaningDraft,original?:Sensa
 }
 
 /** Same learner-authored Sense construction for initial acceptance and correction. */
-export function manualMeaningSense(draft:ManualMeaningDraft,prior?:SensaIntakePayload):NonNullable<SensaIntakePayload['sense']>{
- if(!draft.meaning.trim()||!draft.usage.trim())throw Error('manualMeaning.meaningRequired');
+export function manualMeaningSense(draft:ManualMeaningDraft,prior?:SensaIntakePayload,options:{preserveDefinition?:boolean}={}):NonNullable<SensaIntakePayload['sense']>{
+ if(!draft.meaning.trim())throw Error('manualMeaning.meaningRequired');
  const selected=draft.existingSense,priorSpec=prior?.sense?.semanticSpec;
- if(selected&&(draft.meaning.trim()!==selected.semanticSpec.coreMeaningFocus||draft.usage.trim()!==selected.semanticSpec.prototypeScenes[0]?.summary))throw Error('manualMeaning.invalid');
- if(selected)return {senseKey:selected.senseKey,semanticSpec:selected.semanticSpec,wordingSource:'imported',resolutionProvenance:{resolverKind:'external_tool',provider:'sensa-local-registry',model:null,policyVersion:null,sourceReferenceIds:[selected.senseVersionId]}};
- if(priorSpec&&draft.meaning.trim()===priorSpec.coreMeaningFocus&&draft.usage.trim()===priorSpec.prototypeScenes[0]?.summary)return prior!.sense!;
- return {senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:draft.meaning.trim(),prototypeScenes:[{summary:draft.usage.trim(),participantRoles:[],states:[],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'learner_authored',resolutionProvenance:{resolverKind:'learner',provider:'sensa-web-manual',model:null,policyVersion:null,sourceReferenceIds:[]}};
+ if(selected&&(draft.meaning.trim()!==selected.semanticSpec.coreMeaningFocus||draft.usage.trim()!==(selected.semanticSpec.prototypeScenes[0]?.summary??'')))throw Error('manualMeaning.invalid');
+ if(selected)return {senseKey:selected.senseKey,reuseSense:{senseId:selected.senseId,senseVersionId:selected.senseVersionId},semanticSpec:selected.semanticSpec,wordingSource:'imported',resolutionProvenance:{resolverKind:'external_tool',provider:'sensa-local-registry',model:null,policyVersion:null,sourceReferenceIds:[selected.senseVersionId]}};
+ if(priorSpec&&draft.meaning.trim()===priorSpec.coreMeaningFocus&&draft.usage.trim()===(priorSpec.prototypeScenes[0]?.summary??''))return prior!.sense!;
+ if(options.preserveDefinition&&priorSpec){
+  const first=priorSpec.prototypeScenes[0],summary=draft.usage.trim();
+  return {...prior!.sense!,wordingSource:'learner_authored',semanticSpec:{...priorSpec,coreMeaningFocus:draft.meaning.trim(),prototypeScenes:[...(summary?[first?{...first,summary}:{summary,participantRoles:[],states:[],directionOrCausality:null}]:[]),...priorSpec.prototypeScenes.slice(1)]}};
+ }
+ return {senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:draft.meaning.trim(),prototypeScenes:draft.usage.trim()?[{summary:draft.usage.trim(),participantRoles:[],states:[],directionOrCausality:null}]:[],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'learner_authored',resolutionProvenance:{resolverKind:'learner',provider:'sensa-web-manual',model:null,policyVersion:null,sourceReferenceIds:[]}};
 }
 
 /** Called only by the explicit Save action. No model, invented example, or learning command. */
@@ -50,7 +54,7 @@ export function manualMeaningPayload(draft:ManualMeaningDraft,original?:SensaInt
   const start=positions.length===1?positions[0]!:draft.occurrenceStart;
   if(!mediaOccurrence&&(start===null||!positions.includes(start)))throw new Error('manualMeaning.occurrenceRequired');
   if(!draft.languageTag)throw new Error('manualMeaning.languageRequired');
-  if(!draft.meaning.trim()||!draft.usage.trim())throw new Error('manualMeaning.meaningRequired');
+  if(!draft.meaning.trim())throw new Error('manualMeaning.meaningRequired');
   const prior=original?.payload;
   const retainContext=!!mediaOccurrence||prior?.context?.textSegment===context;
   return sensaIntakePayloadSchema.parse({

@@ -1,16 +1,17 @@
 import {z} from 'zod';
+import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningOwner} from './libraryOwnership';
 import {cachedAuthSubject} from '../account/authSessionHint';
 import {markLocalLibraryPresent} from './localLibraryHint';
-import {validateBackupRows,backupOwnerSchema,type BackupRows} from './backupValidation';
+import {validateRestoreBackupRows,backupOwnerSchema,type BackupRows} from './backupValidation';
 import {clearAllCredentials} from './providers';
 import {libraryBackupTables} from './backupPolicy';
 import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,restoreLibraryReplicaValue,type LibraryReplicaEntry} from './replication/libraryReplica';
 import {encodeBackupArchive,decodeBackupArchive,type BackupArchiveHeader} from './backupArchive';
 const MAX_PLAIN=64*1024*1024,MAX_FILE=90*1024*1024;
 const AAD=new TextEncoder().encode('sensa-web-library-backup-v2:PBKDF2-SHA256:600000:AES-256-GCM:gzip');
-const localMeta=new Set(['cloud-sync','delivery-private','delivery-join','service-owner','service-installation','service-signout-epoch','signed-out','backup-restored','local-incarnation','local-content-revision','local-reset']);
+const localMeta=new Set(['cloud-sync','cloud-sync-recovery','delivery-private','delivery-join','service-owner','service-installation','service-signout-epoch','signed-out','backup-restored','local-incarnation','local-content-revision','local-artifact-revision','local-reset']);
 const serviceOperation=(value:any)=>typeof value?.input==='string'&&JSON.parse(value.input).kind?.startsWith('service.');
 const b64=(bytes:Uint8Array)=>{let s='';for(let i=0;i<bytes.length;i+=16384)s+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(s);};
 const unb64=(value:string)=>{if(!/^[A-Za-z0-9+/]*={0,2}$/u.test(value))throw new Error('libraryBackup.errors.encoding');const bytes=Uint8Array.from(atob(value),c=>c.charCodeAt(0));if(b64(bytes)!==value)throw new Error('libraryBackup.errors.encoding');return bytes;};
@@ -26,12 +27,12 @@ async function decode(file:Uint8Array,password:string){
  let payload:BackupArchiveHeader,rows:BackupRows;
  try{const envelope=envelopeSchema.parse(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(file))),salt=unb64(envelope.salt),iv=unb64(envelope.iv),data=unb64(envelope.data);if(salt.length!==16||iv.length!==12||data.length>MAX_PLAIN+16)throw Error();const key=await keyFor(password,salt);const compressed=await crypto.subtle.decrypt({name:'AES-GCM',iv:iv as BufferSource,additionalData:AAD},key,data as BufferSource);const archive=await decodeBackupArchive(new Uint8Array(compressed));payload=archive.header;rows=archive.rows;}catch{throw new Error('libraryBackup.errors.invalidFile');}
  if(rows.meta.some(r=>localMeta.has(r.key))||rows.operations.some(r=>serviceOperation(r.value)))throw new Error('libraryBackup.errors.authorization');
- validateBackupRows(rows);return {payload,rows,summary:summary(payload,rows)};
+ validateRestoreBackupRows(rows);return {payload,rows,summary:summary(payload,rows)};
 }
 async function encodeCurrentLibrary(){
  const snapshot=await readLibrary(async tx=>{await learningOwner(tx);const storedOwner=await tx.get('meta','service-owner');const owner=storedOwner?localBackupOwnerSchema.parse(storedOwner):null;const rows=Object.fromEntries(libraryTables.map(table=>[table,[]])) as unknown as BackupRows;for(const table of libraryTables){rows[table]=(await tx.entries(table)).map(r=>{if(typeof r.key!=='string')throw new Error('libraryBackup.errors.recordKey');return {key:r.key,value:r.value};});}rows.meta=rows.meta.filter(r=>!localMeta.has(r.key));rows.operations=rows.operations.filter(r=>!serviceOperation(r.value));return {owner,rows};});
  if(libraryBackupTables.reduce((count,table)=>count+snapshot.rows[table].length,0)>200000)throw new Error('libraryBackup.errors.rowLimit');
- validateBackupRows(snapshot.rows);
+ validateRestoreBackupRows(snapshot.rows);
  const archive=await encodeBackupArchive(snapshot.rows,snapshot.owner),payload=archive.header,plaintext=archive.bytes;
  return {payload,rows:snapshot.rows,plaintext};
 }
@@ -106,6 +107,9 @@ export async function restoreLibraryBackup(file:Uint8Array,password:string){
   }}
   for(const row of rows.meta)tx.put('meta',row.key,row.key==='identity'?identity:row.value);
   for(const row of rows.operations){if(row.key==='00000000-0000-4000-8000-000000000001')row.value.result=identity;tx.put('operations',row.key,row.value);}
+  // A valid source may contain no device receipts. Its restored identity must
+  // still replace the empty destination's placeholder creation receipt.
+  tx.put('operations','00000000-0000-4000-8000-000000000001',{input:canonicalConsumerJson({kind:'library.create',input:{}}),result:identity,committedAt:identity.createdAt});
   tx.delete('meta','cloud-sync');
   tx.delete('meta','local-reset');
   tx.put('meta','local-incarnation',crypto.randomUUID());

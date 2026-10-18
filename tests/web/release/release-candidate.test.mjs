@@ -59,6 +59,8 @@ try{
  assert.deepEqual(candidate.provenance,{repository:'sensa/example',workflowRunId:'123',workflowRunAttempt:'1'});
  assert.equal('playerOrigin' in candidate,false);
  assert(candidate.files.some(f=>f.path==='apps/api/dist/index.js'));
+ assert.equal(await readFile(join(root,'apps/api/dist/sensa/releaseIdentity.js'),'utf8'),`export const releaseCommit = ${JSON.stringify(sha)};\n`);
+ assert(candidate.files.some(f=>f.path==='apps/api/dist/sensa/releaseIdentity.js'));
  assert.equal(candidate.database.count,1);assert.equal(candidate.database.latest,'db/migrations/0001_fixture.sql');assert.match(candidate.database.sha256,/^[a-f0-9]{64}$/u);
  assert(!candidate.files.some(f=>f.path==='apps/web/dist/youglish-player.html'));
  assert(!candidate.files.some(f=>f.path.endsWith('.map')));

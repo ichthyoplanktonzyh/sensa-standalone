@@ -1,0 +1,36 @@
+.sensa-meaning-graph { position: relative; min-width: 0; height: 100%; }
+.sensa-expression-graph-workspace { height: 100%; min-height: 22rem; }
+.sensa-cy-container, .sensa-cy-surface { position: absolute; inset: 0; }
+.sensa-cy-surface { touch-action: none; }
+.sensa-graph-keyboard-nodes { position: absolute; inset: 0; pointer-events: none; }
+.sensa-graph-keyboard-nodes button { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.sensa-graph-tools { position: absolute; inset-block-start: .5rem; inset-inline-end: .5rem; z-index: 2; display: flex; align-items: center; border-radius: var(--sensa-radius-control); background: var(--sensa-surface-panel); box-shadow: var(--sensa-shadow-soft); }
+.sensa-graph-tools summary { list-style: none; cursor: pointer; }
+.sensa-graph-tools summary::-webkit-details-marker { display: none; }
+.sensa-graph-menu { position: absolute; inset-block-start: 3rem; inset-inline-end: 0; width: min(19rem, calc(100vw - 2rem)); max-height: 65dvh; overflow-y: auto; border: 1px solid var(--sensa-border-subtle); border-radius: var(--sensa-radius-control); background: var(--sensa-surface-panel); box-shadow: var(--sensa-shadow-raised); }
+html:root .sensa-world-graph-mode { display: flex; flex-direction: column; --sensa-layout-collection-region-gap: .75rem; }
+html:root .sensa-world-graph-mode > [data-sensa-page-region="collection"] { flex: 1; min-height: 22rem; padding-bottom: 1rem; }
+html:root .sensa-world-graph-mode > [data-sensa-page-region="controls"] { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .5rem; align-items: center; }
+html:root .sensa-world-graph-mode .sensa-world-query-row { grid-column: 1 / -1; flex-wrap: nowrap; gap: .5rem; }
+html:root .sensa-world-graph-mode .sensa-world-query-row > label { flex: 1; min-width: 0; max-width: none; }
+html:root .sensa-world-graph-mode .sensa-world-filters { grid-column: 2; grid-row: 2; position: relative; }
+html:root .sensa-world-graph-mode .sensa-world-filters > summary { display: block; padding-block: .625rem; }
+html:root .sensa-world-graph-mode .sensa-world-filters > div { position: absolute; inset-inline-end: 0; z-index: 5; width: min(25rem, calc(100vw - 3rem)); padding: 1rem; border: 1px solid var(--sensa-border-subtle); border-radius: var(--sensa-radius-control); background: var(--sensa-surface-panel); box-shadow: var(--sensa-shadow-raised); }
+html:root .sensa-world-graph-mode [data-world-counts] { grid-column: 1; grid-row: 2; margin-top: 0; }
+html:root .sensa-world-graph-mode .sensa-expression-graph-surface { height: 100%; min-height: 22rem; }
+html:root .sensa-world-graph-mode .sensa-expression-graph-detail { max-height: none; }
+@media (max-width: 48rem) {
+ html:root .sensa-world-graph-mode > [data-sensa-page-region="header"] { padding-top: 1rem; }
+ html:root .sensa-world-graph-mode > [data-sensa-page-region="header"] > div { gap: .5rem; flex-wrap: nowrap; }
+ html:root .sensa-world-graph-mode h1 { font-size: 1.375rem; }
+ html:root .sensa-world-graph-mode [data-world-view-text] { display: none; }
+ html:root .sensa-world-graph-mode [data-inbox-text] { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+ html:root .sensa-world-graph-mode [data-inbox-button] { min-width: 2.75rem; padding-inline: .625rem; }
+ html:root .sensa-world-graph-mode [data-world-view] { padding-inline: .625rem; min-width: 2.75rem; gap: 0; }
+ html:root .sensa-world-graph-mode > [data-sensa-page-region="navigation"] button { min-height: 2.75rem; font-size: .75rem; }
+ html:root .sensa-world-graph-mode > [data-sensa-page-region="collection"] { padding-inline: 0; padding-bottom: 0; min-height: 20rem; }
+ html:root .sensa-world-graph-mode .sensa-expression-graph-workspace, html:root .sensa-world-graph-mode .sensa-expression-graph-surface { min-height: 20rem; }
+}
+
+html:root .sensa-world-graph-mode > [data-sensa-page-region="header"] h1 { font-size: clamp(1.375rem, 3vw, 2rem); }
+html:root .sensa-world-graph-mode .sensa-world-filters:not([open]) > div { display: none; }

@@ -179,18 +179,18 @@ for (const version of [9, sqliteLibrarySchemaVersion+1]) {
   incompatibleDatabase.close();
 }
 });
-test('schema 10 migrates in place and preserves owner tables',()=>{
+test('schema 10 is refused without changing owner tables',()=>{
   const migratedRaw=new sqlite3.oo1.DB(':memory:','c');
   migratedRaw.exec(`CREATE TABLE owner_fixture(value TEXT);
                     INSERT INTO owner_fixture VALUES('preserve-me');
                     PRAGMA user_version=10`);
   const migrated=new SqliteRecordDatabase(sqlite3,migratedRaw,'memory');
-  assert.equal(migrated.initialize().schemaVersion,sqliteLibrarySchemaVersion);
+  assert.throws(()=>migrated.initialize(),/sqlite_schema_legacy:10/u);
   const preserved=migratedRaw.exec({
     sql:'SELECT value FROM owner_fixture',rowMode:0,returnValue:'resultRows',
   }) as unknown[];
   assert.deepEqual(preserved,['preserve-me']);
-  assert.equal(migrated.portableMediaDiagnostics().blobCount,0);
+  assert.equal(migratedRaw.selectValue('PRAGMA user_version'),10);
   migrated.close();
 });
 test('SQLite initialization maintains query planner statistics', () => {
@@ -411,7 +411,7 @@ database.commit({
     { table: 'contentAttempts', key: 'attempt-old', encodedValue: encoded({ id: 'attempt-old', taskId: 'task-a', createdAt: '2026-09-13T12:00:00.000Z', status: 'failed' }) },
     { table: 'contentAttempts', key: 'attempt-recent', encodedValue: encoded({ id: 'attempt-recent', taskId: 'task-a', createdAt: '2026-09-14T12:00:00.000Z', status: 'ready' }) },
     { table: 'contentAttempts', key: 'attempt-other', encodedValue: encoded({ id: 'attempt-other', taskId: 'task-b', createdAt: '2026-09-14T12:00:00.000Z', status: 'ready' }) },
-    { table: 'semanticMeanings', key: 'meaning-media', encodedValue: encoded({ personalSemanticAnchorRevisions: [{ personalMediaObjectId: 'media-a' }, { personalMediaObjectId: 'media-a' }] }) },
+    { table: 'semanticContexts', key: 'anchorRevisions:media-owner', encodedValue: encoded({kind:'anchorRevisions',value:{personalMediaObjectId:'media-a',structuredPayload:{}}}) },
     { table: 'semanticInbox', key: 'inbox-media', encodedValue: encoded({ payload: { context: { mediaReferenceIds: ['media-b'] } } }) },
   ],
 });
@@ -484,8 +484,8 @@ assert.deepEqual(database.learningRunIdsForTarget('target-a', false), ['run-open
 assert.deepEqual(database.openLearningRunTargets(), []);
 database.commit({
   clears: [],
-  deletes: [{ table: 'semanticInbox', key: 'inbox-media' }],
-  puts: [{ table: 'semanticMeanings', key: 'meaning-media', encodedValue: encoded({ personalSemanticAnchorRevisions: [] }) }],
+  deletes: [{ table: 'semanticInbox', key: 'inbox-media' },{table:'semanticContexts',key:'anchorRevisions:media-owner'}],
+  puts: [],
 });
 assert.equal(database.isMediaReferenced('media-a'), false);
 assert.equal(database.isMediaReferenced('media-b'), false);

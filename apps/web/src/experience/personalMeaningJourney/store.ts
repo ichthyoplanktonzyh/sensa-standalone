@@ -35,7 +35,7 @@ import type {
 } from '@sensa/contracts/sensa';
 import type { ClarificationStartingPoint } from './semanticAgent';
 
-export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v5';
+export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v6';
 
 /** Recoverable adapter state; none of these values are domain facts. */
 export interface JourneyMockState {
@@ -97,6 +97,8 @@ export interface CommandReceipt {
 export interface JourneyState {
   version: typeof JOURNEY_STORE_VERSION;
   meanings: MeaningJourneyRecord[];
+  /** The existing material Anchor facts, independently owned by the learner. */
+  contexts: import('./contextRecords').ContextState;
   registry: SenseRegistryState;
   /** Slow-track draft materials waiting for learner confirmation. */
   inboxItems: SensaIntakeItem[];
@@ -127,6 +129,7 @@ export const emptyRegistry = (): SenseRegistryState => ({
 export const emptyJourneyState = (): JourneyState => ({
   version: JOURNEY_STORE_VERSION,
   meanings: [],
+  contexts: {anchors:[],anchorRevisions:[],anchorRevisionParents:{}},
   registry: emptyRegistry(),
   inboxItems: [],
   clarificationDrafts: [],
@@ -160,6 +163,10 @@ export const parseJourneyState = (parsed: unknown): JourneyState => {
   requireArray(parsed, 'inboxItems');
   requireArray(parsed, 'clarificationDrafts');
   requireArray(parsed, 'commandReceipts');
+  if (!isRecord(parsed.contexts)) throw new StoreCorruptedError('本机的情境记录结构损坏。');
+  requireArray(parsed.contexts, 'anchors');
+  requireArray(parsed.contexts, 'anchorRevisions');
+  if (!isRecord(parsed.contexts.anchorRevisionParents)) throw new StoreCorruptedError('本机的情境版本引用损坏。');
   if (!isRecord(parsed.registry)) {
     throw new StoreCorruptedError('本机的语义注册表数据结构损坏。');
   }

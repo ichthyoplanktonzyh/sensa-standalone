@@ -1,3 +1,4 @@
+import type {RecordValidationIndex} from './sqliteRecordValidation';
 import {sqliteLibraryTables,type SqliteLibraryTable} from './sqliteProtocol';
 
 export type LibraryRecordRow={key:string;value:any};
@@ -8,6 +9,9 @@ export type LibraryRecordLookups=Record<SqliteLibraryTable,{get(key:string):any|
  * every unique stored key; get resolves that exact key in the same snapshot.
  * Readers may decode a row on demand and need not retain decoded bodies. */
 export interface LibraryRecordReader{
+ /** Set only by readers whose keyset queries are backed by a verified primary key. */
+ storageKeysUnique?:true;
+ validationIndex?:RecordValidationIndex;
  get(table:SqliteLibraryTable,key:string):any|undefined;
  /** Existence only: do not decode media or other large fact bodies. */
  has(table:SqliteLibraryTable,key:string):boolean;

@@ -12,7 +12,7 @@ import {localLastPresentedMaterial} from '../../../apps/web/src/learning/runtime
 import {encodeBackupValue,decodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://material-pins.fixture.invalid/')});
-const {validateBackupRows}=await import('../../../apps/web/src/data/library/backupValidation');
+const {validateBackupRows,validateRestoreBackupRows}=await import('../../../apps/web/src/data/library/backupValidation');
 const id=()=>crypto.randomUUID(),context=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
 await openLibrary();
 const state=async()=>readLibrary(async tx=>{const active=await tx.get<string>('meta','learning-active');return (await tx.get<LocalLearningRun>('learningRuns',active!))!;});
@@ -38,23 +38,23 @@ test('separate user action times reuse one immutable material body, while baseli
  expect(Object.values(participant.presentedMaterials)).toEqual([participant.material,participant.material]);
  expect(runBaselineMaterial(participant)).toEqual(baseline);expect(baseline.snapshot.createdAt).toBe(at);
  for(const stepId of Object.keys(participant.presentedMaterials))expect(runStepMaterial(participant,stepId)).toEqual(baseline);
- const snapshot=await rows();snapshot.packageCache=[];validateBackupRows(snapshot);
+ const snapshot=await rows();snapshot.packageCache=[];validateBackupRows(snapshot);validateRestoreBackupRows(snapshot);
  }finally{vi.useRealTimers();}
 });
 
 test('restore rejects a missing body, retargeted digest or mutated snapshot; callers never fall back to current Curriculum material',async()=>{
- const snapshot=await rows();snapshot.packageCache=[];validateBackupRows(snapshot);
+ const snapshot=await rows();snapshot.packageCache=[];validateBackupRows(snapshot);validateRestoreBackupRows(snapshot);
  for(const mutation of ['missing','pointer','body'] as const){
   const changed=structuredClone(snapshot),run=changed.learningRuns[0]!.value as LocalLearningRun,participant=run.participants[run.targetId]!;
   if(mutation==='missing')delete participant.materializations[participant.material];
   if(mutation==='pointer')participant.presentedMaterials[Object.keys(participant.presentedMaterials)[0]!]='0'.repeat(64);
   if(mutation==='body')participant.materializations[participant.material]!.snapshot.createdAt='2026-09-01T08:00:01.000Z';
-  expect(()=>validateRunMaterialPins(participant)).toThrow();expect(()=>validateBackupRows(changed)).toThrow('libraryBackup.errors.inconsistent');
+  expect(()=>validateRunMaterialPins(participant)).toThrow();expect(()=>validateBackupRows(changed)).toThrow('libraryBackup.errors.inconsistent');expect(()=>validateRestoreBackupRows(changed)).toThrow('libraryBackup.errors.inconsistent');
  }
 });
 
 test('source readiness cannot be erased or moved across source admission or Run start even with correctly rehashed material pins',async()=>{
- const snapshot=await rows();snapshot.packageCache=[];snapshot.operations=[];validateBackupRows(snapshot);
+ const snapshot=await rows();snapshot.packageCache=[];snapshot.operations=[];validateBackupRows(snapshot);validateRestoreBackupRows(snapshot);
  for(const mutation of ['missing','before_admission','after_start'] as const){
   const changed=structuredClone(snapshot),run=changed.learningRuns[0]!.value as LocalLearningRun,participant=run.participants[run.targetId]!;
   const previous=participant.material,material=structuredClone(runBaselineMaterial(participant));
@@ -97,7 +97,7 @@ test('same-instant Actions and repeated unacted refreshes replay causally, retai
   const protocol=(run.protocolState.value as {initial:{completedSteps:{instance:{materialBindings:{learningMaterializationId:string}[]}}[]}}).initial;
   expect(protocol.completedSteps.map(step=>[...new Set(step.instance.materialBindings.map(binding=>binding.learningMaterializationId))])).toEqual(participant.presentationOrder.map(step=>[runStepMaterial(participant,step).snapshot.learningMaterializationId]));
   expect(Object.values(participant.materializations).map(material=>material.snapshot.provenance.packageVersion).sort()).toEqual(['1','2','3']);
-  validateBackupRows(snapshot);
+  validateBackupRows(snapshot);validateRestoreBackupRows(snapshot);
   const serialized=decodeBackupValue(encodeBackupValue(snapshot)) as BackupRows;validateBackupRows(serialized);
   const roundtrip=serialized.learningRuns.find(row=>row.key===run.id)!.value as LocalLearningRun;
   expect(localLastPresentedMaterial(roundtrip.participants[targetId!]!).snapshot.provenance.packageVersion).toBe('3');

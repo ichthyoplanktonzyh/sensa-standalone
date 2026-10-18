@@ -21,6 +21,9 @@ const deliveryUrl = z.url().refine((value) => {
 export const maxPortableBookArchiveBytes = 256 * 1024 * 1024;
 export const maxPortableBookManifestBytes = 1024 * 1024;
 export const maxPortableBookMembers = 10_000;
+export const maxPortableBookPreviewBytes = 8 * 1024 * 1024;
+/** Older publications can be inspected in memory without installing their archive. */
+export const maxLegacyBookPreviewArchiveBytes = 8 * 1024 * 1024;
 
 const publisherSchema = z.object({
   namespace: publisherNamespace,
@@ -95,7 +98,34 @@ export const sensaPortableBookDescriptorSchema = z.object({
   byteLength: positiveInteger.max(maxPortableBookArchiveBytes),
   sha256: digest,
   url: deliveryUrl,
+  preview: z.object({url:deliveryUrl,sha256:digest,byteLength:positiveInteger.max(maxPortableBookPreviewBytes)}).strict().optional(),
 }).strict();
+
+const previewEntry = sensaPortableBookMemberSchema.extend({expression:label}).strict();
+const previewParty = z.object({name:label,url:z.url().refine(value=>{const url=new URL(value);return !url.username&&!url.password&&['http:','https:'].includes(url.protocol);}).optional()}).strict();
+/** Public text only: no media bytes, installation facts or learner state. */
+export const sensaPortableBookPreviewSchema = z.object({
+  format:z.literal('sensa-portable-book-preview-v1'),
+  publisher:publisherSchema,book:bookSchema,contentRelease:contentReleaseSchema,route:routeSchema,
+  publishedAt:timestamp,changeSummary:z.string().trim().max(2_000),archiveSha256:digest,
+  memberCount:positiveInteger.max(maxPortableBookMembers),
+  authors:z.array(previewParty).min(1).max(maxPortableBookMembers),
+  licenses:z.array(previewParty).min(1).max(maxPortableBookMembers),
+  entries:z.array(previewEntry).min(1).max(maxPortableBookMembers),
+  samples:z.array(previewEntry.extend({
+    scene:nonEmpty.max(8_000).optional(),senseFocus:nonEmpty.max(4_000),hasVisualCue:z.boolean(),
+    meaning:nonEmpty.max(8_000),bridge:nonEmpty.max(8_000),example:nonEmpty.max(8_000),
+    translation:nonEmpty.max(8_000).optional(),
+  }).strict()).min(1).max(3),
+}).strict().superRefine((preview,context)=>{
+  const key=(entry:{packageId:string;version:number})=>`${entry.packageId}:${entry.version}`;
+  const entries=new Map(preview.entries.map(entry=>[key(entry),entry]));
+  if(preview.entries.length!==preview.memberCount||entries.size!==preview.memberCount)
+    context.addIssue({code:'custom',path:['entries'],message:'Preview must enumerate each member exactly once.'});
+  if(preview.samples.length!==Math.min(3,preview.memberCount)||new Set(preview.samples.map(key)).size!==preview.samples.length
+    ||preview.samples.some(sample=>entries.get(key(sample))?.expression!==sample.expression))
+    context.addIssue({code:'custom',path:['samples'],message:'Preview samples must identify distinct enumerated members.'});
+});
 
 export const sensaPortableLearningContentRegistrySchema = z.object({
   format: z.literal("sensa-learning-content-registry-v3"),
@@ -129,6 +159,7 @@ export const sensaPortableLearningContentRegistrySchema = z.object({
 export type SensaPortableBookMember = z.infer<typeof sensaPortableBookMemberSchema>;
 export type SensaPortableBookManifest = z.infer<typeof sensaPortableBookManifestSchema>;
 export type SensaPortableBookDescriptor = z.infer<typeof sensaPortableBookDescriptorSchema>;
+export type SensaPortableBookPreview = z.infer<typeof sensaPortableBookPreviewSchema>;
 export type SensaPortableLearningContentRegistry = z.infer<
   typeof sensaPortableLearningContentRegistrySchema
 >;

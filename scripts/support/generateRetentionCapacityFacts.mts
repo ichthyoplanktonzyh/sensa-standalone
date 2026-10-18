@@ -8,6 +8,11 @@ import {performance} from 'node:perf_hooks';
 
 const count=Number(process.argv.find(arg=>arg.startsWith('--targets='))?.slice('--targets='.length)??1000);
 const readyOnly=process.argv.includes('--ready-only');
+const audioArgument=process.argv.find(arg=>arg.startsWith('--audio-bytes='))?.slice(14);
+const audioByteLength=audioArgument===undefined?undefined:Number(audioArgument);
+const reviewCycles=Number(process.argv.find(arg=>arg.startsWith('--review-cycles='))?.slice(16)??1);
+if(audioByteLength!==undefined&&(!Number.isSafeInteger(audioByteLength)||audioByteLength<64||audioByteLength>1048576))throw new Error('--audio-bytes must be 64..1048576');
+if(!Number.isSafeInteger(reviewCycles)||reviewCycles<1||reviewCycles>100)throw new Error('--review-cycles must be 1..100');
 if(!Number.isSafeInteger(count)||count<1||count>10000)throw new Error('--targets must be an integer from 1 to 10000');
 if(process.env.SENSA_TEST_MEMORY_LIBRARY!=='true')throw new Error('Isolated Node fixture storage must be explicitly enabled');
 const NativeDate=Date;
@@ -27,7 +32,7 @@ const database=await useNodeLearningCapacityStorage();
 try{
  await store.openLibrary();
  const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),id=()=>crypto.randomUUID();
- const book=portableBookDeliveryFixture({memberExpressions:Array.from({length:count},(_,index)=>index?'capacity-'+String(index).padStart(5,'0'):'borrow'),title:readyOnly?'未开始学习的词书容量样本':'成熟复习容量样本'});
+ const book=portableBookDeliveryFixture({memberExpressions:Array.from({length:count},(_,index)=>index?'capacity-'+String(index).padStart(5,'0'):'borrow'),audioByteLength,title:readyOnly?'未开始学习的词书容量样本':'成熟复习容量样本'});
  const fetchBefore=globalThis.fetch;
  try{
   globalThis.fetch=async input=>{const body=book.responses.get(String(input));if(!body)throw new Error('Capacity fixture attempted external network');return new Response(Uint8Array.from(body).buffer);};
@@ -64,6 +69,9 @@ try{
  clock=Math.max(clock,maxDue+60_000);
  // Mature-history axis: each target also has a real due Review outcome. The
  // memory projection is written exclusively by the production scheduler.
+ for(let cycle=0;cycle<reviewCycles;cycle++){
+ home=await store.readHomeLearningRecords(context.languageRouteId,clock);
+ clock=Math.max(clock,Math.max(...home.targets.map(target=>target.memory!.dueAt.getTime()))+60_000);
  for(let index=0;index<home.targets.length;index++){
   const target=home.targets[index]!;
   await learningSystem.execute({kind:'start',operationId:id(),targetId:target.id,languageContext:context,dailyLimit:100,sessionIntent:'review_only'});
@@ -72,7 +80,8 @@ try{
   current=(await learningSystem.read({kind:'runtime',languageContext:context})).runtime!;
   await learningSystem.execute({kind:'act',operationId:id(),runId:current.runId,expectedRevision:current.revision,action:{kind:'rate',rating:'hard'}});
   await learningSystem.execute({kind:'finish',operationId:id(),runId:current.runId});
-  if((index+1)%100===0)console.info(JSON.stringify({stage:'formal_review_outcome',reviewed:index+1,total:count,elapsedSeconds:Math.round((performance.now()-begin)/1000)}));
+  if((index+1)%100===0)console.info(JSON.stringify({stage:'formal_review_outcome',cycle:cycle+1,reviewed:index+1,total:count,elapsedSeconds:Math.round((performance.now()-begin)/1000)}));
+ }
  }
  home=await store.readHomeLearningRecords(context.languageRouteId,clock);
  clock=Math.max(clock,Math.max(...home.targets.map(target=>target.memory!.dueAt.getTime()))+60_000);
@@ -100,7 +109,7 @@ try{
    batches.push({table,file,rowCount:chunk.length,sha256:createHash('sha256').update(bytes).digest('hex')});
   }
  }
- const metadata={format:readyOnly?'sensa-learning-capacity-facts-v1':'sensa-retention-capacity-facts-v1',source:'LearningSystem commands over SQLite/Wasm, no model/TTS, no direct Target/Run/Event field seeds',mode:readyOnly?'ready_inventory':'mature_retention',clock:new Date(clock).toISOString(),bookMemberCount:count,targets:rows.learningTargets.length,runs:rows.learningRuns.length,events:rows.learningEvents.length,bytes:totalBytes,storedFactBytes,sharedArchiveBytes:archive.bytes.length,sharedArchiveRoundtrip:'full authority validation; no encryption, destination restore, OPFS file size or UI latency claim',batches,bookDescriptor:book.descriptor,probeTargetId:targetId,probeRunId,setupSeconds:Math.round((performance.now()-begin)/1000)};
+ const metadata={format:readyOnly?'sensa-learning-capacity-facts-v1':'sensa-retention-capacity-facts-v1',source:'LearningSystem commands over SQLite/Wasm, no model/TTS, no direct Target/Run/Event field seeds',mode:readyOnly?'ready_inventory':'mature_retention',audioByteLength,reviewCycles,reviewOutcomes:readyOnly?0:count*reviewCycles,clock:new Date(clock).toISOString(),bookMemberCount:count,targets:rows.learningTargets.length,runs:rows.learningRuns.length,events:rows.learningEvents.length,bytes:totalBytes,storedFactBytes,sharedArchiveBytes:archive.bytes.length,sharedArchiveRoundtrip:'full authority validation; no encryption, destination restore, OPFS file size or UI latency claim',batches,bookDescriptor:book.descriptor,probeTargetId:targetId,probeRunId,setupSeconds:Math.round((performance.now()-begin)/1000)};
  await writeFile(join(directory,'manifest.json'),JSON.stringify(metadata,null,2));
  console.info(JSON.stringify({stage:'validated_snapshot',directory,bookMemberCount:count,targets:metadata.targets,runs:metadata.runs,events:metadata.events,bytes:totalBytes,storedFactBytes,sharedArchiveBytes:archive.bytes.length,setupSeconds:metadata.setupSeconds}));
 }finally{database.close();Object.assign(globalThis,{Date:NativeDate});}

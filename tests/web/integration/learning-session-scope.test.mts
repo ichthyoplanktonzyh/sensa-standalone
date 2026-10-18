@@ -122,4 +122,31 @@ test('dynamic future sources select per-Run scopes without collection capture, w
  const resumedRows=await snapshot();validateBackupRows(resumedRows);
  const unrelatedOrigin=structuredClone(resumedRows);unrelatedOrigin.learningSessions.find(row=>row.key===resumed.session!.id)!.value.scopeRevisionId=original.scope!.id;
  expect(()=>validateBackupRows(unrelatedOrigin)).toThrow();
+ // A later selection can resume another activity's unfinished Run. Its own
+ // Scope stays fixed; it need not belong to this activity's origin inventory.
+ await learningSystem.execute({kind:'end_session',operationId:id(),runId:resumed.run!.id,expectedRevision:resumed.run!.revision});
+ await install(['queue-delta']);
+ const delta=(await readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'))).find(target=>target.expression==='queue-delta')!;
+ await learningSystem.execute({kind:'start',operationId:id(),targetId:delta.id,languageContext:context,dailyLimit:20});
+ const deltaStart=await state();
+ await act({kind:'reveal'});await act({kind:'rate',rating:'good'});
+ expect(await learningSystem.execute({kind:'advance',operationId:id(),runId:deltaStart.run!.id,languageContext:context,dailyLimit:20})).toBe(true);
+ const laterResume=await state();
+ expect(laterResume.session!.id).toBe(deltaStart.session!.id);
+ expect(laterResume.run!.id).toBe(resumed.run!.id);
+ expect(laterResume.run!.learningSessionId).toBe(later.run!.learningSessionId);
+ expect(laterResume.scope).toEqual(later.scope);
+ expect(laterResume.originScope).toEqual(deltaStart.originScope);
+ expect(laterResume.originScope!.members.map(member=>member.targetId)).toEqual([delta.id]);
+ const laterRows=await snapshot();laterRows.packageCache=[];laterRows.operations=[];
+ expect(()=>validateBackupRows(laterRows)).not.toThrow();
+ const forgedFirst=structuredClone(laterRows);
+ forgedFirst.learningSessions.find(row=>row.key===laterResume.session!.id)!.value.scopeRevisionId=original.scope!.id;
+ expect(()=>validateBackupRows(forgedFirst)).toThrow();
+ const unrelatedPredecessor=structuredClone(laterRows);
+ unrelatedPredecessor.learningRuns.find(row=>row.key===laterResume.run!.id)!.value.lifecycleEvents.at(-1).continuedFromRunId=original.run!.id;
+ expect(()=>validateBackupRows(unrelatedPredecessor)).toThrow();
+ const missingSelection=structuredClone(laterRows);
+ delete missingSelection.learningRuns.find(row=>row.key===laterResume.run!.id)!.value.lifecycleEvents.at(-1).continuedFromRunId;
+ expect(()=>validateBackupRows(missingSelection)).toThrow();
 });

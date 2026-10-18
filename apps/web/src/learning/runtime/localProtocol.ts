@@ -1,3 +1,4 @@
+import {materialSourcePin,type LearningSourcePin} from './learningIdentity';
 import type {
   InstalledLearningContent,
   SensaFormalPinnedLanguageContext,
@@ -24,9 +25,7 @@ export interface LocalLearningMaterialization {
 export interface LocalLearningTargetIdentity {
   readonly learnerUserId:string;
   readonly senseId:string;
-  readonly senseVersionId:string;
-  readonly senseExpressionBindingId:string;
-  readonly bindingVersionId:string;
+  readonly expressionId:string;
   readonly targetLanguageTag:string;
 }
 
@@ -42,6 +41,7 @@ export interface LocalCurriculumMembership {
   readonly languageContext:SensaFormalPinnedLanguageContext;
   readonly sourceKind:'sense_learning_package'|'personal_meaning_alignment'|'stable_sense';
   readonly provenance:Readonly<Record<string,unknown>>;
+  readonly sourcePin:LearningSourcePin;
   readonly packageKey:string|null;
   readonly assurancePackageKey?:string;
   readonly material:LocalLearningMaterialization;
@@ -137,6 +137,7 @@ export interface LocalProtocolOutcomePermissions {
 }
 
 export interface LocalLearningRunParticipant {
+  retentionBaseline:import('./retentionBaseline').LocalRetentionBaseline;
   protocolRunId:string;
   curriculumMembershipId:string;
   languageContext:SensaFormalPinnedLanguageContext;
@@ -480,14 +481,12 @@ export function assertLocalTargetMaterialIdentity(
   target:LocalLearningTarget,
   material:LocalLearningMaterialization,
 ):void{
-  const provenance=material.snapshot.provenance;
+  const provenance=materialSourcePin(material);
   if(
     material.snapshot.learnerUserId!==target.identity.learnerUserId
     || material.snapshot.learningTargetId!==target.id
     || provenance.senseId!==target.identity.senseId
-    || provenance.senseVersionId!==target.identity.senseVersionId
-    || provenance.bindingId!==target.identity.senseExpressionBindingId
-    || provenance.bindingVersionId!==target.identity.bindingVersionId
+    || provenance.expressionId!==target.identity.expressionId
   )throw new Error('localFlow.resourceInvalid');
 }
 
@@ -528,7 +527,7 @@ const sameOutcomePermissions=(left:LocalProtocolOutcomePermissions,right:LocalPr
  &&left.relearningProgress===right.relearningProgress
  &&left.relearningCompletion===right.relearningCompletion;
 
-const isJsonValue=(value:unknown):boolean=>{
+export const isJsonValue=(value:unknown):boolean=>{
  if(value===null||typeof value==='string'||typeof value==='boolean')return true;
  if(typeof value==='number')return Number.isFinite(value);
  if(Array.isArray(value))return value.every(isJsonValue);

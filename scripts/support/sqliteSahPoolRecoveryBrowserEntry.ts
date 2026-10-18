@@ -9,7 +9,7 @@ export type RecoveryPoolInput=Readonly<{
 
 type RecoveryWorkerRequest=RecoveryPoolInput&Readonly<{
   requestId:string;
-  action:'createSentinel'|'initExpectedConflict'|'openAndRead'|'openAbruptly'|'holdSlots'|'probeSlots'|'releaseSlots'|'damageDigest'|'restoreDigest'|'inspectFile'|'createEmptySlot';
+  action:'createSentinel'|'initExpectedConflict'|'openAndRead'|'openAbruptly'|'holdSlots'|'probeSlots'|'releaseSlots'|'damageDigest'|'restoreDigest'|'inspectFile'|'createEmptySlot'|'createUnassociatedTail';
   sentinelKey?:string;
   sentinelValue?:string;
   slotCount?:number;
@@ -146,6 +146,7 @@ export const sqliteSahPoolRecoveryApi=Object.freeze({
   restoreDigest:(command:RecoveryPoolInput&{fileName:string;originalByte:number})=>runOneShot({...command,action:'restoreDigest'}),
   inspectFile:(command:RecoveryPoolInput&{fileName:string})=>runOneShot({...command,action:'inspectFile'}),
   createEmptySlot:(command:RecoveryPoolInput)=>runOneShot({...command,action:'createEmptySlot'}),
+  createUnassociatedTail:(command:RecoveryPoolInput)=>runOneShot({...command,action:'createUnassociatedTail'}),
   releaseSlots,
   terminateWorker,
   terminateAll:(_input:Readonly<Record<string,never>>)=>{

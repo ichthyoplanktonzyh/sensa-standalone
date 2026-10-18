@@ -1,3 +1,4 @@
+import {sameLearningSourcePin} from '../../learning/runtime/learningIdentity';
 import {sensaContentGenerationRequestSchema,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {assertReadyContentAttempt} from './contentAttemptEvidence';
 import {directProvisioningReferenceSchema} from '../../contentSupply/provisioning/contracts';
@@ -10,7 +11,7 @@ export function assertDirectTaskEnrollment(task:any,enrollment:LocalCurriculumEn
  const reference=directProvisioningReferenceSchema.parse(task.source);
  if(enrollment.source.kind!=='stable_sense'||enrollment.id!==reference.enrollmentId)throw new Error('Direct provisioning enrollment is missing.');
  const selection=enrollment.source.selection,pins=selection.reference;
- if(reference.senseId!==pins.senseId||reference.senseVersionId!==pins.senseVersionId||reference.bindingId!==pins.bindingId||reference.bindingVersionId!==pins.bindingVersionId
+ if(!sameLearningSourcePin(reference,pins)
    ||reference.sourceDigest!==selection.sourceDigest||task.useContext!==false||task.replacing===true||!backupEqual(task.languageContext,enrollment.languageContext))throw new Error('Direct provisioning differs from the accepted source or Route.');
  return selection;
 }
@@ -31,6 +32,6 @@ export function assertDirectAttemptSource(attempt:any,task:any,selection:DirectL
  const equal=(a:unknown,b:unknown)=>canonicalConsumerJson(a)===canonicalConsumerJson(b);
  if(expression.sourceVersion!==reference.bindingVersionId||!equal(expression.payload,expectedExpression)
    ||sense.sourceVersion!==reference.senseVersionId||!equal(sense.payload,{meaning:selection.semanticSpec.coreMeaningFocus,semanticSpec:selection.semanticSpec,supportLanguageTag:task.languageContext.supportLanguageTag})
-   ||origin.source!=='other_authoritative_source'||origin.sourceVersion!==reference.senseVersionId||!equal(origin.payload,{scene:selection.semanticSpec.prototypeScenes[0]!.summary,senseFocus:selection.semanticSpec.coreMeaningFocus,featureLabels:[]}))throw new Error('Direct preparation changed the accepted semantics or language.');
+   ||origin.source!=='other_authoritative_source'||origin.sourceVersion!==reference.senseVersionId||!equal(origin.payload,{scene:selection.semanticSpec.prototypeScenes[0]?.summary??'',senseFocus:selection.semanticSpec.coreMeaningFocus,featureLabels:[]}))throw new Error('Direct preparation changed the accepted semantics or language.');
  assertReadyContentAttempt(attempt);
 }

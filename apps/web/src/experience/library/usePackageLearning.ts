@@ -41,7 +41,7 @@ const measuredWorkspaceRead=async<T,>(name:string,work:()=>Promise<T>):Promise<T
  }
 };
 
-export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|'management'|'preferences'|'target'='workspace',targetId?:string){
+export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|'management'|'preferences'|'target'|'inactive'='workspace',targetId?:string){
  const runtimeOnly=mode==='runtime',managementOnly=mode==='management'||mode==='preferences';
  useTranslation();
  const languageContext=useActiveLanguageContext();
@@ -50,10 +50,13 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  const [packages,setPackages]=useState<InstalledPackage[]>([]);
  const [catalog,setCatalog]=useState<ContentSupplyCatalogItem[]>([]);
  const [workspace,setWorkspace]=useState<LearningWorkspaceProjection>(emptyWorkspace);
+ const [sessionSummary,setSessionSummary]=useState<import('../../learning/system/learningReadModels').LearningSessionSummary|null>(null);
  const [management,setManagement]=useState<LearningManagementProjection|null>(null);
  const [notice,setNotice]=useState('');
  const [busy,setBusy]=useState(false);
  const [progress,setProgress]=useState<number|null>(null);
+ const [installation,setInstallation]=useState<{bookKey:string;phase:ContentSupplyInstallationPhase}|null>(null);
+ const [downloadFailed,setDownloadFailed]=useState(false);
  const [loaded,setLoaded]=useState(false);
  const runtimeMode=useRef(runtimeOnly);runtimeMode.current=runtimeOnly;
  const managementMode=useRef(managementOnly);managementMode.current=managementOnly;
@@ -70,6 +73,8 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  const setLoadStatus=(status:typeof loadState.status)=>{if(currentRoute.current===routeKey)setLoadState({routeKey,version:viewEpoch.current.version,status});};
  const [unavailablePackageKeys,setUnavailablePackageKeys]=useState<readonly string[]>([]);
  const [catalogBusy,setCatalogBusy]=useState(false);
+ const [catalogStatus,setCatalogStatus]=useState<'loading'|'ready'|'unavailable'>('loading');
+ const [catalogFailed,setCatalogFailed]=useState(false);
  const transfer=useRef<AbortController|null>(null);
  const catalogRequest=useRef<AbortController|null>(null);
  const generation=useRef(0);
@@ -79,6 +84,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
 
  const refreshLearning=async()=>{
   if(currentRoute.current!==routeKey)return false;
+  if(viewEpoch.current.mode==='inactive'){setWorkspace(emptyWorkspace);setLoadStatus('ready');return true;}
   const current=lifecycle.current,version=viewEpoch.current.version,readingRuntime=runtimeMode.current,readingManagement=managementMode.current;
   if(viewEpoch.current.mode==='target'){
    const selection=targetSelection.current;
@@ -108,6 +114,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    if(current!==lifecycle.current||version!==viewEpoch.current.version||currentRoute.current!==routeKey)return false;
    setPackages([...sources]);
    setRuntimePreferencesDailyLimit(projection.preferencesDailyLimit);
+   setSessionSummary(projection.sessionSummary);
    setWorkspace(previous=>({...previous,runtime:projection.runtime,activeRunId:projection.runtime?.runId??null,dailyLimit:projection.dailyLimit,policyOptions:projection.policyOptions,
     queue:{...previous.queue,nextTargetId:projection.nextTargetId,nextChangeAt:projection.nextChangeAt}}));
    setRuntimeNextTargetId(projection.nextTargetId);
@@ -120,16 +127,17 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  };
  const refreshSupply=async()=>{
   const current=lifecycle.current;
+  const catalogGeneration=generation.current;
   const supply=await measuredWorkspaceRead('supply',()=>contentSupplySystem.read({kind:'workspace'}));
   if(current!==lifecycle.current)return;
   setPackages([...supply.packages]);
   const available=new Set(supply.packages.map(pack=>pack.key));
   setUnavailablePackageKeys(keys=>keys.filter(key=>!available.has(key)));
-  setCatalog([...supply.catalog]);
+  if(catalogGeneration===generation.current)setCatalog([...supply.catalog]);
  };
  const refresh=async()=>{
   const current=lifecycle.current,version=viewEpoch.current.version;
-  const [learningApplied]=await Promise.all([refreshLearning(),runtimeMode.current||managementMode.current||viewEpoch.current.mode==='target'?Promise.resolve():refreshSupply()]);
+  const [learningApplied]=await Promise.all([refreshLearning(),runtimeMode.current||managementMode.current||viewEpoch.current.mode==='target'||viewEpoch.current.mode==='inactive'?Promise.resolve():refreshSupply()]);
   if(current!==lifecycle.current||version!==viewEpoch.current.version||!learningApplied)return;
   setLoaded(true);
   setLoadStatus('ready');
@@ -160,7 +168,8 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  };
 
  useEffect(()=>{
-  setLoaded(false);setManagement(null);setBusy(false);setProgress(null);setNotice('');
+  if(mode==='inactive'){setWorkspace(emptyWorkspace);setLoadStatus('ready');return;}
+  setLoaded(false);setManagement(null);setBusy(false);setProgress(null);setInstallation(null);setDownloadFailed(false);setNotice('');
   const learningCoordinator=createRefreshCoordinator(async()=>{await refreshLearning();});
   const supplyCoordinator=createRefreshCoordinator(refreshSupply);
   const current=lifecycle.current;
@@ -173,7 +182,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    await learningCoordinator.request();
   };
   void retryInitialLoad();
-  const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},reloadLearning);
+  const stopLearning=learningSystem.subscribe(mode==='target'&&targetId?{kind:'target',targetId,languageContext}:{kind:mode==='runtime'?'runtime':mode==='preferences'?'preferences':mode==='management'?'management':'workspace',languageContext},reloadLearning);
   const stopSupply=contentSupplySystem.subscribe({kind:'workspace'},reloadSupply);
   const focus=()=>void prepare().catch(()=>setNotice(localFlowText('progressReadFailed')));
   window.addEventListener('focus',focus);
@@ -187,22 +196,11 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    catalogRequest.current?.abort();
    window.removeEventListener('focus',focus);
   };
- },[languageContext.languageRouteId,languageContext.languageRouteRevision]);
+ },[languageContext.languageRouteId,languageContext.languageRouteRevision,mode,targetId]);
 
- const lastRuntimeMode=useRef(runtimeOnly);
- const selectionKey=JSON.stringify([mode,targetId??null]);
- const lastViewMode=useRef(selectionKey);
- useEffect(()=>{
-  if(lastRuntimeMode.current===runtimeOnly&&lastViewMode.current===selectionKey)return;
-  lastRuntimeMode.current=runtimeOnly;lastViewMode.current=selectionKey;setLoadStatus('loading');
-  // Every screen/Target selection gets its own projection epoch. Hidden
-  // inventory/history stays untouched; an old read cannot cross this view.
-  const version=viewEpoch.current.version;
-  void refresh().catch(()=>{if(version===viewEpoch.current.version){setLoadStatus('unavailable');setNotice(localFlowText('progressReadFailed'));}});
- },[selectionKey]);
 
  useEffect(()=>{
-  if(managementOnly||mode==='target')return;
+  if(managementOnly||mode==='target'||mode==='inactive')return;
   if(workspace.queue.nextChangeAt===null)return;
   const timer=window.setTimeout(
    ()=>void (runtimeOnly?Promise.resolve():learningSystem.execute({kind:'prepare_queue',languageContext,at:new Date().toISOString()}))
@@ -215,6 +213,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
 
  const perform=async<T,>(work:()=>Promise<T>,refreshAfter:()=>Promise<void>=async()=>{await refreshLearning();},unconfirmedNotice='runtime.actionReceiptUnavailable')=>{
   const current=lifecycle.current;
+  setDownloadFailed(false);
   setBusy(true);setNotice('');
   try{
    const outcome=await settleReconciledOperation(work,refreshAfter);
@@ -230,6 +229,7 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   }finally{if(current===lifecycle.current&&currentRoute.current===routeKey){setBusy(false);setProgress(null);}}
  };
  const inspect=async<T,>(work:()=>Promise<T>)=>{
+  setDownloadFailed(false);
   setBusy(true);setNotice('');
   try{return await work();}
   catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('retryOperation'));return null;}
@@ -237,29 +237,37 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
  };
 
  const reloadCatalog=async(notify=false)=>{
+  if(notify)setDownloadFailed(false);
   const gen=++generation.current;
   catalogRequest.current?.abort();
   const request=new AbortController();catalogRequest.current=request;
   setCatalogBusy(true);
+  setCatalogFailed(false);
+  let cached=false;
   try{
-   const local=await contentSupplySystem.read({kind:'catalog'});
+   const local=await contentSupplySystem.read({kind:'catalog_snapshot'});
    if(gen!==generation.current)return;
-   setCatalog([...local]);
+   cached=local.checkedAt!==null;
+   setCatalog([...local.items]);
+   setCatalogStatus(cached?'ready':'loading');
    const result=await contentSupplySystem.execute({kind:'refresh_catalog',force:notify,signal:request.signal});
    if(gen===generation.current){
     setCatalog([...result.items]);
+    setCatalogStatus('ready');
     try{
      if(notify)setNotice(localFlowText(result.status==='current'?'catalogCurrent':'catalogUpdated'));
      else setNotice(current=>current==='localFlow.audioIncomplete'?'':current);
     }catch{setNotice(localFlowText('progressReadFailed'));}
    }
-  }catch{if(gen===generation.current&&!request.signal.aborted)setNotice(localFlowText('catalogFailed'));}
+  }catch{if(gen===generation.current&&!request.signal.aborted){setCatalogFailed(true);setCatalogStatus(cached?'ready':'unavailable');}}
   finally{
    if(catalogRequest.current===request)catalogRequest.current=null;
    if(gen===generation.current)setCatalogBusy(false);
   }
  };
- useEffect(()=>{if(entryOpen)void reloadCatalog();},[entryOpen]);
+ // Restoring a saved Route aborts the previous catalog request in cleanup.
+ // Restart that read even when the Catalog remains the active entry.
+ useEffect(()=>{if(entryOpen)void reloadCatalog();},[entryOpen,languageContext.languageRouteId,languageContext.languageRouteRevision]);
 
  const targetById=new Map(workspace.targets.map(target=>[target.targetId,target]));
  const initialReady=workspace.queue.initialReadyTargetIds.flatMap(id=>targetById.get(id)??[]);
@@ -278,11 +286,12 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   activeRunTargetIds:mode==='target'?targetDetail.activeRunTargetIds:workspace.runtime?.targetIds??[],
   targetExportPackageKey:mode==='target'&&loadStatus==='ready'?targetDetail.exportPackageKey:null,
   initialReady,due,nextTarget,runtime,
+  sessionSummary:runtimeOnly&&loadStatus==='ready'?sessionSummary:null,
   records:workspace.records,
   policyOptions:workspace.policyOptions,
   dailyLimit:dailyLimit??undefined,
   preferencesDailyLimit:runtimeOnly?runtimePreferencesDailyLimit:dailyLimit,
-  notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'||notice.startsWith('sessionEnd.')?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,reloadCatalog,refresh,
+  notice:notice==='runtime.actionReceiptUnavailable'||notice==='learningPreferences.quantitySaveUnconfirmed'||notice.startsWith('sessionEnd.')?i18n.t(notice):localFlowNotice(notice),busy:busy||loadStatus!=='ready',progress,installation,downloadFailed,loaded:loaded&&loadStatus==='ready',loadStatus,retryInitialLoad,unavailablePackageKeys,catalogBusy,catalogStatus,catalogFailed,reloadCatalog,refresh,
   endedStateNeedsRead:notice==='sessionEnd.savedReadFailed',
   retryEndedStateRead:async()=>{
    if(actInFlight.current)return;const current=lifecycle.current;actInFlight.current=true;setBusy(true);
@@ -291,11 +300,18 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
    finally{actInFlight.current=false;if(current===lifecycle.current&&currentRoute.current===routeKey)setBusy(false);}
   },
   confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n}),undefined,'learningPreferences.quantitySaveUnconfirmed'),
-  download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>perform(async()=>{
+  download:(d:ContentSupplyCatalogItem,onPhase?:(phase:ContentSupplyInstallationPhase)=>void)=>{
+   if(transfer.current)return Promise.resolve(null);
    const c=new AbortController();transfer.current=c;
-   try{setProgress(0);return await contentSupplySystem.execute({kind:'install_catalog_item',descriptor:d,signal:AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),onProgress:n=>setProgress(Math.round(100*n)),onPhase});}
-   finally{if(transfer.current===c)transfer.current=null;}
-  },refresh),
+   const current=lifecycle.current;
+   setDownloadFailed(false);
+   setInstallation({bookKey:d.book.bookKey,phase:'downloading'});
+   return perform(async()=>{
+    setProgress(0);
+    return contentSupplySystem.execute({kind:'install_catalog_item',descriptor:d,signal:AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),onProgress:n=>{if(transfer.current===c)setProgress(Math.round(100*n));},onPhase:phase=>{if(transfer.current===c){setInstallation({bookKey:d.book.bookKey,phase});onPhase?.(phase);}}});
+   },refresh).then(result=>{if(current===lifecycle.current&&result===null&&!c.signal.aborted)setDownloadFailed(true);return result;})
+    .finally(()=>{if(transfer.current===c){transfer.current=null;if(current===lifecycle.current)setInstallation(null);}});
+  },
   cancelDownload:()=>transfer.current?.abort(),
   previewImport:(file:File):Promise<PortablePackagePreview|null>=>inspect(async()=>{
    if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');
@@ -317,7 +333,15 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
   selectPolicy:(targetId:string,profileId:LearningPolicy)=>perform(()=>learningSystem.execute({kind:'select_policy',operationId:crypto.randomUUID(),targetId,languageContext,profileId})),
   enroll:(packageKey:string,publicationArchiveSha256?:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext,publicationArchiveSha256})),
   enrollBook:(publicationArchiveSha256:string)=>perform(()=>learningSystem.execute({kind:'enroll_book',operationId:crypto.randomUUID(),languageContext,publicationArchiveSha256})),
-  start:(targetId:string,dailyLimit:number,sessionIntent:'mixed'|'review_only'='mixed')=>perform(()=>learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit,sessionIntent})),
+  start:(targetId:string,dailyLimit:number,sessionIntent:'mixed'|'review_only'='mixed')=>perform(async()=>{
+   if(viewEpoch.current.mode==='inactive'){
+    const version=viewEpoch.current.version;
+    const preferences=await learningSystem.read({kind:'preferences',languageContext});
+    if(currentRoute.current!==routeKey||version!==viewEpoch.current.version)return false;
+    dailyLimit=preferences.dailyLimit??dailyLimit;
+   }
+   return learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit,sessionIntent});
+  }),
   retryRelearning:async()=>{
    if(runtime?.kind!=='lightweight'||!runtime.needsRelearning||!runtime.completed||dailyLimit===null||actInFlight.current||loadStatus!=='ready')return null;
    actInFlight.current=true;
@@ -351,6 +375,11 @@ export function usePackageLearning(entryOpen:boolean,mode:'workspace'|'runtime'|
     return true;
    }finally{actInFlight.current=false;if(current===lifecycle.current&&currentRoute.current===routeKey)setBusy(false);}
   },
-  advance:()=>runtime?perform(()=>learningSystem.execute({kind:'advance',operationId:crypto.randomUUID(),runId:runtime.runId,languageContext,dailyLimit})):Promise.resolve(null),
+  advance:async()=>{
+   if(!runtime||actInFlight.current||loadStatus!=='ready')return null;
+   actInFlight.current=true;
+   try{return await perform(()=>learningSystem.execute({kind:'advance',operationId:crypto.randomUUID(),runId:runtime.runId,languageContext,dailyLimit}));}
+   finally{actInFlight.current=false;}
+  },
  };
 }

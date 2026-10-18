@@ -40,6 +40,7 @@ type BrowserRecoveryApi=Readonly<{
   restoreDigest:(input:PoolInput&{fileName:string;originalByte:number})=>Promise<WorkerResponse>;
   inspectFile:(input:PoolInput&{fileName:string})=>Promise<WorkerResponse>;
   createEmptySlot:(input:PoolInput)=>Promise<WorkerResponse>;
+  createUnassociatedTail:(input:PoolInput)=>Promise<WorkerResponse>;
   releaseSlots:(input:Readonly<{workerId:string;pool:PoolInput}>)=>Promise<WorkerResponse>;
   terminateWorker:(input:Readonly<{workerId:string}>)=>Readonly<{terminated:boolean}>;
   terminateAll:(input:Readonly<Record<string,never>>)=>Readonly<{terminated:number}>;
@@ -239,6 +240,21 @@ test('real OPFS pool init conflict retains sentinel and releases every acquired 
       runtimeSqliteVersion:seeded.sqliteVersion,
     };
     report.seed={capacity:seeded.capacity,integrity:seeded.integrity,pauseState:seeded.pauseState};
+
+    const tailResponse=await stage('modelInterruptedUnlinkInCanonicalFreeSlot',()=>invoke<PoolInput,WorkerResponse>('createUnassociatedTail',options));
+    expect(tailResponse.ok,tailResponse.error?.message).toBe(true);
+    const tail=tailResponse.value as {fileName:string;mainFileName:string;mainBefore:unknown;size:number};
+    expect(tail.size).toBeGreaterThan(4096);
+    const tailOpen=await stage('reclaimOnlyUnassociatedTailAndReadOriginalSentinel',()=>invoke<PoolInput&{sentinelKey:string},WorkerResponse>('openAndRead',{...options,sentinelKey}));
+    expect(tailOpen.ok,tailOpen.error?.message).toBe(true);
+    expect(tailOpen.value).toMatchObject({sentinelValue,integrity:'ok'});
+    const reclaimed=await invoke<PoolInput&{fileName:string},WorkerResponse>('inspectFile',{...options,fileName:tail.fileName});
+    expect(reclaimed.ok,reclaimed.error?.message).toBe(true);
+    expect(reclaimed.value).toMatchObject({size:4096,fileCount:options.initialCapacity});
+    const unchanged=await invoke<PoolInput&{fileName:string},WorkerResponse>('inspectFile',{...options,fileName:tail.mainFileName});
+    expect(unchanged.ok,unchanged.error?.message).toBe(true);
+    expect(unchanged.value).toEqual(tail.mainBefore);
+    report.interruptedUnlinkRecovery={canonicalTailReclaimed:true,mainFileByteIdentical:true,committedSentinelRetained:true};
 
     const damageResponse=await stage('damageOnlySyntheticSentinelHeaderDigest',()=>invoke<PoolInput,WorkerResponse>('damageDigest',options));
     expect(damageResponse.ok,damageResponse.error?.message).toBe(true);

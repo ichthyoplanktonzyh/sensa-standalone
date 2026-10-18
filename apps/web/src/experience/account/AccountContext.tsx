@@ -10,6 +10,8 @@ export type AccountAccess={
  publisherAccess:boolean;
  connectionConflict:boolean;
  libraryAvailability:LibraryAvailability;
+ connectionBusy:boolean;
+ checkConnection:()=>void;
  login:()=>void;
  retryConnection:()=>Promise<void>;
  logout:()=>Promise<void>;
@@ -24,6 +26,8 @@ export const AccountContext=createContext<AccountAccess>({
  publisherAccess:false,
  connectionConflict:false,
  libraryAvailability:'restoring',
+ connectionBusy:false,
+ checkConnection:()=>{},
  login:()=>{},
  retryConnection:async()=>{},
  logout:async()=>{},

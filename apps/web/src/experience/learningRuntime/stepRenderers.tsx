@@ -119,6 +119,9 @@ export interface StepRendererProps {
 }
 
 export interface LightweightInitialStepRendererProps {
+  readonly targetLanguageTag?: string;
+  readonly supportLanguageTag?: string;
+  readonly hidePrimaryAction?: boolean;
   readonly step: LearningLightweightStepProjection;
   readonly active: boolean;
   readonly presentation: LightweightInitialCardPresentation;
@@ -348,6 +351,8 @@ const renderLightweightExperienceRecall = (
   }
   return (
     <ExperienceRecallCard
+      supportLanguageTag={props.supportLanguageTag}
+      hidePrimaryAction={props.hidePrimaryAction}
       key={props.step.protocolStepInstanceId}
       presentation={props.presentation}
       personalScene={props.personalScene}
@@ -365,6 +370,9 @@ const renderLightweightExpressionReveal = (
   }
   return (
     <ExpressionRevealCard
+      targetLanguageTag={props.targetLanguageTag}
+      supportLanguageTag={props.supportLanguageTag}
+      hidePrimaryAction={props.hidePrimaryAction}
       key={props.step.protocolStepInstanceId}
       presentation={props.presentation}
       active={props.active}

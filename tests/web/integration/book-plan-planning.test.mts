@@ -71,7 +71,7 @@ test('actual Learning start binds the eligible old Book source, and Range-exclud
  expect(await readLibrary(tx=>tx.get('learningRuns',run.id))).toEqual(run);
  expect((await learningSystem.execute({kind:'prepare_queue',languageContext:learningContext}))).toEqual([]);
  expect((await readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'))).map(target=>target.id).sort()).toEqual(before.map(target=>target.id).sort());
- const choice=(await learningSystem.read({kind:'direct_choices',query:'second',targetLanguageTag:'en',page:0})).items.find(item=>item.reference.senseVersionId===outside.identity.senseVersionId)!;
+ const choice=(await learningSystem.read({kind:'direct_choices',query:'second',targetLanguageTag:'en',page:0})).items.find(item=>item.reference.senseId===outside.identity.senseId)!;
  const source=await learningSystem.read({kind:'direct_source',reference:choice.reference});
  const intent=await learningSystem.execute({kind:'enroll_direct',operationId:randomUUID(),reference:choice.reference,expectedDigest:source.sourceDigest,languageContext:learningContext});
  expect(intent.status).toBe('awaiting_content');expect(intent.enrollmentId).not.toBeNull();

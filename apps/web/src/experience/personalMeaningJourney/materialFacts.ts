@@ -3,6 +3,7 @@ import type {SensaIntakePayload,SensaIntakeContext,SensaPersonalMeaningRevisionS
 import type {JourneyState,MeaningJourneyRecord} from './store';
 import type {JourneyFactPorts,CommandLanguages} from './ports';
 import type {MaterialBlockInput,CreatePersonalMeaningInput,CreatePersonalMeaningResult} from './types';
+import {referencedContextFacts} from './contextFacts';
 const PSW='sensa-personal-semantic-world-v3' as const,LEARNER_USER_ID='sensa-local-learner';
 type PersonalProvenanceKind=SensaPersonalMeaningRevisionSnapshot['provenance']['kind'];
 const normalizedForm=(surfaceForm:string,languageTag:string)=>surfaceForm.trim().toLocaleLowerCase(languageTag);
@@ -95,7 +96,7 @@ export function createPersonalMeaningFacts(state:JourneyState,ports:JourneyFactP
       throw new Error('熟悉表达不能为空。');
     }
     const blocks = input.blocks ?? [];
-    if (blocks.length === 0 && !familiarSurface) {
+    if (blocks.length === 0 && !familiarSurface&&!input.contextReferences?.length&&!input.learnerIntentNote?.trim()&&!input.draftExpression?.surfaceForm.trim()) {
       throw new Error('个人意义至少需要一个材料块或一个熟悉表达。');
     }
 
@@ -107,7 +108,7 @@ export function createPersonalMeaningFacts(state:JourneyState,ports:JourneyFactP
     const familiarExpressionAnchorId = familiarSurface ? ports.newId() : null;
     const familiarExpressionAnchorRevisionId = familiarSurface ? ports.newId() : null;
 
-    const firstText = blocks.find((block) => block.kind === 'text')?.bodyText?.trim() ?? '';
+    const firstText = input.learnerIntentNote?.trim()||blocks.find((block) => block.kind === 'text')?.bodyText?.trim()||input.contextReferences?.map(ref=>state.contexts.anchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===ref.revisionId)?.bodyText).find(Boolean)||'';
     const record: MeaningJourneyRecord = {
       personalMeaning: {
         contractVersion: PSW,
@@ -210,6 +211,9 @@ export function createPersonalMeaningFacts(state:JourneyState,ports:JourneyFactP
       }
       return original;
     });
+    const referenced=input.contextReferences??[];
+    if(new Set(referenced.map(ref=>ref.contextId)).size!==referenced.length)throw Error('semantic_context_invalid');
+    for(const ref of referenced){const {head,revisions,selected}=referencedContextFacts(state,ref);const {learnerUserId:_,currentRevisionId:__,conflictHistory:___,...association}=head;record.personalSemanticAnchors.push({...association,personalMeaningId,currentRevision:selected.revision});record.personalSemanticAnchorRevisions.push(...revisions);blockAnchors.push({anchorId:ref.contextId,anchorRevisionId:ref.revisionId});}
 
     // A captured Expression belongs to the same Context even while its Sense
     // is unresolved. Preserve the exact occurrence as an unverified source
@@ -274,7 +278,8 @@ export function createPersonalMeaningFacts(state:JourneyState,ports:JourneyFactP
       displayLabel: familiarSurface
         || (firstText.length > 24 ? `${firstText.slice(0, 24)}…` : firstText)
         || '我的个人意义',
-      learnerIntentNote: null,
+      learnerIntentNote: input.learnerIntentNote?.trim()||null,
+      ...(input.draftExpression?{draftExpression:input.draftExpression}:{}),
       provenance: {
         kind: 'learner_authored',
         sourceReferenceIds: [

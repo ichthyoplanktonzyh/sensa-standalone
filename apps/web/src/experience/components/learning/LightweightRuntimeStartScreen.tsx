@@ -2,6 +2,9 @@ import {localFlowText} from '../../../i18n/localFlowText';
 import { useTranslation } from "react-i18next";
 import { Check, ArrowRight, RotateCcw } from "lucide-react";
 import { RuntimeFrame, runtimePrimary } from "./RuntimeFrame";
+import {RuntimeRating} from './RuntimeRating';
+import {LearningSessionStatus,LearningCompletionDetails} from './LearningSessionStatus';
+import type {LearningSessionSummary} from '../../../learning/system/learningReadModels';
 import { useEffect, useMemo, useRef } from "react";
 import type {LearningLightweightRating,LearningLightweightStepProjection,LearningTargetPresentation} from '../../../learning/system';
 import {LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND} from '../../../learning/system';
@@ -15,6 +18,10 @@ import type { PersonalLearningSceneRevision } from '../../../personalContent/sys
 import type {DictionaryLookup,QuickDictEntry} from '../../types';
 
 interface LightweightRuntimeStartScreenProps {
+  readonly sessionSummary?:LearningSessionSummary|null;
+  readonly repeatCount?:number;
+  readonly notice?:string;
+  readonly onViewRecords?:()=>void;
   readonly tools?: import('react').ReactNode;
   readonly support?: import('react').ReactNode;
   readonly purpose?: 'initial_learning'|'retention_review'|'relearning';
@@ -47,6 +54,10 @@ interface LightweightRuntimeStartScreenProps {
  * Instance, the registry supplies its renderer, and completion is a Run result.
  */
 export const LightweightRuntimeStartScreen = ({
+  sessionSummary=null,
+  repeatCount=0,
+  notice,
+  onViewRecords,
   tools,
   support,
   purpose='initial_learning',
@@ -86,6 +97,9 @@ export const LightweightRuntimeStartScreen = ({
       ? stepRendererRegistry.get<LightweightInitialStepRendererProps>(
           step.definition.stepKind,
         )({
+          hidePrimaryAction:true,
+          targetLanguageTag:target?.targetLanguageTag,
+          supportLanguageTag:target?.supportLanguageTag,
           step,
           active,
           presentation,
@@ -105,6 +119,7 @@ export const LightweightRuntimeStartScreen = ({
     : step?.definition.stepKind === LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND
       ? 0
       : 1;
+  const expressionStepLabel=t('runtime.expressionStep',{current:Math.min(2,progressStep+1),total:2});
 
   useEffect(() => {
     if (!active || busy || !completed || needsRelearning || !hasNextTarget || !completionKey) return;
@@ -145,11 +160,10 @@ export const LightweightRuntimeStartScreen = ({
     <RuntimeFrame
       id="s-lightweight-runtime"
       active={active}
+      completed={completed}
       title={purpose==='initial_learning'?t('runtime.learning'):purpose==='retention_review'?localFlowText('reviewTitle'):localFlowText('relearningTitle')}
-      stepLabel={needsRelearning?t('runtime.relearningRetryTitle'):t(
-        completed
-          ? "runtime.done"
-          : purpose === 'initial_learning' && progressStep === 0
+      stepLabel={needsRelearning?t('runtime.relearningRetryTitle'):completed?t('runtime.done'):expressionStepLabel+' · '+t(
+        purpose === 'initial_learning' && progressStep === 0
             ? "runtime.experienceStep"
             : purpose === 'initial_learning'
               ? "runtime.bindingStep"
@@ -157,12 +171,21 @@ export const LightweightRuntimeStartScreen = ({
             ? "runtime.recallStep"
             : "runtime.revealStep",
       )}
-      progress={needsRelearning?null:completed ? 100 : (progressStep + 1) * 50}
+      progress={needsRelearning?null:progressStep*50}
+      progressLabel={expressionStepLabel}
+      progressValueText={completed?t('runtime.done'):expressionStepLabel}
       tools={tools}
       onExit={onExit}
       pauseShortcut="Esc"
+      feedback={notice&&<p role="status" data-runtime-feedback className="mx-auto max-w-xl text-sm">{notice}</p>}
+      controls={!completed&&renderedStep?<fieldset disabled={busy} className="mx-auto m-0 max-w-3xl min-w-0 border-0 p-0 [&_.sensa-runtime-rating]:mt-0">{progressStep===0?<button type="button" className={`${runtimePrimary} w-full`} onClick={onReveal}>{t('runtime.reveal')}<ArrowRight size={17}/><kbd className="sensa-shortcut-hint" aria-hidden="true">↵</kbd></button>:<RuntimeRating initial={purpose!=='retention_review'} showDescriptions={false} onRate={onRate}/>}</fieldset>:completed&&(needsRelearning||!hasNextTarget)&&target?<fieldset disabled={busy} className="mx-auto m-0 flex max-w-xl min-w-0 flex-col items-stretch gap-2 border-0 p-0">
+       <button className={runtimePrimary} onClick={needsRelearning?onRetryRelearning:onFinish}>{needsRelearning?t('runtime.relearningRetryAction'):t('runtime.home')}<ArrowRight size={17}/><kbd className="sensa-shortcut-hint" aria-hidden="true">↵</kbd></button>
+       {!needsRelearning&&onViewRecords&&<button className="min-h-11 rounded-control px-4 text-sm text-action-primary underline focus-visible:outline-2 focus-visible:outline-focus" onClick={onViewRecords}>{localFlowText('completionViewRecords')}</button>}
+       {needsRelearning&&<button className="min-h-11 rounded-control px-4 text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus" onClick={onExit}>{t('runtime.relearningBackHome')}</button>}
+      </fieldset>:undefined}
     >
       {!completed && renderedStep && <fieldset disabled={busy} className="m-0 min-w-0 border-0 p-0">{renderedStep}</fieldset>}
+      {!completed&&<LearningSessionStatus summary={sessionSummary} repeatCount={progressStep===0?repeatCount:0}/>}
       {!completed && renderedStep && support && <div className="mt-4">{support}</div>}
       {!completed && !renderedStep && (
         <div
@@ -185,16 +208,8 @@ export const LightweightRuntimeStartScreen = ({
             {needsRelearning?<RotateCcw size={25} strokeWidth={1.4}/>:<Check size={25} strokeWidth={1.4} />}
           </span>
           <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">{needsRelearning?t('runtime.relearningRetryTitle'):t("runtime.done")}</h1>
-          <button
-            className={`${runtimePrimary} mt-9 w-full sm:w-auto`}
-            disabled={busy}
-            onClick={needsRelearning?onRetryRelearning:onFinish}
-          >
-            {needsRelearning?t('runtime.relearningRetryAction'):t("runtime.home")}
-            <ArrowRight size={17} />
-            <kbd className="sensa-shortcut-hint" aria-hidden="true">↵</kbd>
-          </button>
-          {needsRelearning&&<button className="mt-5 inline-flex min-h-11 items-center rounded-control px-4 text-sm text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40" disabled={busy} onClick={onExit}>{t('runtime.relearningBackHome')}</button>}
+          <LearningCompletionDetails summary={sessionSummary}/>
+
         </section>
       )}
     </RuntimeFrame>

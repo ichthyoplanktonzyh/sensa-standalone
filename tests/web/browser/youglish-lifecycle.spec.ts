@@ -68,7 +68,7 @@ test('native offline SDK failure remains retryable and online retry creates a fr
  page.on('requestfailed',request=>{if(request.url()===sdk)failures.push(request.failure()?.errorText??'unknown');});
  await context.setOffline(true);
  try{
-  await page.evaluate(()=>window.youglishFixture.mountSpanish());await expect(page.getByRole('status').locator('p')).toHaveText('片段加载失败，请重试。');
+  await page.evaluate(()=>window.youglishFixture.mountSpanish());await expect(page.getByRole('alert').locator('p')).toHaveText('片段加载失败，请重试。');
   expect(failures.some(error=>error.includes('ERR_INTERNET_DISCONNECTED'))).toBe(true);
   await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();expect(await page.evaluate(()=>window.youglishFixture.records())).toEqual([]);
   await context.setOffline(false);await page.route(sdk,route=>route.fulfill({contentType:'text/javascript',body:'window.youglishFixture.installApi();window.onYouglishAPIReady?.();'}));
@@ -81,7 +81,7 @@ test('native offline SDK failure remains retryable and online retry creates a fr
 test('player readiness timeout closes media and late readiness cannot remove the retry exit',async({page})=>{
  await open(page);await page.clock.install();await page.evaluate(()=>window.youglishFixture.mountSpanish());await expect.poll(()=>page.evaluate(()=>window.youglishFixture.records().length)).toBe(1);
  await page.evaluate(()=>window.youglishFixture.emit(0,'onFetchDone',{totalResult:3}));await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();
- await page.clock.fastForward(15_001);await expect(page.getByRole('status').locator('p')).toHaveText('片段加载失败，请重试。');
+ await page.clock.fastForward(15_001);await expect(page.getByRole('alert').locator('p')).toHaveText('片段加载失败，请重试。');
  expect((await page.evaluate(()=>window.youglishFixture.records()))[0]!.calls.some(call=>call.kind==='close')).toBe(true);
  await page.evaluate(()=>{window.youglishFixture.emit(0,'onPlayerReady');window.youglishFixture.emit(0,'onPlayerStateChange',{state:1});});
  await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'重新加载',exact:true})).toBeVisible();
@@ -113,7 +113,7 @@ test('API-ready unstarted media is still loading and repeated states cannot post
  await page.evaluate(()=>{window.youglishFixture.emit(0,'onFetchDone',{totalResult:7883});window.youglishFixture.emit(0,'onPlayerReady');window.youglishFixture.emit(0,'onPlayerStateChange',{state:-1});});
  await expect(page.getByRole('status').locator('p')).toHaveText('正在加载片段…');await expect(page.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
  await page.clock.fastForward(10_000);await page.evaluate(()=>window.youglishFixture.emit(0,'onPlayerStateChange',{state:-1}));await page.clock.fastForward(5_001);
- await expect(page.getByRole('status').locator('p')).toHaveText('片段加载失败，请重试。');await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'重新加载',exact:true})).toBeVisible();
+ await expect(page.getByRole('alert').locator('p')).toHaveText('片段加载失败，请重试。');await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'重新加载',exact:true})).toBeVisible();
  await page.evaluate(()=>window.youglishFixture.emit(0,'onPlayerStateChange',{state:1}));await expect(page.getByRole('button',{name:'播放',exact:true})).toBeDisabled();
 });
 

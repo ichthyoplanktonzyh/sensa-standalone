@@ -88,7 +88,7 @@ export interface AgentFocusCandidate {
 }
 
 export interface AgentSenseCandidate {
-  /** Stable key used for reuse detection when the learner confirms. */
+  /** Host-owned alias; reuse requires the explicit immutable reference below. */
   proposedSenseKey: string;
   /** Explicit immutable version selected from confirmed local semantics, never guessed by key. */
   reuseSense?: {senseId: string; senseVersionId: string};

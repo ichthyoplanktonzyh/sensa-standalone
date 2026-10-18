@@ -1,3 +1,4 @@
+import {IndexedSyncFixture} from '../support/indexedSyncFixture.mts';
 /** Production Worker/OPFS lifecycle and controlled-HTTP fresh restoration.
  * Optional instrumented diagnostics are labelled separately. No account UI
  * or mature-product capacity/latency-equivalence claim. */
@@ -12,7 +13,34 @@ import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec'
 import type {SqliteWorkerInput,SqliteWorkerResult} from '../../../apps/web/src/data/library/sqliteProtocol';
 import type {ReplicaCandidateRecord} from '../../../apps/web/src/data/library/replicaCandidateProtocol';
 import {candidateExpected,candidateBlocksFor,candidateFixture} from '../support/replicaCandidateFixture.mts';
+import {storeMeaningContexts} from '../../../apps/web/src/experience/personalMeaningJourney/contextRecords';
 import {librarySyncBlockFetch,librarySyncBlockFetchBytes} from '@sensa/contracts/sensa';
+
+test('uncertified baseline preparation serves foreground Worker reads and fences a concurrent edit',async({browser},testInfo)=>{
+ const context=await browser.newContext(),page=await context.newPage();let vite:ViteDevServer|undefined,http:Server|undefined;
+ const entryUrl=`/@fs/${resolve('scripts/support/sqliteRuntimeFailureBrowserEntry.ts')}`,text=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
+ const identity={id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:crypto.randomUUID(),createdAt:'2026-10-03T00:00:00.000Z',schemaVersion:2 as const},owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
+ const records:ReplicaCandidateRecord[]=[{table:'meta',key:'identity',valueJson:text(identity),blockRefs:['a'.repeat(64)]},...Array.from({length:64},(_,i)=>({table:'settings' as const,key:'seed-'+i,valueJson:text('x'.repeat(20000)),blockRefs:['a'.repeat(64)]}))];
+ const {libraryRestoreValidationVersion}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
+ try{
+  vite=await createViteServer({configFile:resolve('apps/web/vite.config.ts'),root:resolve('apps/web'),logLevel:'error',server:{middlewareMode:true,hmr:false,fs:{allow:[process.cwd()]}}});http=createServer(vite.middlewares);http.listen(0,'127.0.0.1');await once(http,'listening');const origin=`http://127.0.0.1:${(http.address() as any).port}`;
+  await page.route('**/*',async route=>{if(new URL(route.request().url()).origin!==origin)return route.abort();if(route.request().resourceType()==='document')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>Isolated seed regression</title>'});await route.continue();});await page.goto(origin);
+  const state={owner,incarnation:'initial',revision:3,checkpointVersion:7,restoreValidationVersion:libraryRestoreValidationVersion,syncedLocalRevision:0,status:'synced'};
+  const puts=[{table:'meta' as const,key:'identity',encodedValue:text(identity)},{table:'meta' as const,key:'service-owner',encodedValue:text(owner)},{table:'meta' as const,key:'sentinel',encodedValue:text('Original owner data')},{table:'meta' as const,key:'cloud-sync',encodedValue:text(state)}];
+  const result=await page.evaluate(async({entryUrl,identity,owner,records,head,puts,edit})=>{
+   const api=await import(/* @vite-ignore */entryUrl);
+   const value=(reply:any)=>{if(!reply.ok)throw Error(reply.error);return reply.value;};await api.open({unmodified:true});value(await api.request({kind:'initialize'}));
+   value(await api.request({kind:'commit',mutation:{clears:[],deletes:[],puts,syncBaseReplacement:records.map(row=>({table:row.table,key:row.key,valueJson:row.valueJson,blockRefs:row.blockRefs}))}}));
+   const begun=value(await api.request({kind:'replicaCandidate',request:{kind:'beginIndex',fence:{owner,identity,incarnation:'initial',localRevision:0},head,baseRevision:3}}));if(!begun.needsSeed)throw Error('Expected seed');
+   let completed=false;const start=performance.now(),pending=(async()=>{for(;;){const reply=await api.request({kind:'replicaCandidate',request:{kind:'seed',id:begun.id}});if(!reply.ok||reply.value.done)return reply;}})().then((reply:any)=>{completed=true;return reply;});
+   const readStart=performance.now(),probe=await api.request({kind:'get',table:'meta',key:'sentinel'}),readMs=performance.now()-readStart,during=!completed;
+   value(await api.request({kind:'commit',mutation:{clears:[],deletes:[],puts:[{table:'meta',key:'local-content-revision',encodedValue:edit}],contentRevision:1}}));
+   const rejected=await pending,base=value(await api.request({kind:'syncBaseReferences'})),count=value(await api.request({kind:'count',table:'settings'}));value(await api.request({kind:'close'}));return {probe,during,readMs,rejected,base,count,elapsedMs:performance.now()-start};
+  },{entryUrl,identity,owner,records,head:candidateExpected(records,identity,4).head,puts,edit:text(1)});
+  expect(result.during).toBe(true);expect(result.probe).toMatchObject({ok:true,value:text('Original owner data')});expect(result.rejected).toMatchObject({ok:false,error:'library_sync_local_changed'});expect(result.count).toBe(0);expect(result.base).toHaveLength(records.length);expect(result.readMs).toBeLessThan(1000);
+  await testInfo.attach('cooperative-seed-evidence',{contentType:'application/json',body:JSON.stringify(result)});
+ }finally{await context.close();if(http)await new Promise<void>(done=>http!.close(()=>done()));await vite?.close();}
+});
 
 for(const scenario of ['reads','close','native-failure','crash'] as const)test(`private OPFS candidate lifecycle: ${scenario}`,async({browser},testInfo)=>{
  test.setTimeout(180_000);
@@ -49,7 +77,9 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
    if(scenario!=='crash'){
     const lifecycle=await page.evaluate(async({entryUrl,id,scenario})=>{
      const api=await import(/* @vite-ignore */ entryUrl);let settled=false;
-     const pending=api.request({kind:'replicaCandidate',request:{kind:'validate',id}}).then((result:SqliteWorkerResult)=>{settled=true;return result;});
+     const progress:number[]=[];let firstProgress!:()=>void;const advanced=new Promise<void>(r=>firstProgress=r);
+     const pending=api.request({kind:'replicaCandidate',reportProgress:scenario==='close',request:{kind:'validate',id}},(p:any)=>{progress.push(p.completed);firstProgress();}).then((result:SqliteWorkerResult)=>{settled=true;return result;});
+     if(scenario==='close')await advanced;
      const probe=await api.request({kind:'get',table:'meta',key:'sentinel'}),during=!settled;
      let interrupted:SqliteWorkerResult,before:unknown,after:unknown;
      if(scenario==='native-failure'){
@@ -59,16 +89,18 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
      }else interrupted=await api.request({kind:'close'});
      const result=await pending;
      if(scenario==='native-failure')after=await api.request({kind:'test_native_write_stats'});
-     return {probe,during,interrupted,result,before,after};
+     return {probe,during,interrupted,result,before,after,progress};
     },{entryUrl,id:begun.id,scenario});
     expect(lifecycle.during).toBe(true);expect(value(lifecycle.probe)).toBe(text('Existing local data'));
     expect(lifecycle.result.ok).toBe(false);
     if(scenario==='close'){
-     value(lifecycle.interrupted);expect(lifecycle.result).toMatchObject({ok:false,error:'sqlite_database_closed'});
+     expect(lifecycle.progress.length).toBeGreaterThan(0);value(lifecycle.interrupted);expect(lifecycle.result).toMatchObject({ok:false,error:'sqlite_database_closed'});
     }else{
      expect(lifecycle.interrupted).toMatchObject({ok:false});
      if(lifecycle.interrupted.ok||lifecycle.result.ok)throw Error('Expected physical failure');
-     expect(lifecycle.interrupted.error).toContain('SQLITE_IOERR');expect(lifecycle.result.error).toContain('SQLITE_IOERR');
+     // The first failing native operation reports IOERR; the concurrently queued
+     // operation may instead observe the already quarantined connection.
+     expect([lifecycle.interrupted.error,lifecycle.result.error].some(error=>error.includes('SQLITE_IOERR'))).toBe(true);for(const error of [lifecycle.interrupted.error,lifecycle.result.error])expect(error).toMatch(/SQLITE_IOERR|^sqlite_storage_connection_failed$/u);
      const before=value(lifecycle.before as SqliteWorkerResult) as {writeCalls:number;fault:{requested:number;returned:number}},after=value(lifecycle.after as SqliteWorkerResult) as {writeCalls:number};
      expect(before.fault.returned).toBe(before.fault.requested-1);expect(after.writeCalls).toBe(before.writeCalls);
      value(await invoke({kind:'close'}));
@@ -86,14 +118,15 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
   }
   const measured=await page.evaluate(async({entryUrl,id})=>{
    const api=await import(/* @vite-ignore */ entryUrl);let settled=false;
-   const pending=api.request({kind:'replicaCandidate',request:{kind:'validate',id}}).then((result:SqliteWorkerResult)=>{settled=true;return result;});
+   const progress:number[]=[],secondProgress:number[]=[];const pending=api.request({kind:'replicaCandidate',reportProgress:true,request:{kind:'validate',id}},(p:any)=>progress.push(p.completed)).then((result:SqliteWorkerResult)=>{settled=true;return result;});const duplicate=api.request({kind:'replicaCandidate',reportProgress:true,request:{kind:'validate',id}},(p:any)=>secondProgress.push(p.completed));
    const reads:Array<{elapsed:number;during:boolean;reply:SqliteWorkerResult}>=[];
    for(let attempt=0;attempt<30&&!settled;attempt++){
     await new Promise<void>(resolve=>setTimeout(resolve,5));const started=performance.now();
     const reply=await api.request({kind:'get',table:'meta',key:'sentinel'});reads.push({elapsed:performance.now()-started,during:!settled,reply});
    }
-   return {reads,result:await pending};
-  },{entryUrl,id:begun.id}) as {reads:Array<{elapsed:number;during:boolean;reply:SqliteWorkerResult}>;result:SqliteWorkerResult};
+   const result=await pending;await duplicate;const count=progress.length;await api.request({kind:'get',table:'meta',key:'sentinel'});if(count!==progress.length)throw Error('late progress after ACK');return {reads,result,progress,secondProgress};
+  },{entryUrl,id:begun.id}) as {reads:Array<{elapsed:number;during:boolean;reply:SqliteWorkerResult}>;result:SqliteWorkerResult;progress:number[];secondProgress:number[]};
+  expect(measured.progress.length).toBeGreaterThan(0);expect(measured.secondProgress.length).toBeGreaterThan(0);expect(measured.progress.every((n,i)=>n>0&&n%64===0&&(!i||n>measured.progress[i-1]!))).toBe(true);
   const validated=value(measured.result) as {kind:string;candidate:{records:number}};expect(validated.kind).toBe('validated');expect(validated.candidate.records).toBe(records.length);
   for(const read of measured.reads)expect(value(read.reply)).toBe(text('Existing local data'));
   expect(measured.reads.some(read=>read.during)).toBe(true);
@@ -109,7 +142,7 @@ for(const scenario of ['reads','close','native-failure','crash'] as const)test(`
  }
 });
 
-for(const scenario of ['restore','write-during-validation','meaning-scale','meaning-profile'] as const)test(scenario==='meaning-profile'?'instrumented Meaning OPFS restore diagnostic':`normal staged OPFS sync over 64 MiB: ${scenario}`,async({browser},testInfo)=>{
+for(const scenario of ['restore','write-during-validation','meaning-scale','meaning-profile'] as const)test(scenario==='meaning-profile'?'instrumented Meaning OPFS restore diagnostic':`normal staged OPFS sync over 64 MiB: ${scenario}`,{tag:'@capacity'},async({browser},testInfo)=>{
  test.skip(scenario==='meaning-profile'&&process.env.SENSA_RESTORE_SQL_PROFILE!=='true','Optional CPU/SQL diagnostic, not an unmodified-Worker latency guarantee');
  test.setTimeout(scenario==='meaning-scale'?420_000:240_000);
  const profileCount=Number(process.env.SENSA_RESTORE_PROFILE_MEANINGS??1000),profileCache=process.env.SENSA_RESTORE_PROFILE_CACHE_KIB,profileJournal=process.env.SENSA_RESTORE_PROFILE_JOURNAL??'wal';
@@ -126,27 +159,32 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
  const id=crypto.randomUUID(),identity={id,learnerId:crypto.randomUUID(),deviceId:id,createdAt:'2026-10-03T00:00:00.000Z',schemaVersion:2 as const},owner={subject:crypto.randomUUID(),accountId:crypto.randomUUID()};
  const fixture=await(async()=>{
   const records:ReplicaCandidateRecord[]=[{table:'meta',key:'identity',valueJson:JSON.stringify(encodeBackupValue(identity)),blockRefs:[]}];
-  let first:any,last:any,table:'drafts'|'semanticMeanings'='drafts',count=5000;
+  let first:any,last:any,hydratedFirst:any,hydratedLast:any,table:'drafts'|'semanticMeanings'='drafts',count=5000;
   if(scenario==='meaning-scale'||scenario==='meaning-profile'){
    const [{MemoryJourneyRepository},{createJourneyModules},{createSeededClock},{semanticLookupPayload,syntheticSemanticWorld},{semanticRecords}]=await Promise.all([import('../../../apps/web/src/experience/personalMeaningJourney/repository'),import('../../../apps/web/src/experience/personalMeaningJourney/gateway'),import('../../../apps/web/src/experience/personalMeaningJourney/ports'),import('../support/semanticLookupFixtures'),import('../support/semanticWorldRecordFixture.mts')]);
    const repository=new MemoryJourneyRepository();await createJourneyModules({repository,clock:createSeededClock('2026-10-03T00:00:00Z')}).semanticIntake.submit(semanticLookupPayload());
    count=scenario==='meaning-profile'?profileCount:10000;
-   const world=syntheticSemanticWorld(await repository.load(),count);table='semanticMeanings';first=world.meanings[0]!;last=world.meanings.at(-1)!;
+   const world=syntheticSemanticWorld(await repository.load(),count);table='semanticMeanings';hydratedFirst=world.meanings[0]!;hydratedLast=world.meanings.at(-1)!;first=storeMeaningContexts(hydratedFirst);last=storeMeaningContexts(hydratedLast);
    for(const row of semanticRecords(world))records.push({...row,valueJson:JSON.stringify(encodeBackupValue(row.value)),blockRefs:[]});
   }else for(let index=0;index<5000;index++){
    const value={id:crypto.randomUUID(),revision:1,text:`Synthetic remote draft ${index}: `+'x'.repeat(15000),createdAt:identity.createdAt,updatedAt:identity.createdAt};
    first??=value;last=value;records.push({table:'drafts',key:value.id,valueJson:JSON.stringify(encodeBackupValue(value)),blockRefs:[]});
   }
   const {expected,blocks}=candidateFixture(records,identity),wire=new Map([...expected.manifestBlocks,...blocks].map(block=>[block.hash,block.data]));
-  return {expected,wire,first,last,table,count,recordCount:records.length,firstKey:table==='drafts'?first.id:first.personalMeaning.personalMeaningId,lastKey:table==='drafts'?last.id:last.personalMeaning.personalMeaningId,logicalBytes:records.reduce((sum,row)=>sum+Buffer.byteLength(row.valueJson,'utf8'),0)};
+  return {expected,wire,first,last,hydratedFirst,hydratedLast,table,count,recordCount:records.length,firstKey:table==='drafts'?first.id:first.personalMeaning.personalMeaningId,lastKey:table==='drafts'?last.id:last.personalMeaning.personalMeaningId,logicalBytes:records.reduce((sum,row)=>sum+Buffer.byteLength(row.valueJson,'utf8'),0)};
  })();
  // Use Vite's canonical /src URLs so the synchronizer and the instrumented
  // adapter share one module instance rather than /@fs aliases of that file.
  const storeUrl='/src/data/library/store.ts',syncUrl='/src/data/library/cloudSync.ts',adapterUrl='/src/data/library/sqliteAdapter.ts',draftUrl='/src/data/library/drafts.ts';
+ const indexFixture=new IndexedSyncFixture(fixture.wire);indexFixture.observe(fixture.expected.head.revision,fixture.expected.manifestRefs);
  const transportStats={fetchRequests:0,maxRequestedHashes:0,maxResponseDataBytes:0,deferredResponses:0};
   vite=await createViteServer({configFile:resolve('apps/web/vite.config.ts'),root:resolve('apps/web'),logLevel:'error',server:{middlewareMode:true,hmr:false,fs:{allow:[process.cwd()]}}});
   http=createServer(async(request,response)=>{
    if(request.url==='/candidate/head'){response.setHeader('content-type','application/json');response.end(JSON.stringify(fixture.expected.head));return;}
+   if(request.url==='/candidate/snapshot'||request.url==='/candidate/pull'){
+    const chunks:Buffer[]=[];for await(const chunk of request)chunks.push(Buffer.from(chunk));const body=JSON.parse(Buffer.concat(chunks).toString());
+    response.setHeader('content-type','application/json');response.end(JSON.stringify(indexFixture.page(request.url.replace('/candidate',''),body,fixture.expected.head.revision,fixture.expected.manifestRefs)));return;
+   }
    if(request.url==='/candidate/blocks/fetch'){
     try{
      const chunks:Buffer[]=[];for await(const chunk of request)chunks.push(Buffer.from(chunk));
@@ -180,27 +218,37 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
    const originalIdentity=await store.openLibrary();await store.writeLibraryState(async(tx:any)=>tx.put('meta','service-owner',owner));
    const adapter=await adapters.sqliteRecordAdapter(),original=adapter.replicaCandidate.bind(adapter),originalCommit=adapter.commit.bind(adapter);
    const phaseMs:Record<string,number>={},phaseCalls:Record<string,number>={};
-   const timedReplica=async(message:any)=>{const started=performance.now();try{return await original(message);}finally{phaseMs[message.kind]=(phaseMs[message.kind]??0)+performance.now()-started;phaseCalls[message.kind]=(phaseCalls[message.kind]??0)+1;}};
+   const timedReplica=async(message:any,onProgress?:any)=>{const started=performance.now();try{return await original(message,onProgress);}finally{phaseMs[message.kind]=(phaseMs[message.kind]??0)+performance.now()-started;phaseCalls[message.kind]=(phaseCalls[message.kind]??0)+1;}};
    adapter.commit=async(mutation:any)=>{const started=performance.now();try{return await originalCommit(mutation);}finally{if(mutation.replicaCandidateRestore)phaseMs.promotion=(phaseMs.promotion??0)+performance.now()-started;}};
-   let validationRequests=0,writingDuringValidation=false,validationInvalidatedByWrite=false,writeMs=0,localDraftId:string|undefined,appendReadCount=0,maxAppendReadMs=0;
-   adapter.replicaCandidate=async(message:any)=>{
+   let validationRequests=0,writingDuringValidation=false,validationInvalidatedByWrite=false,validationSucceeded=false,writeMs=0,localDraftId:string|undefined,appendReadCount=0,maxAppendReadMs=0;
+   const OriginalWorker=globalThis.Worker;let writing:Promise<void>|undefined;
+   if(scenario==='write-during-validation')globalThis.Worker=class extends OriginalWorker{
+    postMessage(message:any,...args:any[]){
+     if(message.kind==='replicaCandidate'&&message.request.kind==='validate'){
+      validationRequests++;let settled=false;const acknowledge=(event:MessageEvent)=>{
+       if(event.data.id!==message.id)return;
+       if(event.data.kind==='replicaCandidateProgress'&&!writing){
+        localDraftId=crypto.randomUUID();const at=performance.now();writing=drafts.saveDraft(crypto.randomUUID(),{id:localDraftId,expectedRevision:0,text:'A user write while cloud validation runs.'}).then(()=>{writeMs=performance.now()-at;writingDuringValidation=!settled;});
+       }
+       if(typeof event.data.ok==='boolean'){settled=true;validationSucceeded=event.data.ok;validationInvalidatedByWrite=event.data.error==='library_sync_local_changed';this.removeEventListener('message',acknowledge);}
+      };this.addEventListener('message',acknowledge);
+     }
+     return Reflect.apply(OriginalWorker.prototype.postMessage,this,[message,...args]);
+    }
+   };
+   adapter.replicaCandidate=async(message:any,onProgress?:any)=>{
     if(scenario==='meaning-profile'&&message.kind==='append'){
-     const pending=timedReplica(message),started=performance.now();
-     const reading=store.readLibrary((tx:any)=>tx.count('semanticMeanings')).then((count:number)=>{if(count!==0)throw Error('candidate_exposed_before_promotion');appendReadCount++;maxAppendReadMs=Math.max(maxAppendReadMs,performance.now()-started);});
+     const pending=timedReplica(message,onProgress),at=performance.now();
+     const reading=store.readLibrary((tx:any)=>tx.count('semanticMeanings')).then((count:number)=>{if(count!==0)throw Error('candidate_exposed_before_promotion');appendReadCount++;maxAppendReadMs=Math.max(maxAppendReadMs,performance.now()-at);});
      const [result]=await Promise.all([pending,reading]);return result;
     }
-    if(scenario!=='write-during-validation'||message.kind!=='validate')return timedReplica(message);
-    validationRequests++;
-    let settled=false;const validation=timedReplica(message).then((result:any)=>{settled=true;return {result};},(error:Error)=>{settled=true;return {error};});
-    localDraftId=crypto.randomUUID();const started=performance.now();
-    await drafts.saveDraft(crypto.randomUUID(),{id:localDraftId,expectedRevision:0,text:'A user write while cloud validation runs.'});writeMs=performance.now()-started;writingDuringValidation=!settled;
-    const outcome=await validation;if('error' in outcome){validationInvalidatedByWrite=outcome.error.message==='library_sync_local_changed';throw outcome.error;}return outcome.result;
+    return timedReplica(message,onProgress);
    };
    let tick=performance.now(),maxMainThreadGapMs=0;const timer=setInterval(()=>{const now=performance.now();maxMainThreadGapMs=Math.max(maxMainThreadGapMs,now-tick);tick=now;},16),started=performance.now();
    let error:string|undefined;
    try{await sync.synchronizeLibrary(async(path:string,body?:unknown)=>{const response=await fetch('/candidate'+path,{method:body?'POST':'GET',headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});if(!response.ok)throw Error('controlled_transport_failed');return response.json();});}catch(cause){error=cause instanceof Error?cause.message:String(cause);}
-   finally{clearInterval(timer);adapter.replicaCandidate=original;adapter.commit=originalCommit;}
-   return {originalIdentity,error,validationRequests,writingDuringValidation,validationInvalidatedByWrite,writeMs,localDraftId,appendReadCount,maxAppendReadMs,phaseMs,phaseCalls,durationMs:performance.now()-started,maxMainThreadGapMs,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),identity:await store.readLibrary((tx:any)=>tx.get('meta','identity')),storage:await navigator.storage.estimate(),workerProfile:Reflect.get(globalThis,'sensaRestoreProfile')};
+   finally{clearInterval(timer);await writing;globalThis.Worker=OriginalWorker;adapter.replicaCandidate=original;adapter.commit=originalCommit;}
+   return {originalIdentity,error,validationRequests,writingDuringValidation,validationInvalidatedByWrite,validationSucceeded,savedDraft:localDraftId?await store.readLibrary((tx:any)=>tx.get('drafts',localDraftId)):undefined,writeMs,localDraftId,appendReadCount,maxAppendReadMs,phaseMs,phaseCalls,durationMs:performance.now()-started,maxMainThreadGapMs,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),identity:await store.readLibrary((tx:any)=>tx.get('meta','identity')),storage:await navigator.storage.estimate(),workerProfile:Reflect.get(globalThis,'sensaRestoreProfile')};
   },{storeUrl,syncUrl,adapterUrl,draftUrl,owner,scenario,table:fixture.table});
   await testInfo.attach('normal-staged-restore-evidence',{contentType:'application/json',body:JSON.stringify({scenario,browser:browser.version(),profile:persistentProfile?'isolated persistent profile':'isolated ephemeral context',fixture:fixture.table==='semanticMeanings'?`${fixture.count} accepted synthetic Meanings, unique initial Registry, no media/Learning history; controlled HTTP, ${scenario==='meaning-profile'?'instrumented diagnostic':'unmodified'} Worker/OPFS; no PostgreSQL/account UI`:'5000 valid synthetic Drafts; controlled loopback HTTP; real normal synchronizer/Worker/OPFS, no PostgreSQL or account UI',recordCount:fixture.recordCount,logicalBytes:fixture.logicalBytes,transportStats,...measured,paidCalls:0})});
   expect(transportStats.maxRequestedHashes).toBeLessThanOrEqual(512);expect(transportStats.maxResponseDataBytes).toBeLessThanOrEqual(librarySyncBlockFetchBytes);
@@ -217,17 +265,20 @@ for(const scenario of ['restore','write-during-validation','meaning-scale','mean
   if(scenario!=='write-during-validation'){
    expect(measured.error).toBeUndefined();expect(measured.count).toBe(fixture.count);expect(measured.state.status).toBe('synced');expect(measured.identity).toEqual({...identity,deviceId:measured.originalIdentity.deviceId});
    await page.reload();
-   const restored=await page.evaluate(async({storeUrl,syncUrl,firstKey,lastKey,table})=>{
+   const restored=await page.evaluate(async({storeUrl,syncUrl,contextUrl,firstKey,lastKey,table})=>{
     const store=await import(/* @vite-ignore */ storeUrl),sync=await import(/* @vite-ignore */ syncUrl);const identity=await store.openLibrary();
-    return {identity,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),first:await store.readLibrary((tx:any)=>tx.get(table,firstKey)),last:await store.readLibrary((tx:any)=>tx.get(table,lastKey)),lookup:table==='semanticMeanings'?await store.readLibrary((tx:any)=>tx.lookupMeanings('借用编号0')):undefined};
-   },{storeUrl,syncUrl,firstKey:fixture.firstKey,lastKey:fixture.lastKey,table:fixture.table});
+    const contexts=table==='semanticMeanings'?await import(/* @vite-ignore */ contextUrl):undefined;
+    return {identity,state:await sync.readCloudSync(),count:await store.readLibrary((tx:any)=>tx.count(table)),first:await store.readLibrary((tx:any)=>tx.get(table,firstKey)),last:await store.readLibrary((tx:any)=>tx.get(table,lastKey)),hydratedFirst:contexts?await store.readLibrary((tx:any)=>contexts.readMeaningContexts(tx,firstKey)):undefined,hydratedLast:contexts?await store.readLibrary((tx:any)=>contexts.readMeaningContexts(tx,lastKey)):undefined,lookup:table==='semanticMeanings'?await store.readLibrary((tx:any)=>tx.lookupMeanings('借用编号0')):undefined};
+   },{storeUrl,syncUrl,contextUrl:'/src/experience/personalMeaningJourney/contextRecords.ts',firstKey:fixture.firstKey,lastKey:fixture.lastKey,table:fixture.table});
    expect(restored.identity).toEqual(measured.identity);expect(restored.count).toBe(fixture.count);expect(restored.first).toEqual(fixture.first);expect(restored.last).toEqual(fixture.last);expect(restored.state.status).toBe('synced');
-   if(fixture.table==='semanticMeanings')expect(restored.lookup.meanings).toHaveLength(1);
+   if(fixture.table==='semanticMeanings'){
+    expect(restored.hydratedFirst).toEqual(fixture.hydratedFirst);expect(restored.hydratedLast).toEqual(fixture.hydratedLast);expect(restored.lookup.meanings).toHaveLength(1);
+   }
   }else{
    // The write can invalidate and finish validation before its own Promise
-   // resolves. A rejected fence proves concurrent progress, unlike waiting for
-   // a successful validation behind a shared Library Web Lock.
-   expect(measured.validationRequests).toBe(1);expect(measured.validationInvalidatedByWrite).toBe(true);expect(measured.error).toBe('library_sync_local_changed');expect(measured.count).toBe(1);expect(measured.identity).toEqual(measured.originalIdentity);expect(measured.state.status).toBe('pending');
+   // resolves. A fresh generation can finish its private validation, but activation must
+   // reject the changed source fence and leave the user edit visible.
+   expect(measured.validationRequests).toBe(1);expect(measured.writingDuringValidation).toBe(true);expect(measured.validationSucceeded).toBe(true);expect(measured.savedDraft).toMatchObject({id:measured.localDraftId,text:'A user write while cloud validation runs.'});expect(measured.error).toBe('library_sync_local_changed');expect(measured.count).toBe(1);expect(measured.identity).toEqual(measured.originalIdentity);expect(measured.state.status).toBe('pending');
    expect(await page.evaluate(async storeUrl=>{const store=await import(/* @vite-ignore */ storeUrl);return store.readLibrary(async(tx:any)=>(await tx.syncBaseReferences()).length);},storeUrl)).toBe(0);
   }
  }finally{

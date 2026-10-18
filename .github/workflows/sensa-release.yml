@@ -57,9 +57,13 @@ jobs:
       release_sha: ${{ steps.release.outputs.sha }}
       release_id: ${{ steps.planner.outputs.release_id }}
       deploy_application: ${{ steps.planner.outputs.deploy_application }}
+      application_mode: ${{ steps.planner.outputs.application_mode }}
       publish_learning_content: ${{ steps.planner.outputs.publish_learning_content }}
       candidate_run_id: ${{ steps.ci.outputs.run_id }}
-      candidate_run_attempt: ${{ steps.ci.outputs.run_attempt }}
+      candidate_run_attempt: ${{ steps.candidate.outputs.build_attempt }}
+      candidate_artifact_id: ${{ steps.candidate.outputs.artifact_id }}
+      candidate_validation_attempt: ${{ steps.ci.outputs.run_attempt }}
+      authorization_outcome: ${{ steps.planner.outputs.authorization_outcome }}
     env:
       SENSA_RELEASE_MODE: ${{ github.event_name == 'workflow_run' && 'automatic' || 'manual' }}
       SENSA_RELEASE_SHA: ${{ github.event.workflow_run.head_sha || inputs.release_sha || github.sha }}
@@ -102,7 +106,7 @@ jobs:
           }
           const endpoint=new URL(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/sensa-consumer-check.yml/runs`);
           for(const [key,value] of Object.entries({branch:'main',event:'push',head_sha:sha,per_page:'10'}))endpoint.searchParams.set(key,value);
-          for(let attempt=0;attempt<56;attempt++){
+          {
             const response=await fetch(endpoint,{headers:{authorization:`Bearer ${env.GH_TOKEN}`,accept:'application/vnd.github+json','x-github-api-version':'2026-03-10'}});
             if(!response.ok)throw Error(`Cannot verify Sensa CI (${response.status})`);
             const payload=await response.json(),run=payload.workflow_runs?.find(candidate=>candidate.head_sha===sha&&candidate.head_branch==='main'&&candidate.event==='push');
@@ -111,10 +115,7 @@ jobs:
               appendFileSync(env.GITHUB_OUTPUT,`run_id=${run.id}\nrun_attempt=${run.run_attempt}\n`);
               process.exit(0);
             }
-            if(run?.status==='completed')throw Error(`Sensa CI run ${run.id} concluded ${run.conclusion}`);
-            if(attempt===55)throw Error('Sensa CI did not complete for this exact main commit within 14 minutes');
-            console.log(run?`Waiting for Sensa CI run ${run.id} (${run.status})...`:'Waiting for the main CI run to appear...');
-            await new Promise(resolve=>setTimeout(resolve,15000));
+            throw Error(run ? `Sensa CI run ${run.id} is ${run.status}/${run.conclusion}; wait for this exact revision to pass before releasing` : 'No main CI run exists for this exact revision');
           }
           JS
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -124,22 +125,7 @@ jobs:
       - name: Restore the previous successful system manifest
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          while read -r previous_run; do
-            [ -n "$previous_run" ] || continue
-            evidence_dir=".tmp/previous-system-release/$previous_run"
-            mkdir -p "$evidence_dir"
-            if ! gh run download "$previous_run" --pattern 'sensa-system-release-*' --dir "$evidence_dir"; then
-              continue
-            fi
-            previous_manifest="$(find "$evidence_dir" -name system-release-manifest.json -type f -print -quit)"
-            if [ -n "$previous_manifest" ]; then
-              echo "SENSA_PREVIOUS_RELEASE_MANIFEST=$previous_manifest" >> "$GITHUB_ENV"
-              echo "Restored previous system release from run $previous_run."
-              exit 0
-            fi
-          done < <(gh run list --workflow sensa-release.yml --status success --limit 20 --json databaseId --jq '.[].databaseId')
-          echo 'No previous unified release manifest is available; the planner will require a full bootstrap release.'
+        run: node scripts/release/releaseArchive.mjs baseline
       - name: Plan the smallest safe system release
         id: planner
         env:
@@ -148,37 +134,57 @@ jobs:
           SENSA_MEDIA_PACK_SHA256: ${{ inputs.media_pack_sha256 }}
           SENSA_SYSTEM_RELEASE_ID: sensa-system-${{ steps.release.outputs.short_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: node scripts/release/systemRelease.mjs plan
+      - name: Resolve the immutable build independently of validation reruns
+        id: candidate
+        if: ${{ steps.planner.outputs.deploy_application == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SENSA_CANDIDATE_RUN_ID: ${{ steps.ci.outputs.run_id }}
+          SENSA_VALIDATION_RUN_ATTEMPT: ${{ steps.ci.outputs.run_attempt }}
+        run: node scripts/release/candidateSource.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sensa-release-plan-${{ steps.release.outputs.sha }}
+          name: sensa-release-plan-${{ steps.planner.outputs.release_id }}
           retention-days: 30
           if-no-files-found: error
-          path: release-candidate/system-release-plan.json
+          path: |
+            release-candidate/system-release-plan.json
+            release-candidate/ci-candidate-source.json
 
   learning_content:
-    needs: plan
-    if: ${{ needs.plan.outputs.publish_learning_content == 'true' }}
+    needs: [plan, application]
+    if: >-
+      ${{
+        always() &&
+        needs.plan.result == 'success' &&
+        needs.plan.outputs.publish_learning_content == 'true' &&
+        (needs.plan.outputs.deploy_application != 'true' || needs.application.result == 'success')
+      }}
     uses: ./.github/workflows/sensa-learning-content-publish.yml
     with:
       release_sha: ${{ needs.plan.outputs.release_sha }}
       media_release_tag: ${{ inputs.media_release_tag }}
       media_pack_sha256: ${{ inputs.media_pack_sha256 }}
+      release_id: ${{ needs.plan.outputs.release_id }}
     secrets: inherit
 
   application:
-    needs: [plan, learning_content]
+    needs: plan
     if: >-
       ${{
         always() &&
         needs.plan.result == 'success' &&
-        needs.plan.outputs.deploy_application == 'true' &&
-        (needs.plan.outputs.publish_learning_content != 'true' || needs.learning_content.result == 'success')
+        needs.plan.outputs.deploy_application == 'true'
       }}
     uses: ./.github/workflows/sensa-web-deploy.yml
     with:
       release_sha: ${{ needs.plan.outputs.release_sha }}
       candidate_run_id: ${{ needs.plan.outputs.candidate_run_id }}
       candidate_run_attempt: ${{ needs.plan.outputs.candidate_run_attempt }}
+      candidate_artifact_id: ${{ needs.plan.outputs.candidate_artifact_id }}
+      candidate_validation_attempt: ${{ needs.plan.outputs.candidate_validation_attempt }}
+      release_id: ${{ needs.plan.outputs.release_id }}
+      application_mode: ${{ needs.plan.outputs.application_mode }}
     secrets: inherit
 
   record:
@@ -187,10 +193,13 @@ jobs:
       ${{
         always() &&
         needs.plan.result == 'success' &&
+        needs.plan.outputs.authorization_outcome != 'requires-approval' &&
         (needs.plan.outputs.publish_learning_content != 'true' || needs.learning_content.result == 'success') &&
         (needs.plan.outputs.deploy_application != 'true' || needs.application.result == 'success')
       }}
     runs-on: ubuntu-latest
+    outputs:
+      manifest_artifact_id: ${{ steps.recorded.outputs.artifact-id }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -198,17 +207,19 @@ jobs:
           ref: ${{ needs.plan.outputs.release_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: sensa-release-plan-${{ needs.plan.outputs.release_sha }}
+          name: sensa-release-plan-${{ needs.plan.outputs.release_id }}
           path: .tmp/system-release-plan
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         if: ${{ needs.plan.outputs.deploy_application == 'true' }}
         with:
-          name: sensa-release-evidence-${{ needs.plan.outputs.release_sha }}
+          artifact-ids: ${{ needs.application.outputs.evidence_artifact_id }}
+          merge-multiple: true
           path: .tmp/application-evidence
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         if: ${{ needs.plan.outputs.publish_learning_content == 'true' }}
         with:
-          name: sensa-learning-content-${{ needs.plan.outputs.release_sha }}
+          artifact-ids: ${{ needs.learning_content.outputs.evidence_artifact_id }}
+          merge-multiple: true
           path: .tmp/content-evidence
       - name: Record the complete production state
         env:
@@ -216,8 +227,68 @@ jobs:
           SENSA_CONTENT_EVIDENCE_DIRECTORY: .tmp/content-evidence
         run: node scripts/release/systemRelease.mjs finalize
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        id: recorded
         with:
-          name: sensa-system-release-${{ needs.plan.outputs.release_sha }}
+          name: sensa-system-release-${{ needs.plan.outputs.release_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 90
           if-no-files-found: error
           path: release-candidate/system-release-manifest.json
+
+  archive:
+    needs: [plan, record]
+    if: ${{ always() && needs.record.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.plan.outputs.release_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ needs.record.outputs.manifest_artifact_id }}
+          merge-multiple: true
+          path: .tmp/system-release-record
+      - name: Archive verified candidate bytes and system state without redeploying
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/releaseArchive.mjs persist
+      - name: Preserve the native archive receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sensa-native-release-${{ needs.plan.outputs.release_id }}-attempt-${{ github.run_attempt }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            release-candidate/system-release-manifest.json
+            release-candidate/native-release-archive.json
+
+  report:
+    needs: [plan, learning_content, application, record, archive]
+    if: ${{ always() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.plan.outputs.release_sha }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: sensa-release-plan-${{ needs.plan.outputs.release_id }}
+          path: .tmp/system-release-plan
+      - name: Distinguish authorization, completion and failed component execution
+        env:
+          SENSA_RELEASE_JOBS: '{"application":"${{ needs.application.result }}","learning_content":"${{ needs.learning_content.result }}","record":"${{ needs.record.result }}","archive":"${{ needs.archive.result }}"}'
+        run: node scripts/release/releaseStatus.mjs system
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sensa-release-status-${{ needs.plan.outputs.release_id }}-attempt-${{ github.run_attempt }}
+          retention-days: 90
+          if-no-files-found: error
+          path: release-candidate/system-release-status.json

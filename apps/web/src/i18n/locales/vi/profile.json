@@ -209,7 +209,7 @@
     "feedback": "Góp ý và chỉnh sửa",
     "feedbackText": "Liên hệ hỗ trợ về góp ý sản phẩm, chỉnh sửa nội dung, khôi phục tài khoản hoặc xóa dữ liệu. Chỉ đính kèm tệp chẩn đoán khi hữu ích; tệp có trạng thái chạy và số lượng, không có nội dung học tập, email, ID bản ghi, URL, mã thông báo hoặc dấu vết ngăn xếp.",
     "contact": "Liên hệ hỗ trợ",
-    "unavailable": "Chưa cấu hình liên hệ hỗ trợ cho bản dựng này. Không phát hành bản này cho người dùng.",
+    "unavailable": "Thông tin liên hệ hỗ trợ hiện không khả dụng.",
     "diagnostics": "Dữ liệu chẩn đoán đã làm sạch",
     "diagnosticsText": "Tải báo cáo JSON cục bộ gồm phiên bản, khả năng trình duyệt, dung lượng và trạng thái đồng bộ. Xem lại trước khi đính kèm vào yêu cầu hỗ trợ.",
     "diagnosticsDownload": "Tải dữ liệu chẩn đoán",
@@ -229,7 +229,7 @@
     "storageBudget": "Ước tính của trình duyệt cho trang này: đã dùng {{used}} MiB trên {{quota}} MiB. Con số này có thể bao gồm tệp ứng dụng.",
     "storageBudgetWarning": "Trang này đã dùng hơn 80% dung lượng ước tính: {{used}} MiB trên {{quota}} MiB. Hãy sớm xuất bản sao lưu và giải phóng dung lượng thiết bị.",
     "clearTitle": "Xóa nội dung cục bộ",
-    "clearIntro": "Chỉ xóa nội dung, tiến độ học và cài đặt mô hình khỏi trình duyệt này. Tài khoản không bị xóa. Xuất bản sao lưu phía trên nếu muốn giữ nội dung.",
+    "clearIntro": "Chỉ xóa nội dung, tiến độ học và cài đặt mô hình khỏi trình duyệt này. Tài khoản không bị xóa. Xuất bản sao lưu trước nếu muốn giữ nội dung.",
     "clearInspect": "Xem lại nội dung cục bộ",
     "clearSummary": "Thao tác sẽ xóa {{drafts}} nguồn, {{meanings}} nghĩa, {{packages}} gói, {{targets}} mục học và {{events}} sự kiện.",
     "clearPending": "Có {{count}} lượt chuẩn bị chưa hoàn tất. Chúng không thể tiếp tục sau khi xóa.",
@@ -237,5 +237,24 @@
     "clearConfirm": "Tôi đã lưu mọi bản sao lưu cần thiết và xác nhận xóa nội dung cục bộ này.",
     "clearAction": "Xóa nội dung cục bộ",
     "clearDone": "Đã xóa nội dung cục bộ. Mở lại ứng dụng để dùng thư viện trống."
+  },
+  "syncRecovery": {
+    "blocked": "Cần kiểm tra đồng bộ trước khi tiếp tục. Dữ liệu cục bộ vẫn được lưu. Hãy xuất bản sao lưu, tải tệp chẩn đoán rồi liên hệ hỗ trợ.",
+    "hint": "Bản sao lưu chỉ lưu dữ liệu của thiết bị này. Nó không giải quyết vấn đề đồng bộ và không chứa thay đổi trên đám mây chưa được tải xuống.",
+    "backup": "Sao lưu thiết bị này",
+    "hideBackup": "Ẩn bản sao lưu"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Chuẩn bị dữ liệu cho thiết bị mới",
+    "preparing": "Đang chuẩn bị dữ liệu tài khoản cho thiết bị khác…",
+    "preparingUpload": "Đang gửi dữ liệu cần thiết cho thiết bị mới…",
+    "receiving": "Đang nhận dữ liệu tài khoản…",
+    "prepared": "Dữ liệu tài khoản đã sẵn sàng cho thiết bị mới.",
+    "preparationFailed": "Chưa thể hoàn tất chuẩn bị. Hãy thử lại sau. Dữ liệu đã đồng bộ vẫn được giữ.",
+    "preparationCancelled": "Đã dừng chuẩn bị. Dữ liệu đã đồng bộ vẫn được giữ.",
+    "stop": "Dừng lần đồng bộ này",
+    "stopping": "Đang dừng…",
+    "cancelled": "Đã dừng đồng bộ. Bạn có thể thử lại.",
+    "processed": "Dữ liệu đã xử lý: {{amount}} MiB"
   }
 }

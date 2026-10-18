@@ -5,6 +5,7 @@ import {decodeBackupValue,encodeBackupValue} from '../../../apps/web/src/data/li
 import {mergeLibraryReplicas,mergeLibraryReplicasCooperatively,planLibraryReplicaApply,replicaEntryId} from '../../../apps/web/src/data/library/replication/libraryReplica.ts';
 import {assertPersonalSemanticWorldState,assertPersonalSemanticWorldTransition,PersonalSemanticWorldInvariantError} from '../../../apps/web/src/experience/personalMeaningJourney/authority.ts';
 import {emptyJourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store.ts';
+import {collectMeaningContexts} from '../../../apps/web/src/experience/personalMeaningJourney/contextRecords';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository.ts';
 
 test("personal-semantic-world-merge", async () => {
@@ -29,6 +30,7 @@ const baseMeaning={
 };
 const baseRow=entry('semanticMeanings',meaningId,baseMeaning);
 const baseState={...emptyJourneyState(),meanings:[baseMeaning]} as any;
+collectMeaningContexts(baseState);
 assert.doesNotThrow(()=>assertPersonalSemanticWorldState(baseState));
 const repository=new MemoryJourneyRepository(),empty=await repository.load();
 await repository.commit({before:empty,after:baseState});

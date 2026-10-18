@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {effectiveHomeLearningPolicy, homeLearningReadiness} from '../../../apps/web/src/learning/system/learningProjection.ts';
+import {homeLearningState} from '../../../apps/web/src/experience/library/homeLearningState';
+import type {LearningHomeProjection} from '../../../apps/web/src/learning/system';
 
 const target = (profileId: 'lightweight' | 'high_assurance' | 'interleaved_four_stage', committed?: typeof profileId) => ({
   policyAssignment: {profileId},
@@ -36,4 +38,16 @@ describe('Home learning readiness from persisted installation state', () => {
   it('prefers the committed learning policy', () => {
     expect(effectiveHomeLearningPolicy(target('lightweight', 'interleaved_four_stage'))).toBe('interleaved_four_stage');
   });
+});
+
+it('Home distinguishes unknown, resumable, ready, future review, empty route and no learning intent',()=>{
+ const summary={activeRunId:null,hasLibraryContent:false,routeTargetCount:0,nextReviewAt:null,mixedReadyCount:0,readyInitialCount:0} as LearningHomeProjection;
+ expect(homeLearningState(summary,false)).toBe('loading');
+ expect(homeLearningState(summary,true)).toBe('empty');
+ expect(homeLearningState({...summary,hasLibraryContent:true},true)).toBe('route_empty');
+ expect(homeLearningState({...summary,hasLibraryContent:true,routeTargetCount:2},true)).toBe('idle');
+ expect(homeLearningState({...summary,hasLibraryContent:true,nextReviewAt:'2026-10-11T08:00:00Z'},true)).toBe('waiting');
+ expect(homeLearningState({...summary,mixedReadyCount:1},true)).toBe('review');
+ expect(homeLearningState({...summary,mixedReadyCount:1,readyInitialCount:1},true)).toBe('ready');
+ expect(homeLearningState({...summary,activeRunId:'pinned-run',mixedReadyCount:4},true)).toBe('resume');
 });

@@ -73,7 +73,11 @@ const patchSahPoolHeaderRecovery=(source:string):string=>{
     '\tconst pathBytes = this.#apBody.subarray(0, HEADER_MAX_PATH_SIZE).findIndex((v) => 0 === v);',
     '\tif (pathBytes < 0) throw new Error("sqlite_sahpool_header_path_invalid");',
     '\tif (pathBytes === 0) {',
-    '\t\tif (flags !== 0 || sah.getSize() !== HEADER_OFFSET_DATA) throw new Error("sqlite_sahpool_header_orphaned_payload");',
+    // Unlink publishes an empty header before truncating. Resume the SDK's
+    // reclamation after interruption, but a fixed v1 digest is not evidence
+    // that a partially cleared path is a canonical empty slot.
+    '\t\tif (flags !== 0 || !this.#apBody.every((v) => v === 0) || sah.getSize() < HEADER_OFFSET_DATA) throw new Error("sqlite_sahpool_header_orphaned_payload");',
+    '\t\tif (sah.getSize() > HEADER_OFFSET_DATA) { sah.truncate(HEADER_OFFSET_DATA); sah.flush(); }',
     '\t\treturn "";',
     '\t}',
     // Legitimate transient files can be reclaimed only after their full header

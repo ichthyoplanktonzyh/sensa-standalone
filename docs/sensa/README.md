@@ -42,6 +42,11 @@ Learning Kernel、Production Base 的软件职责轴正交，详见
 
 这些文档只维护当前有效内容，不追加施工日志。完成记录由 Git 和 CI 保存，待办由 issue tracking 保存。
 
+新任务先确认当前产品范围，再从 `user-journeys.md` 定位旅程，通过
+[`tests/web/journeyMapping.mts`](../../tests/web/journeyMapping.mts) 与
+[`tests/web/catalog.mts`](../../tests/web/catalog.mts) 选择已有证据。工程说明中的“证据保存与任务接续”给出
+原始报告归档、摘要核验和 checkpoint 追溯方法；历史矩阵、报告与本机归档不替代当前需求或实际执行结果。
+
 ## 就近操作说明
 
 - [`../../apps/web/README.md`](../../apps/web/README.md)：Web 开发与媒体准备。

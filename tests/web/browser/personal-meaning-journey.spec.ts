@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {createServer,type Server} from 'node:http';
 import {once} from 'node:events';
-import {mkdir,mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {extname,join,resolve} from 'node:path';
 import {test as base,expect,type Page,type Locator,type TestInfo} from '@playwright/test';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
@@ -14,14 +14,14 @@ import {semanticLookupPayload,syntheticSemanticWorld} from '../support/semanticL
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
 import {assertInteractionBudget} from '../support/interactionBudget';
 
-declare global{interface Window{semanticDetailPaint?:{startedAt:number;elapsedMs:number|null}}}
+declare global{interface Window{semanticDetailPaint?:{startedAt:number;elapsedMs:number|null};semanticSearchPaint?:{startedAt:number;elapsedMs:number|null}}}
 
 let server:Server,origin:string,output:string;
 type Plan={value:unknown;hold?:boolean;fail?:boolean};
 let plans:Plan[]=[],requests:Array<{messages:Array<{role:string;content:string}>;tools:Array<{function:{name:string}}>}> = [];
 let releaseStream:(()=>void)|undefined;
 let scaleFixture:JourneyState|undefined;
-const proposal={context:'上班前，学习者给家里的植物浇水。',sense:'给植物供水的动作。',senseKey:'water_plants',scene:'学习者用水壶给家里的植物浇水。',expression:'water',expressionType:'word',relation:'realizes',coverage:'exact',reason:'water 可以作动词表示给植物浇水。'};
+const proposal={context:'上班前，学习者给家里的植物浇水。',sense:'给植物供水的动作。',scene:'学习者用水壶给家里的植物浇水。',expression:'water',expressionType:'word',reason:'water 可以作动词表示给植物浇水。'};
 const answer={reply:'这里可以说 water，表示给植物浇水。你看这个表达合适吗？',clarity:{context:true,sense:true,expression:true},proposal};
 const snapshot={format:'sensa-learning-content-registry-v3',publishedAt:'2026-10-03T00:00:00Z',items:[]};
 const registry={...snapshot,revision:createHash('sha256').update(canonicalConsumerJson(snapshot)).digest('hex')};
@@ -29,7 +29,7 @@ const types:Record<string,string>={'.js':'text/javascript','.css':'text/css','.w
 const practicePreference={source:'personal',expressionIds:['pending-source-selection']};
 const test=base.extend<{meaningSetup:{size:number;world:boolean};preparedMeaningPage:{page:Page;modelCalls:string[]}}>({
  meaningSetup:[{size:0,world:false},{option:true}],
- preparedMeaningPage:[async({page,meaningSetup},use)=>{
+ preparedMeaningPage:[async({page,meaningSetup},use,testInfo)=>{
   const started=performance.now(),modelCalls:string[]=[];requests=[];plans=[];
   page.on('request',request=>{if(/chat\/completions|semantic-agent|\/tts|model.*execute/.test(request.url()))modelCalls.push(request.url());});
   if(meaningSetup.world)await page.addInitScript(preference=>{
@@ -43,13 +43,17 @@ const test=base.extend<{meaningSetup:{size:number;world:boolean};preparedMeaning
   if(!meaningSetup.world)await worldButton.click();
   if(meaningSetup.size){
    const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
-   await modules.semanticIntake.submit(semanticLookupPayload());scaleFixture=syntheticSemanticWorld(await repository.load(),meaningSetup.size);
+   await modules.semanticIntake.submit(semanticLookupPayload());
+   const graphFixture=process.env.SENSA_GRAPH_CAPACITY_FIXTURE;
+   scaleFixture=graphFixture?(JSON.parse(await readFile(graphFixture,'utf8')) as JourneyState):syntheticSemanticWorld(await repository.load(),meaningSetup.size);
    if(meaningSetup.world){
     await modules.personalMeaningJourney.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'尚待确认的材料'}]});
-    const pending=await repository.load();scaleFixture.inboxItems=pending.inboxItems;scaleFixture.clarificationDrafts=pending.clarificationDrafts;
+    const pending=await repository.load();if(!graphFixture){scaleFixture.inboxItems=pending.inboxItems;scaleFixture.clarificationDrafts=pending.clarificationDrafts;}
    }
    await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+   if(process.env.SENSA_GRAPH_CAPACITY_SAVE_FIXTURE)await writeFile(process.env.SENSA_GRAPH_CAPACITY_SAVE_FIXTURE,JSON.stringify(scaleFixture),{flag:'wx'});
    expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(meaningSetup.size);
+   if(process.env.SENSA_GRAPH_CAPACITY_SIZE)await testInfo.attach('graph-input.json',{body:JSON.stringify({sha256:createHash('sha256').update(JSON.stringify(scaleFixture)).digest('hex'),meanings:scaleFixture.meanings.length,expressions:scaleFixture.registry.expressions.length,contexts:scaleFixture.contexts.anchors.length}),contentType:'application/json'});
    if(!meaningSetup.world)await page.reload();
   }
   console.log('Personal Meaning fixture preparation (not user interaction):',JSON.stringify({size:meaningSetup.size,world:meaningSetup.world,preparedMs:performance.now()-started}));
@@ -101,7 +105,7 @@ test.beforeAll(async()=>{
   env:{...process.env,VITE_SENSA_MODE:'production',VITE_SENSA_BROWSER_SMOKE:'true',VITE_SUPABASE_URL:origin,VITE_SUPABASE_PUBLISHABLE_KEY:'fixture-public-key',VITE_SENSA_API_URL:origin},stdio:'pipe',
  });
 });
-test.afterEach(()=>{releaseStream?.();releaseStream=undefined;});
+test.afterEach(async({page},testInfo)=>{releaseStream?.();releaseStream=undefined;if(testInfo.status!==testInfo.expectedStatus&&process.env.SENSA_GRAPH_CAPACITY_SIZE&&!page.isClosed()){const measures=await page.evaluate(()=>performance.getEntriesByType('measure').filter(entry=>/^sensa\.(graph|journey)\./.test(entry.name)).map(entry=>({name:entry.name,startTime:entry.startTime,duration:entry.duration})));await testInfo.attach('graph-failed-stages.json',{body:JSON.stringify(measures,null,2),contentType:'application/json'});}});
 test.afterAll(async()=>{releaseStream?.();if(server?.listening)await new Promise<void>(done=>server.close(()=>done()));if(output)await rm(output,{recursive:true,force:true});});
 
 async function enterAndConfigureTeacher(page:Page,content=false){
@@ -155,7 +159,7 @@ test('Today personal-content entry offers non-AI recording without reopening the
  expect(requests).toEqual([]);
 });
 
-for(const size of [0,10_000])test.describe(`manual Meaning fixture ${size}`,()=>{
+for(const size of [0,10_000])test.describe(`manual Meaning fixture ${size}`,{tag:size?'@capacity':[]},()=>{
 test.use({meaningSetup:{size,world:false}});
 test(`manual authoring at ${size} Meanings needs Context and explicit acceptance, stays offline, and reopens`,async({preparedMeaningPage:{page,modelCalls}},testInfo)=>{
  test.setTimeout(180_000);
@@ -170,7 +174,7 @@ test(`manual authoring at ${size} Meanings needs Context and explicit acceptance
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');
  await form.getByLabel('表达类型',{exact:true}).selectOption('phrase');
  await form.getByLabel('这里表达的意思',{exact:true}).fill('退出已经答应参加的活动。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('有人答应参加活动，后来改变主意不再参加。');
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('有人答应参加活动，后来改变主意不再参加。');
  await form.getByText('表达原形（可选）',{exact:true}).click();
  await form.getByLabel('表达原形（可选）',{exact:true}).fill('back out');
  await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(form.getByRole('alert')).toContainText('准确位置');
@@ -264,7 +268,7 @@ test('confirmed Context image limits preserve editing input and saved sources, t
  const form=page.locator('.sensa-manual-meaning'),originalText='I water the plants before work.';
  await form.getByLabel('情境或原句',{exact:true}).fill(originalText);await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('water');
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');await form.getByLabel('这里表达的意思',{exact:true}).fill('给植物供水。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('上班前给家中的植物浇水。');await form.getByRole('button',{name:'确认并保存',exact:true}).click();
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('上班前给家中的植物浇水。');await form.getByRole('button',{name:'确认并保存',exact:true}).click();
  await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
  const meaningId=await page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId()),pins=await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId);
  const before=await facts(page);await page.getByRole('button',{name:'编辑场景',exact:true}).click();
@@ -302,7 +306,7 @@ test('personal meaning favorites and notes survive explicit recycle-bin deletion
  await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');await form.getByLabel('表达类型',{exact:true}).selectOption('word');
  await form.getByLabel('这里表达的意思',{exact:true}).fill('暂时借用他人的东西，之后归还。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
  await form.getByRole('button',{name:'确认并保存',exact:true}).click();
  await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();const originalUrl=page.url();
  const more=page.getByRole('button',{name:'更多',exact:true}),menu=page.getByRole('dialog',{name:'更多',exact:true});
@@ -352,8 +356,8 @@ test('personal meaning favorites and notes survive explicit recycle-bin deletion
  await expect(page.getByRole('button',{name:/^收藏的意思\s+0$/u})).toBeVisible();await expect(page.getByRole('button',{name:'我的笔记 0',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'我的意思',exact:true}).click();
  await expect(page.locator('.sensa-world-row').filter({hasText:'borrow'})).toHaveCount(0);
- await page.getByRole('button',{name:'回收站',exact:true}).click();await page.locator('.sensa-world-row').filter({hasText:'borrow'}).click();
- expect(page.url()).toBe(originalUrl);await page.getByRole('button',{name:'恢复内容',exact:true}).click();
+ await page.getByRole('combobox',{name:'按状态筛选',exact:true}).selectOption('deleted');await page.locator('.sensa-world-row').filter({hasText:'borrow'}).click();
+ expect(new URL(page.url()).pathname).toBe(new URL(originalUrl).pathname);expect(new URL(page.url()).searchParams.get('meaningId')).toBe(new URL(originalUrl).searchParams.get('meaningId'));expect(new URL(page.url()).searchParams.get('worldFilter')).toBe('deleted');await page.getByRole('button',{name:'恢复内容',exact:true}).click();
  await expect(more).toBeEnabled();await page.reload();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
  await more.click();await expect(menu.getByRole('button',{name:'取消收藏',exact:true})).toBeVisible();
  await menu.getByRole('button',{name:'写笔记',exact:true}).click();await expect(note.locator('textarea')).toHaveValue('忘带钱包时，向朋友暂借钱；之后归还。');
@@ -403,7 +407,7 @@ test('personal correction preserves the Meaning and original capture, blocks an 
  await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
  const initial=page.locator('.sensa-manual-meaning'),capture='Jo asked to borrow my umbrella. I gave it to her.';
  await initial.getByLabel('情境或原句',{exact:true}).fill(capture);await initial.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');
- await initial.getByLabel('表达语言',{exact:true}).selectOption('en');await initial.getByLabel('这里表达的意思',{exact:true}).fill('暂时取得别人的物品，之后归还。');await initial.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借雨伞。');
+ await initial.getByLabel('表达语言',{exact:true}).selectOption('en');await initial.getByLabel('这里表达的意思',{exact:true}).fill('暂时取得别人的物品，之后归还。');await initial.getByText('这个意思适用的典型场景',{exact:true}).click();await initial.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借雨伞。');
  await initial.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
  const meaningId=new URL(page.url()).searchParams.get('meaningId'),originalUrl=page.url();
  await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'收藏',exact:true}).click();
@@ -411,7 +415,7 @@ test('personal correction preserves the Meaning and original capture, blocks an 
  const note=page.locator('.sensa-note-editor');await note.locator('textarea').fill('起初理解为从别人那里借入。');await note.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(note).toHaveCount(0);
  const open=async()=>{await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'修改意思和表达',exact:true}).click();};
  await open();const editor=page.locator('.sensa-meaning-correction');await expect(editor.getByLabel('表达',{exact:true})).toHaveValue('borrow');await expect(editor.getByText(capture,{exact:true})).toBeVisible();
- const write=async()=>{await editor.getByLabel('表达',{exact:true}).fill('lend');await editor.getByLabel('这里表达的意思',{exact:true}).fill('把自己的物品暂时交给别人使用，之后收回。');await editor.getByLabel('这个意思适用的典型场景',{exact:true}).fill('把雨伞暂借给同事，用完后收回。');};
+ const write=async()=>{await editor.getByLabel('编辑方式',{exact:true}).selectOption('different_meaning');const usage=editor.locator('#meaning-correction-usage').locator('..');if(!(await usage.evaluate(node=>node.hasAttribute('open'))))await usage.locator('summary').click();await editor.getByLabel('表达',{exact:true}).fill('lend');await editor.getByLabel('这里表达的意思',{exact:true}).fill('把自己的物品暂时交给别人使用，之后收回。');await editor.getByLabel('这个意思适用的典型场景',{exact:true}).fill('把雨伞暂借给同事，用完后收回。');};
  await write();await editor.getByRole('button',{name:'关闭',exact:true}).click();
  // A corrupt UI-only pending request must not lock the valid typed draft into
  // an endless retry. Recovery is explicit and cannot accept the old request.
@@ -465,7 +469,7 @@ test('note editors preserve stale drafts and require an explicit choice after an
  await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');await form.getByLabel('表达类型',{exact:true}).selectOption('word');
  await form.getByLabel('这里表达的意思',{exact:true}).fill('暂时借用他人的东西，之后归还。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('向朋友暂借钱，并会归还。');
  await form.getByRole('button',{name:'确认并保存',exact:true}).click();
  await expect(page.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();const url=page.url();
  const openNote=async(tab:Page)=>{
@@ -513,7 +517,7 @@ async function manualInboxCompletion(page:Page,missing:'context'|'expression'|'s
  await open();await expect(form.getByLabel('情境或原句',{exact:true})).toBeEnabled();
  if(missing==='context')await form.getByLabel('情境或原句',{exact:true}).fill('I asked to borrow an umbrella on a rainy day.');
  if(missing==='expression'){await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('borrow');await form.getByLabel('表达语言',{exact:true}).selectOption('en');}
- const fillSense=async()=>{await form.getByLabel('这里表达的意思',{exact:true}).fill('临时取得物品使用，之后归还。');await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('下雨时向同事借伞，回家后再把伞还给同事。');};
+ const fillSense=async()=>{await form.getByLabel('这里表达的意思',{exact:true}).fill('临时取得物品使用，之后归还。');await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('下雨时向同事借伞，回家后再把伞还给同事。');};
  if(missing==='sense'||missing==='image')await fillSense();
  if(missing==='image')await expect(form.getByLabel('表达语言',{exact:true})).toHaveValue('en-US');
  await form.getByRole('button',{name:'关闭',exact:true}).click();await expect(inbox.getByRole('article')).toHaveCount(1);
@@ -700,6 +704,34 @@ async function clickToMeaningReady(page:Page,action:Locator,label:string,readyAc
  return (await page.evaluate(()=>window.semanticDetailPaint!.elapsedMs))!;
 }
 
+
+/** Input-to-stable actionable row is timed inside Chromium; assertion polling
+ * and the driver's fill round-trip are retained separately as diagnostics. */
+async function searchToWorldRowReady(page:Page,input:Locator,value:string,label:string){
+ await input.evaluate((element,{value,label})=>{
+  element.addEventListener('input',()=>{
+   const measure=window.semanticSearchPaint={startedAt:performance.now(),elapsedMs:null as number|null};
+   let previousGeometry:string|null=null;
+   const painted=()=>{
+    const rows=[...document.querySelectorAll<HTMLElement>('.sensa-world.active [role="listitem"]')];
+    const row=rows.length===1&&rows[0].getAttribute('aria-setsize')==='1'?rows[0]:null;
+    const button=row?.querySelector<HTMLButtonElement>('button.sensa-world-row'),heading=button?.querySelector('strong');
+    const rect=button?.getBoundingClientRect();
+    const top=rect?document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2):null;
+    const ready=(element as HTMLInputElement).value===value&&heading?.textContent===label&&button&&!button.disabled&&button.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})&&rect&&rect.width>0&&rect.top>=0&&rect.bottom<=innerHeight&&top&&button.contains(top)&&!button.closest('[inert],[aria-hidden="true"]');
+    const geometry=ready?JSON.stringify(rect.toJSON()):null;
+    if(geometry!==null&&geometry===previousGeometry){measure.elapsedMs=performance.now()-measure.startedAt;return;}
+    previousGeometry=geometry;if(performance.now()-measure.startedAt<30_000)requestAnimationFrame(painted);
+   };requestAnimationFrame(painted);
+  },{once:true,capture:true});
+ },{value,label});
+ const driverStart=await page.evaluate(()=>performance.now());await input.fill(value);
+ await expect(page.locator('.sensa-world.active').getByRole('button',{name:new RegExp('^'+label+'(?:\\s|$)','u')})).toBeVisible();
+ const driverMs=await page.evaluate(start=>performance.now()-start,driverStart);
+ await expect.poll(()=>page.evaluate(()=>window.semanticSearchPaint?.elapsedMs)).not.toBeNull();
+ return {searchMs:(await page.evaluate(()=>window.semanticSearchPaint!.elapsedMs))!,driverMs};
+}
+
 test('reply streams before candidate disclosure, explicit acceptance persists, and the learning bridge stays optional',async({page})=>{
  await enterAndConfigureTeacher(page);plans=[{value:answer,hold:true}];await send(page);
  const workspace=page.locator('.pmw-screen.active'),originalSkin=await page.evaluate(()=>document.documentElement.getAttribute('data-sensa-skin'));
@@ -778,6 +810,9 @@ test('personal preparation pins explicit Context updates, preserves the active R
  test.setTimeout(150_000);
  page.setDefaultTimeout(15_000);
  await enterAndConfigureTeacher(page,true);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();
+ await page.locator('#s-study').getByRole('button',{name:'学习偏好',exact:true}).click();const preferences=page.getByRole('dialog',{name:'学习偏好',exact:true});await preferences.getByRole('combobox',{name:'每日新学数量',exact:true}).selectOption('5');await preferences.getByRole('button',{name:'完成',exact:true}).click();
+
  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
  await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
  const form=page.locator('.sensa-manual-meaning'),oldContext='Private-A: Every morning I water the plants.',nextContext='Private-B: At dusk I water the flowers on the balcony.';
@@ -785,7 +820,7 @@ test('personal preparation pins explicit Context updates, preserves the active R
  await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('water');
  await form.getByLabel('表达语言',{exact:true}).selectOption('en');
  await form.getByLabel('这里表达的意思',{exact:true}).fill('给植物供水。');
- await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('一个人给植物浇水，让它们获得需要的水分。');
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('一个人给植物浇水，让它们获得需要的水分。');
  await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(form).toHaveCount(0);
  const meaningId=await page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId());
  const sensePins=await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId);
@@ -805,6 +840,8 @@ test('personal preparation pins explicit Context updates, preserves the active R
  const initial=await facts(page);expect(initial.provisioning[0]).toMatchObject({status:'ready',useContext:true});expect(initial.learning.targetIds).toHaveLength(1);
  await preparation.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'学习偏好',exact:true})).toHaveCount(0);
+ await expect(page.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/})).toBeEnabled();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningArrangementCheckpointForTest())).session?.dailyNewSenseLimit).toBe(5);
  await page.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/}).click();
  const active=(await facts(page)).learning;expect(active.runtime).not.toBeNull();
  await page.locator('#s-lightweight-runtime').getByRole('button',{name:'暂停',exact:true}).click();
@@ -818,11 +855,16 @@ test('personal preparation pins explicit Context updates, preserves the active R
  await page.getByRole('button',{name:'保存场景',exact:true}).click();
  await expect(preparation).toContainText('场景已修改');expect(requests).toHaveLength(1);
  await preparation.getByText('查看学习资源',{exact:true}).click();
- await expect(preparation.getByText('清晨，一个人用水壶给室内的植物浇水。',{exact:true})).toBeVisible();
+ await expect(page.getByRole('dialog',{name:/^学习资源/u}).getByText('清晨，一个人用水壶给室内的植物浇水。',{exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');await expect(preparation.getByRole('button',{name:'查看学习资源',exact:true})).toBeFocused();
  await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();
  plans=[{value:candidate('傍晚，一个人在阳台上给花浇水。','At dusk I water the flowers on the balcony.')}];
  await preparation.getByRole('button',{name:'使用当前场景设置更新资源',exact:true}).click();
- await expect(preparation.getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ await expect.poll(async()=>(await facts(page)).learning.runtime?.materializationId).not.toBe(suspended.runtime!.materializationId);
+ await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();
+ await preparation.getByRole('button',{name:'查看学习资源',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:/^学习资源/u}).getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ await page.goBack();await expect(page.getByRole('dialog',{name:/^学习资源/u})).toHaveCount(0);
  expect(requests).toHaveLength(2);expect(JSON.stringify(requests[1])).toContain(nextContext);expect(JSON.stringify(requests[1])).not.toContain(oldContext);
  const updated=(await facts(page)).learning;
  expect(updated).toEqual({...suspended,runtime:{...suspended.runtime!,materializationId:updated.runtime!.materializationId}});
@@ -837,7 +879,9 @@ test('personal preparation pins explicit Context updates, preserves the active R
  await expect(preparation.getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible();
  await expect.poll(async()=>(await facts(page)).provisioning[0]).toMatchObject({status:'failed',useContext:false});
  expect((await facts(page)).learning).toEqual(updated);
- await expect(preparation.getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ await preparation.getByRole('button',{name:'查看学习资源',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:/^学习资源/u}).getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
+ await page.goBack();await expect(page.getByRole('dialog',{name:/^学习资源/u})).toHaveCount(0);
  await expect(preparation.getByRole('button',{name:'使用原有资源学习',exact:true})).toBeEnabled();
  expect(JSON.stringify(requests.slice(2))).not.toMatch(/Private-A|Private-B/);
  await page.evaluate(()=>window.__sensaBrowserSmoke!.setSpeechFixtureForTest(false));
@@ -857,6 +901,22 @@ test('personal preparation pins explicit Context updates, preserves the active R
  await expect(page.locator('#s-lightweight-runtime').getByRole('button',{name:/查看表达/})).toHaveCount(0);
  expect((await facts(page)).learning).toEqual(finalLearning);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest())).toEqual(operated);
+ // Complete real UI actions before asserting that ordinary edits retain progress.
+ const runtime=page.locator('#s-lightweight-runtime');
+ const reveal=runtime.getByRole('button',{name:/查看表达/});if(await reveal.count())await reveal.click();
+ await runtime.getByRole('button',{name:/已经连上/}).click();
+ await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();
+ await runtime.getByRole('button',{name:'完成并回到首页',exact:true}).click();
+ const completed=(await facts(page)).learning;expect(completed.records.length).toBeGreaterThan(0);expect(completed.completedTargets.length).toBeGreaterThan(0);
+ const ratedPins=await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest());for(const pin of operated)expect(ratedPins).toContainEqual(pin);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.locator(`[data-world-meaning="${meaningId}"]`).click();
+ await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'修改意思和表达',exact:true}).click();
+ const correction=page.locator('.sensa-meaning-correction');await expect(correction.getByLabel('编辑方式',{exact:true})).toHaveValue('wording');await correction.getByLabel('这里表达的意思',{exact:true}).fill('为植物补充需要的水分。');await correction.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(correction).toHaveCount(0);
+ expect((await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id!),meaningId)).map(row=>row.senseId)).toEqual(sensePins.map(row=>row.senseId));
+ expect((await facts(page)).learning).toEqual(completed);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest())).toEqual(ratedPins);
+ await page.getByRole('button',{name:'编辑场景',exact:true}).click();await page.getByRole('textbox',{name:'场景',exact:true}).fill('Private-C: I water the balcony plants in the evening.');await page.getByRole('button',{name:'保存场景',exact:true}).click();
+ await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();expect((await facts(page)).learning).toEqual(completed);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.operatedStepMaterialsForTest())).toEqual(ratedPins);
+ await page.screenshot({path:test.info().outputPath('learned-wording-context-revision-preserves-progress.png'),fullPage:true});
 });
 
 test('field-specific correction recovers a rejected final object without creating duplicate meaning facts',async({page})=>{
@@ -976,8 +1036,8 @@ async function directDiscoveryJourney(page:Page,testInfo:TestInfo,size:number){
   await screen.getByRole('button',{name:'返回',exact:true}).click();const backUrl=page.url();
   await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseDirectEnrollmentResultForTest());
   await expect(page.locator('#s-learning-entry').getByRole('button',{name:'按表达查找',exact:true})).toBeVisible();expect(page.url()).toBe(backUrl);
-  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
-  await page.locator('#s-learning-library').getByRole('button',{name:new RegExp(expression)}).click();
+  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();
+  await page.locator('#s-study').getByRole('button',{name:new RegExp(expression)}).click();
  }
  await expect(page).toHaveURL(/enrollmentId=/);await expect(screen.getByRole('button',{name:'准备学习资源',exact:true})).toBeEnabled();
  const accepted=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(accepted.enrollments).toHaveLength(1);expect(accepted.enrollments[0]!.sourceKind).toBe('stable_sense');expect(accepted.targetIds).toEqual([]);expect(accepted.runtime).toBeNull();
@@ -985,20 +1045,20 @@ async function directDiscoveryJourney(page:Page,testInfo:TestInfo,size:number){
  await expect(screen.getByRole('button',{name:'重试 / 恢复准备',exact:true}).last()).toBeEnabled();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).enrollments).toEqual(accepted.enrollments);
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
- await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
- const library=page.locator('#s-learning-library');await library.getByRole('textbox',{name:'搜索单词或意思',exact:true}).fill('no-such-expression');await expect(library.getByRole('button',{name:new RegExp(expression)})).toHaveCount(0);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();
+ const library=page.locator('#s-study');await library.getByRole('searchbox',{name:'搜索表达或意思',exact:true}).fill('no-such-expression');await expect(library.getByRole('button',{name:new RegExp(expression)})).toHaveCount(0);
  if(size===250){
   await expect(library.getByText('没有符合条件的内容',{exact:true})).toBeVisible();
-  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(true));await expect(library.getByRole('alert')).toBeVisible();
+  await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.failLearningManagementReadsForTest(true);window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['learningTargets']}}));});await expect(library.getByRole('alert')).toBeVisible();
   await expect(library.getByText('没有符合条件的内容',{exact:true})).toHaveCount(0);
-  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await library.getByRole('button',{name:'重试',exact:true}).click();await expect(library.getByRole('alert')).toHaveCount(0);
+  await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningManagementReadsForTest(false));await library.getByRole('button',{name:'重试',exact:true}).click();await expect(library.getByRole('alert')).toHaveCount(0);
  }
- await library.getByRole('textbox',{name:'搜索单词或意思',exact:true}).fill(expression);await library.getByRole('button',{name:new RegExp(expression)}).click();await expect(screen.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+ await library.getByRole('searchbox',{name:'搜索表达或意思',exact:true}).fill(expression);await library.getByRole('button',{name:new RegExp(expression)}).click();await expect(screen.getByRole('heading',{name:expression,exact:true})).toBeVisible();
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath('direct-preparation-mobile.png'),fullPage:true});
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);expect(requests).toEqual([]);
 }
 test('direct discovery at 250 connections stays read-only until enrollment and recovers without a Personal Meaning',async({page},testInfo)=>directDiscoveryJourney(page,testInfo,250));
-test('direct discovery at 10000 connections stays read-only until enrollment and recovers without a Personal Meaning',async({page},testInfo)=>directDiscoveryJourney(page,testInfo,10_000));
+test('direct discovery at 10000 connections stays read-only until enrollment and recovers without a Personal Meaning',{tag:'@capacity'},async({page},testInfo)=>directDiscoveryJourney(page,testInfo,10_000));
 
 test('explicit batch confirmation saves all intentions and failed preparation retries without duplicate enrollments',async({page})=>{
  requests=[];plans=[];
@@ -1040,7 +1100,79 @@ test('explicit batch confirmation saves all intentions and failed preparation re
  expect(requests).toEqual([]);
 });
 
-test.describe('prepared 10k World',()=>{
+const graphCapacitySize=Number(process.env.SENSA_GRAPH_CAPACITY_SIZE??1000);
+if(!Number.isSafeInteger(graphCapacitySize)||graphCapacitySize<1||graphCapacitySize>10000)throw Error('Graph capacity size must be 1..10000');
+test.describe('isolated graph capacity',{tag:'@capacity'},()=>{
+ test.use({meaningSetup:{size:graphCapacitySize,world:true}});
+ test('capacity graph exploration reports actual open, selection, zoom and return without learning writes',async({preparedMeaningPage:{page}},testInfo)=>{
+  test.setTimeout(90_000);
+  await page.evaluate(()=>{(window as any).__graphLongTasks=[];new PerformanceObserver(list=>(window as any).__graphLongTasks.push(...list.getEntries().map(e=>({startTime:e.startTime,duration:e.duration})))).observe({type:'longtask',buffered:true});});
+  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+  const world=page.locator('.sensa-world.active').last();await expect(world.locator('.sensa-world-row').first()).toBeVisible();
+  const learningBefore=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+  const rawLearningBefore=await page.evaluate(()=>window.__sensaBrowserSmoke!.rawLearningFactsForTest());
+  const actualMeanings=await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest());expect(actualMeanings).toBe(graphCapacitySize);
+  const started=await page.evaluate(()=>performance.now());
+  await world.locator('[data-world-view]').nth(1).click();
+  const graph=world.getByRole('region',{name:'词义图谱',exact:true}),points=graph.locator('[data-graph-current="true"] [data-expression-id]');
+  await expect(graph.locator('[data-graph-current="true"] [data-graph-node-count]')).toHaveAttribute('data-graph-node-count',String(graphCapacitySize),{timeout:30_000});await expect(graph.locator('[data-graph-current="true"] [data-graph-ready="true"]')).toBeVisible();
+  await expect(graph.locator('[data-graph-current="true"] [data-graph-edge-count]')).toHaveAttribute('data-graph-edge-count','0');
+  const mountedKeyboardNodes=await points.count();expect(mountedKeyboardNodes).toBeLessThanOrEqual(160);
+  await expect(points.first()).toHaveAttribute('data-graph-position',/.+/);
+  const openMs=await page.evaluate(start=>performance.now()-start,started);
+  const stages=await page.evaluate(start=>performance.getEntriesByType('measure').filter(entry=>entry.startTime>=start&&/^sensa\.(graph|journey)\./.test(entry.name)).map(entry=>({name:entry.name,startMs:entry.startTime-start,durationMs:entry.duration})),started);
+  const selected=await page.evaluate(()=>performance.now());
+  const surface=await graph.locator('[data-graph-current="true"] [data-cy-surface]').boundingBox();expect(surface).not.toBeNull();
+  const firstPosition=JSON.parse((await points.first().getAttribute('data-graph-position'))!);
+  await page.mouse.move(surface!.x+firstPosition.x,surface!.y+firstPosition.y);await expect(graph.locator('[data-graph-preview]')).toBeVisible();
+  await page.mouse.click(surface!.x+firstPosition.x,surface!.y+firstPosition.y);
+  await expect(graph.getByRole('complementary',{name:'表达预览',exact:true})).toBeVisible();
+  await expect(graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('button',{name:'查看详情',exact:true})).toBeEnabled();
+  await expect(graph.getByRole('complementary',{name:'表达预览',exact:true})).toContainText('Private source: May asked to borrow an umbrella.');
+  const selectionMs=await page.evaluate(start=>performance.now()-start,selected);
+  await graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('button',{name:'关闭',exact:true}).click();
+  await points.first().press('End');await expect(points.last()).toBeFocused();await points.last().press('Enter');await expect(graph.getByRole('complementary',{name:'表达预览',exact:true})).toBeVisible();
+  const lastNodeId=await points.last().getAttribute('data-expression-id'),beforeDetailCamera=await graph.locator('[data-graph-current="true"] [data-graph-camera]').getAttribute('data-graph-camera');
+  await graph.locator('[data-graph-current="true"] [data-cy-surface]').evaluate(surface=>{const cy=(surface as any)._cyreg.cy;(window as any).__retainedGraph={cy,renderer:cy.renderer()};});
+  const detailReturnStart=await page.evaluate(()=>performance.now());
+  await graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('button',{name:'查看详情',exact:true}).click();await expect(page.locator('#s-personal-meaning')).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>{const {cy,renderer}=(window as any).__retainedGraph;return !cy.destroyed()&&cy.renderer()===renderer&&!cy.userPanningEnabled()&&!cy.userZoomingEnabled()&&!!cy.container()?.closest('[inert]');})).toBe(true);
+  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+  const hiddenWidth=await page.evaluate(()=>(window as any).__retainedGraph.cy.container().getBoundingClientRect().width);expect(hiddenWidth).toBeGreaterThan(0);expect(hiddenWidth).toBeLessThanOrEqual(390);
+  await page.setViewportSize({width:1280,height:900});await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));await page.goBack();
+  await expect(graph.locator(`[data-graph-current="true"] [data-expression-id="${lastNodeId}"]`)).toHaveAttribute('aria-pressed','true');await expect(graph.locator('[data-graph-current="true"] [data-graph-camera]')).toHaveAttribute('data-graph-camera',beforeDetailCamera!);
+  expect(await graph.locator('[data-graph-current="true"] [data-cy-surface]').evaluate(surface=>{const saved=(window as any).__retainedGraph,cy=(surface as any)._cyreg.cy;return cy===saved.cy&&cy.renderer()===saved.renderer&&cy.userPanningEnabled()&&cy.userZoomingEnabled();})).toBe(true);
+  const detailRoundTripMs=await page.evaluate(start=>performance.now()-start,detailReturnStart);
+  await testInfo.attach('graph-interactive.png',{body:await page.screenshot(),contentType:'image/png'});
+  const canvas=graph.locator('[data-graph-current="true"] [data-graph-camera]'),camera=await canvas.getAttribute('data-graph-camera');
+  const zoomStarted=await page.evaluate(()=>performance.now());await graph.getByRole('button',{name:'放大',exact:true}).click();await expect(canvas).not.toHaveAttribute('data-graph-camera',camera!);
+  const zoomMs=await page.evaluate(start=>performance.now()-start,zoomStarted);
+  await graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('button',{name:'关闭',exact:true}).click();
+  const lastExpression=[...scaleFixture!.registry.expressionVersions].sort((a,b)=>a.surfaceForm.localeCompare(b.surfaceForm)||a.expressionId.localeCompare(b.expressionId)).at(-1)!;
+  const menu=graph.locator('.sensa-graph-browse');await menu.locator('summary').click();
+  await expect(menu.locator('[role="listitem"]').first()).toBeVisible();
+  await expect.poll(()=>menu.locator('.sensa-graph-menu').evaluate(element=>element.scrollHeight>element.clientHeight||element.scrollHeight>0)).toBe(true);
+  await menu.locator('.sensa-graph-menu').evaluate(element=>{element.scrollTop=element.scrollHeight;});
+  await expect(menu.getByText(lastExpression.surfaceForm,{exact:true})).toBeVisible();expect(await menu.locator('button').count()).toBeLessThan(80);
+  await menu.getByText(lastExpression.surfaceForm,{exact:true}).click();await expect(graph.getByRole('complementary',{name:'表达预览',exact:true})).toContainText(lastExpression.surfaceForm);
+  const returnStarted=await page.evaluate(()=>performance.now());await world.getByRole('button',{name:'列表',exact:true}).click();await expect(world.locator('.sensa-world-row').first()).toBeVisible();
+  const returnMs=await page.evaluate(start=>performance.now()-start,returnStarted);expect(await world.locator('.sensa-world-row').count()).toBeLessThan(80);
+  await expect.poll(()=>page.evaluate(()=>(window as any).__retainedGraph.cy.destroyed())).toBe(true);await page.evaluate(()=>{delete (window as any).__retainedGraph;});
+  await world.getByRole('button',{name:'语义世界',exact:true}).click();await expect(graph.locator('[data-graph-current="true"] [data-graph-ready="true"]')).toBeVisible();
+  await graph.locator('[data-graph-current="true"] [data-cy-surface]').evaluate(surface=>{(window as any).__leavingWorldCore=(surface as any)._cyreg.cy;});
+  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'今日',exact:true}).click();await expect(page.locator('#s-home')).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__leavingWorldCore.destroyed())).toBe(true);await page.evaluate(()=>{delete (window as any).__leavingWorldCore;});
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(0);
+  const learningAfter=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(learningAfter).toEqual(learningBefore);expect(learningAfter.targetIds).toHaveLength(0);
+  const rawLearningAfter=await page.evaluate(()=>window.__sensaBrowserSmoke!.rawLearningFactsForTest());expect(rawLearningAfter).toEqual(rawLearningBefore);
+  const measurement={meanings:actualMeanings,constructedContextHeads:scaleFixture!.contexts.anchors.length,constructedSenseIdentities:scaleFixture!.registry.senses.length,graphExpressionNodes:graphCapacitySize,mountedKeyboardNodes,detailRoundTripMs,selectedProxyRestored:true,fullMenuLastNodeReachable:true,fixtureSha256:createHash('sha256').update(JSON.stringify(scaleFixture)).digest('hex'),browserVersion:page.context().browser()?.version(),learningTargets:learningAfter.targetIds.length,completeLearningCheckpointUnchanged:true,rawLearningFactsUnchanged:true,rawLearningAfter,stages,edgeShape:'distinct isolated accepted Sense/Expression nodes, no shared memberships; 85-Meaning polysemy/linked graph functional case remains separate',openMs,selectionMs,zoomMs,returnMs,provisionalGoals:{openMs:2000,selectionMs:500,zoomMs:200,returnMs:500},longTasks:await page.evaluate(start=>(window as any).__graphLongTasks.filter((task:any)=>task.startTime>=start),started),scope:'production UI+Chromium+OPFS, 1x CPU, loopback, cold graph after warm list; driver-observed canvas render followed by animation frame, real canvas hover/click and keyboard End selection; synthetic semantic nodes, not human use, dense graph, formal Targets or cold OS cache'};
+  console.log('GRAPH_CAPACITY',JSON.stringify(measurement));
+  await testInfo.attach('graph-capacity.json',{body:JSON.stringify(measurement,null,2),contentType:'application/json'});
+  if(openMs>2000||selectionMs>500||zoomMs>200||returnMs>500)console.warn('PERFORMANCE_WARNING: provisional graph experience target exceeded; functional assertions do not establish performance pass');
+ });
+});
+
+test.describe('prepared 10k World',{tag:'@capacity'},()=>{
 test.use({meaningSetup:{size:10_000,world:true}});
 test('10k personal meanings keep the shipped World bounded and searchable, with real detail and refresh recovery',async({preparedMeaningPage:{page}})=>{
  test.setTimeout(180_000);
@@ -1130,10 +1262,10 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  await search.fill('');
  await world.getByRole('button',{name:'清空选择',exact:true}).click();
  await world.getByRole('button',{name:'完成选择',exact:true}).click();
- const searchStart=await page.evaluate(()=>performance.now());await search.fill('ＢＯＲＲＯＷ-９９９９');
+ const {searchMs,driverMs:searchDriverMs}=await searchToWorldRowReady(page,search,'ＢＯＲＲＯＷ-９９９９','borrow-9999');
  const row=world.getByRole('button',{name:/^borrow-9999(?:\s|$)/u});
  await expect(row).toBeVisible();
- const searchMs=await page.evaluate(start=>performance.now()-start,searchStart);
+
  // Readable, stable detail and an enabled editing action are measured inside
  // the browser, independently of the driver's assertion polling schedule.
  const profiler=process.env.SENSA_UI_PROFILE?await page.context().newCDPSession(page):null;
@@ -1155,7 +1287,7 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
  await expect(context).toHaveCount(0);
  const saveMs=await page.evaluate(start=>performance.now()-start,saveStart);
- console.log('Shipped World / 10k synthetic / UI actions / no model:',JSON.stringify({searchMs,detailMs,saveMs}));
+ console.log('Shipped World / 10k synthetic / UI actions / no model:',JSON.stringify({searchMs,searchDriverMs,detailMs,saveMs}));
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa.practice.materials.v4:en')!))).toEqual(preference);
  await page.reload();await expect(page.getByRole('heading',{name:'borrow-9999',exact:true})).toBeVisible({timeout:30_000});
  await expect(page.getByRole('article',{name:'表达详情'}).getByText('验收修改：借用同伴的雨伞，用完后归还。',{exact:true})).toBeVisible();
@@ -1210,4 +1342,417 @@ test('10k personal meanings keep the shipped World bounded and searchable, with 
  await page.reload();await expect(page.getByRole('heading',{name:'water',exact:true})).toBeVisible();
  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).targetIds).toEqual([]);
 });
+});
+
+test('World route learning read failure and cold reload remain unknown until explicit retry confirms membership',async({page},testInfo)=>{
+ requests=[];plans=[];
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');scaleFixture=await expressionWorldFixture();
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const navigation=page.getByRole('navigation',{name:'主要导航'});await navigation.getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ await expect.poll(()=>page.evaluate(async()=>!!(await window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest()).identity)).toBe(true);
+ await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()));
+ await navigation.getByRole('button',{name:'我的语义世界',exact:true}).click();
+ const world=page.locator('.sensa-world.active').last();await world.getByRole('button',{name:'语义世界',exact:true}).click();
+ const graph=world.getByRole('region',{name:'词义图谱',exact:true}),point=graph.locator(`[data-graph-current="true"] [data-expression-id="${scaleFixture.registry.expressions[0]!.expressionId}"]`);
+ await point.focus();await point.press('Enter');const detail=graph.getByRole('complementary',{name:'表达预览',exact:true});
+ await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();
+ const facts=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(true));
+ await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
+ await detail.getByRole('button',{name:'重试',exact:true}).click();await expect(detail.getByRole('alert')).toBeVisible();
+ await page.screenshot({path:testInfo.outputPath('graph-route-read-unavailable.png')});
+ await page.evaluate(async()=>{await window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false);await window.__sensaBrowserSmoke!.holdLearningWorkspaceReadsForTest();});
+ await detail.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(detail.getByRole('status')).toContainText('正在读取');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
+ // Retire the held successful read, then create a failure in the new view.
+ await navigation.getByRole('button',{name:'我的学习',exact:true}).click();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(true));
+ await navigation.getByRole('button',{name:'我的语义世界',exact:true}).click();await world.getByRole('button',{name:'语义世界',exact:true}).click();
+ await point.focus();await point.press('Enter');await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');
+ await page.evaluate(async()=>{window.__sensaBrowserSmoke!.releaseLearningWorkspaceReadsForTest();await window.__sensaBrowserSmoke!.provisioningCheckpoint();await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));});
+ await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
+ await world.getByRole('button',{name:'列表',exact:true}).click();await expect(world.getByRole('status').filter({hasText:'无法读取学习准备状态'})).toBeVisible();
+ await world.getByRole('button',{name:'语义世界',exact:true}).click();await point.focus();await point.press('Enter');
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await detail.getByRole('button',{name:'重试',exact:true}).click();await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();
+ await world.getByRole('button',{name:'列表',exact:true}).click();await expect(world.getByText('无法读取学习准备状态，请重试。',{exact:true})).toHaveCount(0);
+ await page.screenshot({path:testInfo.outputPath('world-list-after-read-recovery.png')});
+ await world.getByRole('button',{name:'语义世界',exact:true}).click();await point.focus();await point.press('Enter');
+ await page.addInitScript(()=>{const timer=setInterval(()=>{if(!window.__sensaBrowserSmoke)return;clearInterval(timer);void window.__sensaBrowserSmoke.failLearningWorkspaceReadsForTest(true);},1);});
+ await page.reload();await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');await expect(detail.getByText('尚未加入此路线',{exact:true})).toHaveCount(0);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await detail.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(detail.getByText('尚未加入此路线',{exact:true})).toBeVisible();
+ await world.getByRole('button',{name:'列表',exact:true}).click();await expect(world.getByText('无法读取学习准备状态，请重试。',{exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(facts);expect(requests).toEqual([]);
+});
+
+test('World read recovery removes only its read error and preserves a failed preparation operation notice',async({page},testInfo)=>{
+ requests=[];plans=[];
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');scaleFixture=await expressionWorldFixture();
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ const navigation=page.getByRole('navigation',{name:'主要导航'});await navigation.getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ await expect.poll(()=>page.evaluate(async()=>!!(await window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest()).identity)).toBe(true);
+ await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()));
+ const world=page.locator('.sensa-world.active').last();await world.getByRole('button',{name:'语义世界',exact:true}).click();
+ const graph=world.getByRole('region',{name:'词义图谱',exact:true}),point=graph.locator(`[data-graph-current="true"] [data-expression-id="${scaleFixture.registry.expressions[0]!.expressionId}"]`);
+ await point.focus();await point.press('Enter');const detail=graph.getByRole('complementary',{name:'表达预览',exact:true});
+ await detail.getByRole('button',{name:'查看详情',exact:true}).click();
+ const preparation=page.getByRole('region',{name:'个人内容学习准备',exact:true}).filter({has:page.getByRole('heading',{name:/^borrow ·/u})});
+ await preparation.getByRole('button',{name:'加入学习',exact:true}).click();
+ await expect(preparation.getByRole('status')).toContainText('请先登录 Sensa 在线服务');
+ const operationNotice=(await preparation.getByRole('status').innerText()).trim();
+ const saved=await page.evaluate(async()=>({learning:await window.__sensaBrowserSmoke!.learningCheckpoint(),provisioning:await window.__sensaBrowserSmoke!.provisioningCheckpoint()}));
+ expect(saved.provisioning).toHaveLength(1);expect(saved.provisioning[0]!.status).toBe('failed');expect(saved.learning.records).toEqual([]);expect(saved.learning.runtime).toBeNull();
+ await page.goBack();await expect(detail).toBeVisible();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(true));await expect(detail.getByRole('alert')).toContainText('无法读取学习准备状态');
+ await world.getByRole('button',{name:'列表',exact:true}).click();
+ const notice=world.getByRole('status').filter({hasText:operationNotice});await expect(notice).toContainText('无法读取学习准备状态');
+ await world.getByRole('button',{name:'语义世界',exact:true}).click();await point.focus();await point.press('Enter');
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failLearningWorkspaceReadsForTest(false));await detail.getByRole('button',{name:'重试',exact:true}).click();await expect(detail.getByRole('alert')).toHaveCount(0);
+ await world.getByRole('button',{name:'列表',exact:true}).click();await expect(notice).toHaveText(operationNotice);await expect(world.getByText('无法读取学习准备状态，请重试。',{exact:true})).toHaveCount(0);
+ await page.screenshot({path:testInfo.outputPath('world-list-preserved-operation-notice.png')});
+ expect(await page.evaluate(async()=>({learning:await window.__sensaBrowserSmoke!.learningCheckpoint(),provisioning:await window.__sensaBrowserSmoke!.provisioningCheckpoint()}))).toEqual(saved);
+ expect(requests,'unavailable account must not call a real or paid model').toEqual([]);
+});
+
+test('World expression languages combine with search, saved meanings and notes while point details preserve camera and exact identities',async({page},testInfo)=>{
+ requests=[];plans=[];
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');
+ scaleFixture=await expressionWorldFixture(80);
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ await expect.poll(()=>page.evaluate(async()=>!!(await window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest()).identity)).toBe(true);
+ expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(85);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ const world=page.locator('.sensa-world.active').last(),counts=world.locator('[data-world-counts]'),languages=world.getByRole('group',{name:'表达语言',exact:true}),search=world.getByRole('textbox',{name:'搜索场景、意思或表达',exact:true});
+ await expect(counts).toHaveText('86 个表达 · 85 个去重意义');
+ await expect(languages.getByRole('button',{name:'全部语言',exact:true})).toHaveAttribute('aria-pressed','true');
+ await languages.getByRole('button',{name:'fr',exact:true}).click();await expect(counts).toHaveText('1 个表达 · 1 个去重意义');
+ await expect(world.locator('[data-world-meaning]')).toHaveCount(1);await expect(world.locator('[data-matching-expressions]')).toHaveText('法语');
+ await world.getByText('此意义的其他语言表达',{exact:true}).click();await expect(world.getByText('take on loan · en',{exact:true})).toBeVisible();
+ await world.getByRole('button',{name:'批量选择',exact:true}).click();await expect(world.getByText('当前筛选中，没有可加入 en 学习路线的表达。',{exact:true})).toBeVisible();await expect(world.getByRole('button',{name:'全选当前结果',exact:true})).toBeDisabled();await world.getByRole('button',{name:'完成选择',exact:true}).click();
+ await search.fill('Private source');await expect(counts).toHaveText('1 个表达 · 1 个去重意义');
+ await search.fill('no such expression fixture');await expect(counts).toHaveText('0 个表达 · 0 个去重意义');await expect(world.getByText('没有匹配的内容',{exact:true})).toBeVisible();
+ await search.fill('');await languages.getByRole('button',{name:'en',exact:true}).click();await expect(counts).toHaveText('86 个表达 · 85 个去重意义');
+ await world.getByRole('button',{name:'语义世界',exact:true}).click();
+ const graph=world.getByRole('region',{name:'词义图谱',exact:true}),points=graph.locator('[data-graph-current="true"] [data-expression-id]');
+ await expect(points).toHaveCount(86);
+ await graph.getByRole('button',{name:'显示全部',exact:true}).click();
+ // Hold renderer frames across A -> B -> A while permitting React and reads.
+ // The returning topology must wait for its new Core, not A's old ready flag.
+ await world.locator('.sensa-world-filters > summary').click();
+ await graph.locator('[data-graph-current="true"] [data-cy-surface]').evaluate(surface=>{const original=requestAnimationFrame,held:FrameRequestCallback[]=[];(window as any).__graphFrames={original,held,first:(surface as any)._cyreg.cy};window.requestAnimationFrame=callback=>original.call(window,at=>held.push(callback));});
+ try{
+  await languages.getByRole('button',{name:'en',exact:true}).evaluate(button=>(button as HTMLButtonElement).click());
+  await expect.poll(()=>graph.locator('[data-graph-current="true"] [data-cy-surface]').evaluate(surface=>{const cy=(surface as any)._cyreg.cy;return cy!==(window as any).__graphFrames.first&&cy.nodes().length===1;})).toBe(true);
+  expect(await graph.locator('[data-graph-current="true"] [data-graph-camera]').evaluate(element=>element.hasAttribute('inert')&&getComputedStyle(element).visibility==='hidden'&&!element.hasAttribute('data-graph-ready'))).toBe(true);
+  await languages.getByRole('button',{name:'en',exact:true}).evaluate(button=>(button as HTMLButtonElement).click());
+  await expect.poll(()=>graph.locator('[data-graph-current="true"] [data-cy-surface]').evaluate(surface=>{const cy=(surface as any)._cyreg.cy;return cy!==(window as any).__graphFrames.first&&cy.nodes().length===86;})).toBe(true);
+  expect(await graph.locator('[data-graph-current="true"] [data-graph-camera]').evaluate(element=>element.hasAttribute('inert')&&getComputedStyle(element).visibility==='hidden'&&!element.hasAttribute('data-graph-ready'))).toBe(true);
+ }finally{await page.evaluate(()=>{const frames=(window as any).__graphFrames;window.requestAnimationFrame=frames.original;for(const callback of frames.held)frames.original.call(window,callback);delete (window as any).__graphFrames;});}
+ await expect(graph.locator('[data-graph-current="true"] [data-graph-ready="true"]')).toBeVisible();
+ await world.locator('.sensa-world-filters > summary').click();
+ await page.screenshot({path:testInfo.outputPath('expression-graph-86-records.png'),animations:'disabled'});
+ const polysemous=graph.locator(`[data-graph-current="true"] [data-expression-id="${scaleFixture.registry.expressions[0]!.expressionId}"]`);await polysemous.focus();await polysemous.press('Enter');
+ await expect(graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('combobox',{name:'已确认意思',exact:true}).locator('option')).toHaveCount(2);
+ const polyPreview=graph.getByRole('complementary',{name:'表达预览',exact:true}),interpretation=polyPreview.getByRole('combobox',{name:'已确认意思',exact:true});await interpretation.selectOption({index:1});const selectedInterpretation=await interpretation.inputValue();
+ await expect(polyPreview).toContainText('临时借用编号2的物品。');await expect(polysemous).toHaveAccessibleName('borrow · en · 临时借用编号2的物品。');
+ await interpretation.selectOption({index:0});await expect(polyPreview).toContainText('临时取得他人物品，并预期归还。');await expect(polysemous).toHaveAccessibleName('borrow · en · 临时取得他人物品，并预期归还。');
+ await interpretation.selectOption({index:1});
+ await polyPreview.getByRole('button',{name:'查看详情',exact:true}).click();await expect(page.locator('#s-personal-meaning').getByRole('heading',{name:'borrow',exact:true})).toBeVisible();await page.goBack();await expect(interpretation).toHaveValue(selectedInterpretation);
+ await expect(polyPreview).toContainText('临时借用编号2的物品。');await expect(polysemous).toHaveAccessibleName('borrow · en · 临时借用编号2的物品。');
+ expect(await graph.locator('[data-graph-current="true"] [data-graph-edge]').count()).toBe(2);
+ await page.screenshot({path:testInfo.outputPath('expression-graph-polysemy-and-real-links.png'),animations:'disabled'});
+ await graph.getByRole('complementary',{name:'表达预览',exact:true}).getByRole('button',{name:'关闭',exact:true}).click();
+ const borrow=scaleFixture.registry.expressionVersions.filter(version=>version.surfaceForm==='borrow');
+ expect(new Set(borrow.map(version=>version.expressionId)).size).toBe(3);
+ await world.locator('.sensa-world-filters > summary').click();
+ for(const version of borrow)await expect(graph.locator(`[data-graph-current="true"] [data-expression-id="${version.expressionId}"]`)).toHaveCount(1);
+ await languages.getByRole('button',{name:'en',exact:true}).click();await expect(points).toHaveCount(1);
+ await world.locator('.sensa-world-filters > summary').click();
+ await graph.getByRole('button',{name:'显示全部',exact:true}).click();
+ const frId=scaleFixture.registry.expressions.find(expression=>expression.languageTag==='fr')!.expressionId,point=graph.locator(`[data-graph-current="true"] [data-expression-id="${frId}"]`);
+ await point.focus();await expect(graph.locator('[data-graph-preview]')).toContainText('emprunter');await point.press('Enter');
+ const detail=graph.getByRole('complementary',{name:'表达预览',exact:true});await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
+ await expect(detail).toContainText('当前视图中没有连线');await expect(detail).toContainText('当前学习路线');await expect(detail).toContainText('尚未加入此路线');
+ await detail.getByText('原始来源',{exact:true}).click();await detail.getByText('fixture · 隔离原文来源',{exact:true}).click();await expect(detail.getByRole('link',{name:'查看来源：',exact:true})).toHaveAttribute('href','https://example.test/original');
+ const canvas=graph.locator('[data-graph-current="true"] [data-graph-camera]');await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox();expect(box).not.toBeNull();
+ const beforePan=JSON.parse((await canvas.getAttribute('data-graph-camera'))!);await page.mouse.move(box!.x+box!.width-25,box!.y+box!.height-35);await page.mouse.down();await page.mouse.move(box!.x+box!.width-55,box!.y+box!.height-55,{steps:8});await page.mouse.up();
+ await expect.poll(async()=>JSON.parse((await canvas.getAttribute('data-graph-camera'))!).x).not.toBe(beforePan.x);
+ await graph.getByRole('button',{name:'放大',exact:true}).click();const camera=await graph.locator('[data-graph-current="true"] [data-graph-camera]').getAttribute('data-graph-camera');
+ await page.screenshot({path:testInfo.outputPath('expression-graph-desktop-fr-preview.png'),animations:'disabled'});
+ await detail.getByRole('button',{name:'查看详情',exact:true}).click();
+ const meaning=page.locator('#s-personal-meaning');await expect(meaning).toBeVisible();
+ const more=meaning.getByRole('button',{name:'更多',exact:true});await more.click();let menu=page.getByRole('dialog',{name:'更多',exact:true});await menu.getByRole('button',{name:'收藏',exact:true}).click();
+ await more.click();menu=page.getByRole('dialog',{name:'更多',exact:true});await menu.getByRole('button',{name:'写笔记',exact:true}).click();
+ const note=page.locator('.sensa-note-editor');await note.locator('textarea').fill('隔离的图谱详情笔记');
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failNextSenseNoteCommitForTest());await note.getByRole('button',{name:'保存笔记',exact:true}).click();
+ await expect(note.getByRole('alert')).toBeVisible();await expect(note.locator('textarea')).toHaveValue('隔离的图谱详情笔记');
+ await note.getByRole('button',{name:'保存笔记',exact:true}).click();await expect(note).toHaveCount(0);
+ await page.goBack();await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
+ await expect(graph.locator('[data-graph-current="true"] [data-graph-camera]')).toHaveAttribute('data-graph-camera',camera!);await expect(world.locator('.sensa-world-filters > summary')).toContainText('法语');
+ const changeSkin=async(skin:'Clear'|'Quiet')=>{await page.getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#settings-preferences').click();await page.getByRole('radio',{name:new RegExp(`^Sensa ${skin}(?:\\s|$)`,'u')}).click();await expect(page.locator('html')).toHaveAttribute('data-sensa-skin',skin.toLowerCase());await page.goBack();};
+ await changeSkin('Clear');await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
+ expect(await graph.locator('.sensa-expression-graph-workspace').evaluate(element=>getComputedStyle(element).display)).toBe('flex');
+ expect((await canvas.boundingBox())!.height).toBeGreaterThanOrEqual(400);const clearCanvas=await canvas.boundingBox(),clearDetail=await detail.boundingBox();expect(clearDetail!.x).toBeGreaterThan(clearCanvas!.x);expect(Math.abs(clearDetail!.y-clearCanvas!.y)).toBeLessThanOrEqual(2);
+ await page.screenshot({path:testInfo.outputPath('expression-graph-clear-preview.png'),animations:'disabled'});
+ await changeSkin('Quiet');await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
+ await detail.getByRole('button',{name:'关闭',exact:true}).click();await expect(point).toBeFocused();
+ await world.locator('.sensa-world-filters > summary').click();const markers=world.getByRole('combobox',{name:'收藏与笔记',exact:true});await markers.selectOption('saved');await expect(points).toHaveCount(1);await markers.selectOption('notes');await expect(points).toHaveCount(1);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failAnnotationReadsForTest(true));await expect(world.getByRole('alert')).toContainText('读取');await expect(world.locator('[data-world-counts]')).toHaveCount(0);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.failAnnotationReadsForTest(false));await world.getByRole('button',{name:'重试',exact:true}).click();await expect(points).toHaveCount(1);
+ await page.reload();await expect(points).toHaveCount(1);await world.locator('.sensa-world-filters > summary').click();await expect(markers).toHaveValue('notes');await expect(languages.getByRole('button',{name:'fr',exact:true})).toHaveAttribute('aria-pressed','true');
+ await world.getByRole('button',{name:'列表',exact:true}).click();await expect(counts).toHaveText('1 个表达 · 1 个去重意义');
+ await markers.selectOption('all');await languages.getByRole('button',{name:'全部语言',exact:true}).click();await expect(counts).toHaveText('86 个表达 · 85 个去重意义');
+ await world.getByRole('button',{name:/^收件箱/u}).click();await expect(page.getByRole('dialog')).toContainText('尚待绑定的隔离材料');await page.getByRole('dialog').getByRole('button',{name:'关闭',exact:true}).click();
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(0);expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.provisioningCheckpoint()))).toHaveLength(0);
+ expect(requests).toHaveLength(0);
+});
+
+test.describe('World touch preview',()=>{
+ test.use({hasTouch:true,viewport:{width:320,height:740}});
+ test('expression points open a readable drawer by touch and keyboard without automatic navigation or learning',async({page},testInfo)=>{
+  requests=[];plans=[];
+  const {expressionWorldFixture}=await import('../support/expressionWorldFixture');scaleFixture=await expressionWorldFixture();
+  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+  await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+  await expect.poll(()=>page.evaluate(async()=>!!(await window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest()).identity)).toBe(true);
+  await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()));
+  await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+  const world=page.locator('.sensa-world.active').last(),languages=world.getByRole('group',{name:'表达语言',exact:true});await world.getByText('筛选',{exact:true}).click();await languages.getByRole('button',{name:'fr',exact:true}).click();await world.getByRole('button',{name:'语义世界',exact:true}).click();
+  const graph=world.getByRole('region',{name:'词义图谱',exact:true});
+  const surfaceBefore=graph.locator('[data-graph-current="true"] [data-cy-surface]'),gestureBounds=await surfaceBefore.boundingBox();
+  const cyBefore=graph.locator('[data-graph-current="true"] [data-graph-camera]'),zoomBefore=JSON.parse((await cyBefore.getAttribute('data-graph-camera'))!).zoom;
+  const cdp=await page.context().newCDPSession(page),cx=gestureBounds!.x+gestureBounds!.width/2,cy=gestureBounds!.y+gestureBounds!.height/2;
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:cx-30,y:cy,id:0},{x:cx+30,y:cy,id:1}]});
+  for(const spread of [40,50,65])await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:cx-spread,y:cy,id:0},{x:cx+spread,y:cy,id:1}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await expect.poll(async()=>JSON.parse((await cyBefore.getAttribute('data-graph-camera'))!).zoom).toBeGreaterThan(zoomBefore);await cdp.detach();
+  await graph.getByRole('button',{name:'显示全部',exact:true}).click();
+  const point=graph.locator('[data-graph-current="true"] [data-expression-id]');await expect(point).toHaveCount(1);const location=new URL(page.url()).pathname;
+  const surface=graph.locator('[data-graph-current="true"] [data-cy-surface]'),bounds=await surface.boundingBox(),position=JSON.parse((await point.getAttribute('data-graph-position'))!);
+  await page.touchscreen.tap(bounds!.x+position.x,bounds!.y+position.y);
+  const drawer=page.getByRole('dialog',{name:/^表达预览(?:\s|$)/u});await expect(drawer.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();expect(new URL(page.url()).pathname).toBe(location);
+  expect(await drawer.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);await expect(drawer.getByRole('button',{name:'查看详情',exact:true})).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath('expression-graph-320px-touch-drawer.png'),animations:'disabled'});
+  await page.keyboard.press('Escape');await expect(drawer).toHaveCount(0);await expect(point).toBeFocused();await point.press('Enter');await expect(drawer).toBeVisible();
+  await drawer.getByRole('button',{name:'查看详情',exact:true}).click();await expect(page.locator('#s-personal-meaning')).toBeVisible();await page.goBack();await expect(drawer.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();
+  await drawer.getByRole('button',{name:'关闭',exact:true}).first().click();await page.reload();await expect(graph.locator('[data-graph-current="true"] [data-expression-id]')).toHaveCount(1);await expect(world.locator('.sensa-world-filters > summary')).toContainText('法语');await world.locator('.sensa-world-filters > summary').click();await expect(languages.getByRole('button',{name:'fr',exact:true})).toHaveAttribute('aria-pressed','true');
+  expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(0);expect(requests).toHaveLength(0);
+ });
+});
+
+const localizedWorldSurface=(locale:string)=>async({page}:{page:Page},testInfo:TestInfo)=>{
+ requests=[];plans=[];const {expressionWorldFixture}=await import('../support/expressionWorldFixture');scaleFixture=await expressionWorldFixture(80);
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ await expect.poll(()=>page.evaluate(async()=>!!(await window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest()).identity)).toBe(true);
+ expect(await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()))).toBe(85);
+ await page.evaluate(value=>localStorage.setItem('sensa:interface-language:v1',value),locale);await page.reload();
+ const content=JSON.parse(await readFile(`apps/web/src/i18n/locales/${locale}/content.json`,'utf8')).content;
+ const world=page.locator('.sensa-world.active').last();await expect(world.locator('[data-world-counts]')).toContainText(new Intl.NumberFormat(locale).format(86));await expect(world.locator('[data-world-meaning]').first()).toBeVisible();
+ const shot=async(name:string,width:number)=>{await page.setViewportSize({width,height:width<768?844:900});await world.evaluate(element=>element.scrollTo(0,0));expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:testInfo.outputPath(`${locale}-world-${name}-${width}.png`),animations:'disabled'});};
+ await shot('list',1280);await shot('list',320);await shot('list',390);
+ await world.getByRole('button',{name:content.world,exact:true}).click();const graph=world.getByRole('region',{name:content.graph.title,exact:true});await expect(graph.locator('[data-graph-current="true"] [data-expression-id]')).toHaveCount(86);await world.evaluate(element=>element.scrollTo(0,0));
+ await expect.poll(()=>graph.locator('[data-graph-current="true"] [data-graph-position]').evaluateAll(points=>{const canvas=points[0]?.closest('[data-graph-camera]')?.getBoundingClientRect();return points.filter(point=>{const p=JSON.parse(point.getAttribute('data-graph-position')!);return canvas&&p.x>0&&p.x<canvas.width&&p.y>0&&p.y<canvas.height;}).length;})).toBeGreaterThan(0);
+ await shot('graph',390);await shot('graph',320);await shot('graph',1280);
+ if(locale==='zh-CN'){
+  const appearance=async(skin:'Clear'|'Quiet',mode:'浅色'|'深色')=>{
+   await page.getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#settings-preferences').click();
+   await page.getByRole('radio',{name:new RegExp(`^Sensa ${skin}(?:\\s|$)`,'u')}).click();await page.getByRole('radio',{name:mode,exact:true}).click();await page.goBack();
+   await expect(graph).toBeVisible();
+  };
+  await appearance('Clear','浅色');await shot('graph-clear',1280);await shot('graph-clear',320);
+  await appearance('Quiet','深色');await shot('graph-dark',1280);await shot('graph-dark',320);
+  await appearance('Quiet','浅色');
+ }
+ await graph.getByRole('button',{name:content.graph.fit,exact:true}).click();await shot('overview',1280);
+ await page.setViewportSize({width:1280,height:900});
+ const french=graph.locator(`[data-graph-current="true"] [data-expression-id="${scaleFixture.registry.expressions.find(row=>row.languageTag==='fr')!.expressionId}"]`);await page.mouse.move(1,1);await french.focus();await french.press('Enter');
+ const detail=graph.locator('.sensa-expression-graph-detail');await expect(detail.getByRole('heading',{name:'emprunter',exact:true})).toBeVisible();await expect(detail.locator('h2 bdi')).toHaveAttribute('lang','fr');await expect(graph.locator('[data-graph-preview]')).toHaveCount(0);
+ await shot('drawer',1280);await shot('drawer',320);await shot('drawer',390);
+ expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toHaveLength(0);expect(requests).toHaveLength(0);
+};
+test('World content-led list and drawer retain 86 actual expressions in zh-CN UI',localizedWorldSurface('zh-CN'));
+test('World content-led list and drawer retain 86 actual expressions in en UI',localizedWorldSurface('en'));
+test('World content-led list and drawer retain 86 actual expressions in de UI',localizedWorldSurface('de'));
+
+test('saved Context and staged understanding stay separate, reopen offline, and restore after deletion',async({preparedMeaningPage:{page,modelCalls}},testInfo)=>{
+ test.setTimeout(180_000);page.setDefaultTimeout(15_000);
+ const openContexts=async()=>{await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'保存的情境',exact:true}).click();};
+ const original='Maya borrowed my umbrella. I expect it back tomorrow.';
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'只保存情境',exact:true}).click();
+ const composer=page.getByRole('dialog');
+ await composer.getByRole('textbox').first().fill(original);await composer.getByRole('button',{name:'保存情境',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'保存的情境',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(0);
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await page.getByRole('button',{name:'开始一条理解',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'继续完善理解',exact:true})).toBeVisible();
+ await page.getByLabel('这里表达的意思',{exact:true}).fill('临时借用并归还。');
+ await page.getByRole('button',{name:'先保存',exact:true}).click();
+ await expect(page.getByLabel('这里表达的意思',{exact:true})).toHaveValue('临时借用并归还。',{timeout:15_000});
+ const firstId=await page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId());
+ // An unreadable device draft cannot overwrite saved facts or be silently erased.
+ const damagedCache=await page.evaluate(id=>{
+  const key=Object.keys(localStorage).find(key=>key.includes(`meaning-editor:${id}:draft`));if(!key)throw Error('Missing editor draft cache');
+  const value='{"selection":{"senseId":"untrusted"},"meaning":42}';localStorage.setItem(key,value);return {key,value};
+ },firstId);
+ await page.reload();await expect(page.getByRole('button',{name:'确认这个意思',exact:true})).toBeDisabled();
+ expect(await page.evaluate(key=>localStorage.getItem(key),damagedCache.key)).toBe(damagedCache.value);
+ await page.getByRole('button',{name:'从最新材料重新填写',exact:true}).click();await expect(page.getByLabel('这里表达的意思',{exact:true})).toHaveValue('临时借用并归还。');
+ await page.getByRole('button',{name:'确认这个意思',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'确认这个表达',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
+ await page.getByLabel('表达（可稍后填写）',{exact:true}).fill('borrow');await page.getByRole('combobox',{name:'表达语言',exact:true}).selectOption('en');
+ await page.reload();
+ await expect(page.getByLabel('表达（可稍后填写）',{exact:true})).toHaveValue('borrow');
+ await page.getByRole('button',{name:'确认这个表达',exact:true}).click();
+ await expect(page.getByRole('region',{name:'个人内容学习准备',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(before);
+ await page.getByRole('button',{name:'返回我的语义世界',exact:true}).click();
+ await openContexts();await page.getByRole('button',{name:new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))}).click();
+ await expect(page.getByText('1 条理解',{exact:true})).toBeVisible();await page.getByRole('button',{name:'开始一条理解',exact:true}).click();
+ await page.getByLabel('这里表达的意思',{exact:true}).fill('物品所有者暂借给别人。');await page.getByRole('button',{name:'先保存',exact:true}).click();
+ await page.getByRole('button',{name:'返回',exact:true}).click();await openContexts();await page.getByRole('dialog').getByRole('button',{name:new RegExp('Maya borrowed my umbrella')}).click();
+ await expect(page.getByText('2 条理解',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'编辑情境',exact:true}).click();await page.getByLabel('场景',{exact:true}).fill('Maya returned my umbrella today.');await page.getByRole('button',{name:'保存情境',exact:true}).click();
+ await expect(page.getByText('Maya returned my umbrella today.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'移到情境回收站',exact:true}).click();await page.getByRole('button',{name:'恢复情境',exact:true}).click();
+ await expect(page.getByRole('button',{name:'开始一条理解',exact:true})).toBeEnabled();await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.locator(`[data-world-meaning="${firstId}"]`).click();
+ await expect(page.getByRole('article',{name:'表达详情',exact:true}).getByText(original,{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.semanticMeaningCountForTest())).toBe(2);expect(firstId).toBeTruthy();expect(modelCalls).toEqual([]);
+ await page.screenshot({path:testInfo.outputPath('staged-context-desktop.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:testInfo.outputPath('staged-context-mobile.png'),fullPage:true});
+});
+
+test('shared Contexts, explicit Sense reuse and multilingual expressions keep real memories distinct through a changed meaning',async({preparedMeaningPage:{page}},testInfo)=>{
+ test.setTimeout(300_000);page.setDefaultTimeout(15_000);
+ await page.evaluate(()=>{(window as unknown as {__name:(value:unknown)=>unknown}).__name=value=>value;});
+ await configureTeacher(page,true);await page.evaluate(()=>window.__sensaBrowserSmoke!.setSpeechFixtureForTest(false));
+ const world=async()=>page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ const savedContext='Maya borrowed my umbrella. I lent it to her until tomorrow.';
+ const createContext=async(text:string)=>{
+  await world();await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'只保存情境',exact:true}).click();
+  const composer=page.getByRole('dialog');await composer.getByRole('textbox').first().fill(text);await composer.getByRole('button',{name:'保存情境',exact:true}).click();
+  await expect(page.getByRole('button',{name:'开始一条理解',exact:true})).toBeEnabled();
+ };
+ const fromContext=async(meaning:string,expression:string,language:string,reuse=false)=>{
+  await page.getByRole('button',{name:'开始一条理解',exact:true}).click();
+  if(reuse){await page.getByText('选择已有意思',{exact:true}).click();await page.getByLabel('按意思或表达查找',{exact:true}).fill('borrow');await page.getByRole('button',{name:'查找',exact:true}).click();await page.getByRole('button',{name:'使用这个意思',exact:true}).click();}
+  else await page.getByLabel('这里表达的意思',{exact:true}).fill(meaning);
+  await page.getByLabel('表达（可稍后填写）',{exact:true}).fill(expression);await page.getByRole('combobox',{name:'表达语言',exact:true}).selectOption(language);await page.getByRole('button',{name:'确认这个意思',exact:true}).click();
+  await expect(page.getByRole('heading',{name:expression,exact:true})).toBeVisible();
+  const meaningId=new URL(page.url()).searchParams.get('meaningId');if(!meaningId)throw Error('Missing accepted understanding URL');
+  return {meaningId,pins:await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id),meaningId)};
+ };
+ const candidate=(surface:string,meaning:string,example:string)=>({resources:[
+  {role:'experience_recall_cue',payload:{scene:meaning,senseFocus:meaning}},
+  {role:'scene_bridge',payload:{text:'把这个动作联系到表达。',meaningRendering:{meaning,languageTag:'zh-CN'}}},
+  {role:'scene_realization',payload:{example,targetStart:example.indexOf(surface),targetEnd:example.indexOf(surface)+surface.length,experienceResourceKey:'experience_recall_cue:0'}},
+ ]});
+ const enroll=async(surface:string,meaning:string,example:string)=>{
+  const preparation=page.getByRole('region',{name:'个人内容学习准备',exact:true});plans=[{value:candidate(surface,meaning,example)}];
+  await preparation.getByRole('button',{name:'加入学习',exact:true}).click();try{await expect(preparation.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeEnabled();}catch(error){console.log('Controlled preparation failure:',JSON.stringify({facts:await facts(page),requests,remainingPlans:plans.length}));throw error;}return preparation;
+ };
+ const learn=async(preparation:Locator)=>{
+  await preparation.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();const runtime=page.locator('#s-lightweight-runtime');
+  await runtime.getByRole('button',{name:/查看表达/}).click();await runtime.getByRole('button',{name:/已经连上/}).click();await expect(runtime.getByRole('heading',{name:'本轮完成',exact:true})).toBeVisible();await runtime.getByRole('button',{name:'完成并回到首页',exact:true}).click();
+  return page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ };
+ const route=async(tag:string)=>{
+  await page.getByRole('button',{name:'账号与设置',exact:true}).click();await page.locator('#s-profile').getByRole('button',{name:/使用偏好/}).click();await page.locator('#account-languages').click();
+  const languages=page.getByRole('dialog',{name:'语言路线',exact:true});const radio=languages.getByRole('radio',{name:tag==='fr'?/Français/:/English/});
+  if(!await radio.count()){await languages.getByRole('combobox',{name:'选择目标语言',exact:true}).selectOption(tag);await languages.getByRole('button',{name:'添加路线',exact:true}).click();}
+  if(await radio.getAttribute('aria-checked')!=='true')await radio.click();await expect(radio).toHaveAttribute('aria-checked','true');await languages.getByRole('button',{name:'完成',exact:true}).click();
+ };
+ await createContext(savedContext);const borrower=await fromContext('临时借用并归还。','borrow','en');
+ const borrowedMemory=await learn(await enroll('borrow','临时借用并归还。','May I borrow your umbrella?'));expect(borrowedMemory.records).toHaveLength(1);
+ await world();await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'保存的情境',exact:true}).click();await page.getByRole('dialog').getByRole('button').filter({hasText:savedContext}).click();
+ const lender=await fromContext('把自己的物品暂时交给别人使用，之后收回。','lend','en');expect(lender.pins[0]!.senseId).not.toBe(borrower.pins[0]!.senseId);
+ const twoMemories=await learn(await enroll('lend','把自己的物品暂时交给别人使用，之后收回。','I can lend you my umbrella.'));expect(twoMemories.targetIds).toHaveLength(2);expect(twoMemories.records).toEqual(expect.arrayContaining(borrowedMemory.records));
+ await createContext('I asked Jo to borrow a book and promised to return it.');const otherContext=await fromContext('','borrow','en',true);expect(otherContext.pins).toEqual(borrower.pins);
+ await enroll('borrow','临时借用并归还。','I borrow a book from Jo.');const shared=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(shared.targetIds).toEqual(twoMemories.targetIds);expect(shared.records).toEqual(twoMemories.records);expect(shared.completedTargets).toEqual(twoMemories.completedTargets);
+ await route('fr');await createContext('Puis-je emprunter ton livre ?');const french=await fromContext('','emprunter','fr',true);expect(french.pins).toEqual(borrower.pins);
+ const frenchMemory=await learn(await enroll('emprunter','临时借用并归还。','Puis-je emprunter ton livre ?'));expect(frenchMemory.targetIds).toHaveLength(1);expect(frenchMemory.targetIds.some(id=>twoMemories.targetIds.includes(id))).toBe(false);expect(frenchMemory.records.filter(row=>frenchMemory.targetIds.includes(row.targetId))).toHaveLength(1);expect(frenchMemory.records).toEqual(expect.arrayContaining(twoMemories.records));
+ await world();await page.locator(`[data-world-meaning="${french.meaningId}"]`).click();await page.getByRole('button',{name:'更多',exact:true}).click();await page.getByRole('dialog',{name:'更多',exact:true}).getByRole('button',{name:'修改意思和表达',exact:true}).click();
+ const correction=page.locator('.sensa-meaning-correction');await correction.getByLabel('编辑方式',{exact:true}).selectOption('different_meaning');await correction.getByLabel('表达',{exact:true}).fill('prêter');await correction.getByLabel('这里表达的意思',{exact:true}).fill('把自己的物品暂时交给别人使用，之后收回。');await correction.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(correction).toHaveCount(0);
+ const newPins=await page.evaluate(id=>window.__sensaBrowserSmoke!.meaningPinsForTest(id),french.meaningId);expect(newPins.at(-1)!.senseId).not.toBe(french.pins[0]!.senseId);
+ const changed=await learn(await enroll('prêter','把自己的物品暂时交给别人使用，之后收回。','Je peux te prêter mon livre.'));expect(changed.targetIds).toHaveLength(2);expect(changed.records).toEqual(expect.arrayContaining(frenchMemory.records));expect(changed.completedTargets).toEqual(expect.arrayContaining(frenchMemory.completedTargets));
+ await route('en');const english=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());expect(english.targetIds).toEqual(twoMemories.targetIds);expect(english.records).toEqual(changed.records);expect(english.records.filter(row=>english.targetIds.includes(row.targetId))).toEqual(twoMemories.records);expect(english.completedTargets).toEqual(twoMemories.completedTargets);
+ await page.reload();expect((await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records).toEqual(changed.records);
+ await testInfo.attach('stable-multilingual-memory-evidence',{contentType:'application/json',body:JSON.stringify({borrower,lender,otherContext,french,newPins,borrowedMemory,twoMemories,shared,frenchMemory,changed,english,provider:'controlled free HTTP and synthetic speech bytes; no live provider quality claim'})});
+});
+
+test('World retains only a verified full graph across language filters and releases parked graphs on real changes',async({page})=>{
+ requests=[];plans=[];
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');
+ scaleFixture=await expressionWorldFixture(3);
+ await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+ await page.goto(origin);await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.waitForFunction(()=>!!window.__sensaBrowserSmoke);
+ await expect.poll(()=>page.evaluate(async()=>!!(await window.__sensaBrowserSmoke!.libraryBootstrapFactsForTest()).identity)).toBe(true);
+ await page.evaluate(async()=>window.__sensaBrowserSmoke!.seedSemanticWorld(await (await fetch('/semantic-scale-fixture')).json()));
+ const world=page.locator('.sensa-world.active').last(),languages=world.getByRole('group',{name:'表达语言',exact:true});
+ await languages.getByRole('button',{name:'全部语言',exact:true}).click();
+ const beforeLearning=await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint());
+ await page.evaluate(()=>{
+  const state=(window as any).__graphCacheTest={cores:[] as any[],maximumLive:0,observer:null as MutationObserver|null};
+  const update=()=>{state.maximumLive=Math.max(state.maximumLive,state.cores.filter((cy:any)=>!cy.destroyed()).length);};
+  state.observer=new MutationObserver(()=>{for(const el of document.querySelectorAll('[data-cy-surface]')){const cy=(el as any)._cyreg?.cy;if(cy&&!state.cores.includes(cy)){state.cores.push(cy);cy.on('destroy',update);update();}}});state.observer.observe(document,{childList:true,subtree:true});
+  const native=requestAnimationFrame,held:FrameRequestCallback[]=[];(window as any).__cacheFrames={native,held};window.requestAnimationFrame=callback=>native.call(window,at=>held.push(callback));
+ });
+ await world.getByRole('button',{name:'语义世界',exact:true}).evaluate(button=>(button as HTMLButtonElement).click());
+ const graph=world.getByRole('region',{name:'词义图谱',exact:true,includeHidden:true}),frame=graph.locator('[data-graph-current="true"]'),canvas=frame.locator('[data-graph-camera]'),surface=frame.locator('[data-cy-surface]');
+ try{
+  await expect.poll(()=>surface.evaluate(el=>(el as any)._cyreg?.cy.nodes().length)).toBe(9);
+  await surface.evaluate(el=>{(window as any).__graphCacheTest.unready=(el as any)._cyreg.cy;});
+  await world.locator('.sensa-world-filters > summary').evaluate(summary=>(summary as HTMLElement).click());
+  await languages.getByRole('button',{name:'fr',exact:true}).evaluate(button=>(button as HTMLButtonElement).click());
+  await expect.poll(()=>page.evaluate(()=>(window as any).__graphCacheTest.unready.destroyed())).toBe(true);
+ }finally{await page.evaluate(()=>{const {native,held}=(window as any).__cacheFrames;window.requestAnimationFrame=native;for(const fn of held)native.call(window,fn);delete (window as any).__cacheFrames;});}
+ await expect(canvas).toHaveAttribute('data-graph-ready','true');await expect(canvas).toHaveAttribute('data-graph-node-count','1');
+ await languages.getByRole('button',{name:'全部语言',exact:true}).click();await expect(canvas).toHaveAttribute('data-graph-ready','true');await expect(canvas).toHaveAttribute('data-graph-node-count','9');
+ await surface.evaluate(el=>{const cy=(el as any)._cyreg.cy,s=(window as any).__graphCacheTest;s.full=cy;s.renderer=cy.renderer();s.positions=JSON.stringify(cy.nodes().map((node:any)=>[node.id(),node.position()]));});
+ const fullIsCurrent=()=>surface.evaluate(el=>{const s=(window as any).__graphCacheTest,cy=(el as any)._cyreg.cy;return cy===s.full&&cy.renderer()===s.renderer&&JSON.stringify(cy.nodes().map((node:any)=>[node.id(),node.position()]))===s.positions;});
+ await languages.getByRole('button',{name:'fr',exact:true}).click();await expect(canvas).toHaveAttribute('data-graph-node-count','1');await expect(canvas).toHaveAttribute('data-graph-ready','true');
+ expect(await page.evaluate(()=>{const cy=(window as any).__graphCacheTest.full;return !cy.destroyed()&&!cy.userPanningEnabled()&&!cy.userZoomingEnabled()&&!!cy.container().closest('[inert]');})).toBe(true);
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.holdWorldGraphReadsForTest());
+ try{
+  await languages.getByRole('button',{name:'全部语言',exact:true}).click();
+  await expect(canvas).toBeHidden();expect(await canvas.evaluate(el=>el.hasAttribute('inert'))).toBe(true);
+ }finally{await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseWorldGraphReadsForTest());}
+ await expect(canvas).toBeVisible();await expect(canvas).toHaveAttribute('data-graph-node-count','9');expect(await fullIsCurrent()).toBe(true);
+ // Drive a route change through the loading overlay to force a late snapshot;
+ // this injection is a cancellation race, not a native-input latency check.
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.holdWorldGraphReadsForTest());
+ try{await languages.getByRole('button',{name:'fr',exact:true}).click();await languages.getByRole('button',{name:'全部语言',exact:true}).evaluate(button=>(button as HTMLButtonElement).click());}
+ finally{await page.evaluate(()=>window.__sensaBrowserSmoke!.releaseWorldGraphReadsForTest());}
+ await expect(canvas).toBeVisible();await expect(canvas).toHaveAttribute('data-graph-node-count','9');expect(await fullIsCurrent()).toBe(true);
+ for(let i=0;i<3;i++){
+  await languages.getByRole('button',{name:i%2?'en':'fr',exact:true}).click();await expect(canvas).toHaveAttribute('data-graph-ready','true');
+  await expect(canvas).toHaveAttribute('data-graph-node-count',i%2?'8':'1');
+  await languages.getByRole('button',{name:'全部语言',exact:true}).click();await expect(canvas).toHaveAttribute('data-graph-node-count','9');expect(await fullIsCurrent()).toBe(true);
+  await expect(graph.locator('[data-cy-surface]')).toHaveCount(1);
+ }
+ await languages.getByRole('button',{name:'fr',exact:true}).click();await expect(canvas).toHaveAttribute('data-graph-node-count','1');
+ await page.evaluate(id=>window.__sensaBrowserSmoke!.reviseMeaningContextForTest(id,'A real changed Context invalidates the parked full graph.'),scaleFixture.meanings[0]!.personalMeaning.personalMeaningId);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__graphCacheTest.full.destroyed())).toBe(true);
+ await expect(graph.locator('[data-cy-surface]')).toHaveCount(1);
+ await languages.getByRole('button',{name:'全部语言',exact:true}).click();await expect(canvas).toHaveAttribute('data-graph-node-count','9');await expect(canvas).toHaveAttribute('data-graph-ready','true');expect(await fullIsCurrent()).toBe(false);
+ await languages.getByRole('button',{name:'fr',exact:true}).click();await expect(canvas).toHaveAttribute('data-graph-node-count','1');
+ await page.evaluate(()=>{const s=(window as any).__graphCacheTest;s.beforeOwner=s.cores.slice();window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['meta'],clears:[],records:[{table:'meta',key:'local-incarnation'}]}}));});
+ await expect.poll(()=>page.evaluate(()=>(window as any).__graphCacheTest.beforeOwner.every((cy:any)=>cy.destroyed()))).toBe(true);
+ await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'今日',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__graphCacheTest.cores.every((cy:any)=>cy.destroyed()))).toBe(true);
+ expect(await page.evaluate(()=>(window as any).__graphCacheTest.maximumLive)).toBeLessThanOrEqual(2);
+ expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).toEqual(beforeLearning);
+ expect(requests).toEqual([]);await page.evaluate(()=>{(window as any).__graphCacheTest.observer.disconnect();delete (window as any).__graphCacheTest;});
 });

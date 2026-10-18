@@ -1,3 +1,5 @@
+import {collectMeaningContexts} from '../../../apps/web/src/experience/personalMeaningJourney/contextRecords';
+import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 /** Actual SQLite/Wasm kernel: committed derivation, privacy, invalidation and rebuild. */
 import {test,expect} from 'vitest';
 import {registrySelectionSql,type RegistrySelectionQuery} from '../../../apps/web/src/data/library/semanticRegistrySelection';
@@ -15,13 +17,7 @@ import {journeyReservedIdentities} from '../../../apps/web/src/experience/person
 import {assertPersonalSemanticWorldState} from '../../../apps/web/src/experience/personalMeaningJourney/authority.ts';
 
 const sqlite=await init(),encode=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
-const ids={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
-function rows(state:JourneyState):SqliteMutation['puts']{
- const result:SqliteMutation['puts']=[{table:'semanticState',key:'root',encodedValue:encode({version:state.version})}];
- for(const value of state.meanings)result.push({table:'semanticMeanings',key:value.personalMeaning.personalMeaningId,encodedValue:encode(value)});
- for(const kind of Object.keys(ids) as Array<keyof typeof ids>)state.registry[kind].forEach((value,ordinal)=>result.push({table:'semanticRegistry',key:`${kind}:${(value as unknown as Record<string,string>)[ids[kind]]}`,encodedValue:encode({kind,ordinal,value})}));
- return result;
-}
+function rows(state:JourneyState):SqliteMutation['puts']{return [...semanticRecords(state)].map(row=>({table:row.table,key:row.key,encodedValue:encode(row.value)}));}
 async function fixture(append=''){
   const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
   const payload=semanticLookupPayload();if(append)payload.context!.textSegment+=' '+append;
@@ -58,15 +54,15 @@ test('identity reservation lookup is bounded, excludes opaque prose, retains sha
   expect(()=>database.existingJourneyIdentities([senseVersion])).toThrow('journey_identity_cache_invalid');expect(database.entries('semanticMeanings')).toEqual(source);
   raw.exec('DROP TRIGGER refuse_identity_repair;');
   database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
-  expect(raw.selectValue('SELECT version FROM sensa_journey_identity_meta WHERE id=1')).toBe(3);expect(database.existingJourneyIdentities([senseVersion])).toEqual([senseVersion]);expect(database.entries('semanticMeanings')).toEqual(source);
+  expect(raw.selectValue('SELECT version FROM sensa_journey_identity_meta WHERE id=1')).toBe(5);expect(database.existingJourneyIdentities([senseVersion])).toEqual([senseVersion]);expect(database.entries('semanticMeanings')).toEqual(source);
   raw.exec({sql:'DELETE FROM sensa_journey_identities WHERE identity_id=?',bind:[versionBytes]});
   raw.exec("CREATE TEMP TRIGGER refuse_identity_marker BEFORE INSERT ON sensa_journey_identity_meta BEGIN SELECT RAISE(ABORT,'fixture-identity-marker-failure'); END;");
   expect(()=>database.diagnostics({verifyIntegrity:true})).toThrow('fixture-identity-marker-failure');
-  expect(()=>database.existingJourneyIdentities([senseVersion])).toThrow('journey_identity_cache_invalid');expect(raw.selectValue('SELECT version FROM sensa_journey_identity_meta WHERE id=1')).toBe(3);expect(database.entries('semanticMeanings')).toEqual(source);
+  expect(()=>database.existingJourneyIdentities([senseVersion])).toThrow('journey_identity_cache_invalid');expect(raw.selectValue('SELECT version FROM sensa_journey_identity_meta WHERE id=1')).toBe(5);expect(database.entries('semanticMeanings')).toEqual(source);
   raw.exec('DROP TRIGGER refuse_identity_marker;');
   expect(database.diagnostics({verifyIntegrity:true}).journeyIdentityCheck?.status).toBe('rebuilt');expect(database.existingJourneyIdentities([senseVersion])).toEqual([senseVersion]);
   database.commit({clears:[],deletes:[{table:'semanticMeanings',key:id}],puts:[],contentRevision:2});
-  expect(database.existingJourneyIdentities([id,senseVersion])).toEqual([senseVersion]);
+  expect(database.existingJourneyIdentities([id,senseVersion])).toEqual([id,senseVersion].sort()); // Retained command receipts still reserve the deleted Meaning's identity.
   database.commit({clears:['semanticRegistry'],deletes:[],puts:[],contentRevision:3});expect(database.existingJourneyIdentities([senseVersion])).toEqual([]);
  }finally{database.close();}
 });
@@ -91,8 +87,8 @@ test('registry selectors use source expression indexes, historical forms and fix
   const cases:Array<{query:RegistrySelectionQuery;keys:string[];index:string}>=[
    {query:{kind:'senseKey',senseKey:sense.senseKey},keys:[`senses:${sense.senseId}`],index:'sensa_registry_sense_key'},
    {query:{kind:'expression',normalizedForm:'borrow',languageTag:'en',expressionType:'word'},keys:[`expressions:${expression.expressionId}`,`expressionVersions:${version.expressionVersionId}`],index:'sensa_registry_expression_form'},
-   {query:{kind:'binding',senseId:sense.senseId,expressionId:expression.expressionId,relation:'realizes'},keys:[`bindings:${binding.senseExpressionBindingId}`],index:'sensa_registry_binding_pair'},
-   {query:{kind:'bindingVersion',bindingId:binding.senseExpressionBindingId,senseVersionId:bindingVersion.senseVersionId,expressionVersionId:version.expressionVersionId,coverage:'exact'},keys:[`bindingVersions:${bindingVersion.bindingVersionId}`],index:'sensa_registry_binding_versions'},
+   {query:{kind:'binding',senseId:sense.senseId,expressionId:expression.expressionId,relation:binding.relation},keys:[`bindings:${binding.senseExpressionBindingId}`],index:'sensa_registry_binding_pair'},
+   {query:{kind:'bindingVersion',bindingId:binding.senseExpressionBindingId,senseVersionId:bindingVersion.senseVersionId,expressionVersionId:version.expressionVersionId,coverage:bindingVersion.semanticCoverage},keys:[`bindingVersions:${bindingVersion.bindingVersionId}`],index:'sensa_registry_binding_versions'},
    {query:{kind:'ordinal',registryKind:'senses'},keys:[],index:'sensa_registry_kind_ordinal'},
   ];
   for(const {query,keys,index} of cases){
@@ -208,9 +204,9 @@ test('shared version writes retain only changed references instead of rebuilding
     if(!changedIds.has(value))changedIds.set(value,crypto.randomUUID());return changedIds.get(value);
    })) as JourneyState['meanings'][number];
    const id=cloned.personalMeaning.personalMeaningId;added.push(id);meanings.push(cloned);
-   database.commit({clears:[],deletes:[],puts:[{table:'semanticMeanings',key:id,encodedValue:encode(cloned)}],contentRevision:index+2});
+   database.commit({clears:[],deletes:[],puts:rows({...state,meanings:[cloned],registry:{senses:[],senseVersions:[],expressions:[],expressionVersions:[],bindings:[],bindingVersions:[]},contexts:{anchors:[],anchorRevisions:[],anchorRevisionParents:{}},commandReceipts:[]}),contentRevision:index+2});
   }
-  assertPersonalSemanticWorldState({...state,meanings});
+  const complete={...state,meanings};collectMeaningContexts(complete);assertPersonalSemanticWorldState(complete);
   expect(raw.selectValue('SELECT COUNT(*) FROM document_replacements')).toBe(0);
   expect(raw.selectValue('SELECT COUNT(*) FROM sensa_meaning_lookup_documents')).toBe(2);
   expect(raw.selectValue('SELECT MIN(reference_count) FROM sensa_meaning_lookup_documents')).toBe(1001);

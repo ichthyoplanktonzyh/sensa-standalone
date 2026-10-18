@@ -82,6 +82,9 @@ export async function prepareCandidate(env,root=process.cwd()){
  const browserCode=(await Promise.all(browserFiles.map(p=>readFile(p,'utf8')))).join('\n');
  for(const value of [env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY,env.VITE_SENSA_SUPPORT_URL])if(!browserCode.includes(value))throw new Error('Web bundle does not contain the release configuration; rebuild with the release environment');
  const entries=[];
+ // The identity belongs to the sealed API bytes, not a mutable service secret.
+ await mkdir(resolve(root,'apps/api/dist/sensa'),{recursive:true});
+ await writeFile(resolve(root,'apps/api/dist/sensa/releaseIdentity.js'),`export const releaseCommit = ${JSON.stringify(config.commit)};\n`);
  for(const rootPath of candidateRoots){
   await removeSourceMaps(resolve(root,rootPath));
   for(const path of (await files(resolve(root,rootPath))).sort()){

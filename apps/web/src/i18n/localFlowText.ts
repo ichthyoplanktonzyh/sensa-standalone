@@ -2,12 +2,12 @@ import i18n from './index';
 import zhCN from './locales/zh-CN/localFlow.json';
 import en from './locales/en/localFlow.json';
 import ja from './locales/ja/localFlow.json';
-import {interfaceLocales} from './localeRegistry';
+import {interfaceLocales,resolveInterfaceLocale} from './localeRegistry';
 import {registerTranslationNamespace} from './registerResources';
 
 registerTranslationNamespace('localFlow',{'zh-CN':zhCN,en,ja});
 const localFlowZh=zhCN.localFlow;
-export const localFlowText=(key:keyof typeof localFlowZh,values?:Record<string,unknown>):string=>i18n.t(`localFlow.${key}`,values);
+export const localFlowText=(key:keyof typeof localFlowZh,values?:Record<string,unknown>):string=>i18n.t(`localFlow.${key}`,typeof values?.count==='number'?{...values,formattedCount:new Intl.NumberFormat(resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language)).format(values.count)}:values);
 /** Translate presentation notices, including earlier persisted UI copy. Never translate learner content. */
 export function localFlowNotice(value:string|null|undefined):string {
  if(!value)return '';

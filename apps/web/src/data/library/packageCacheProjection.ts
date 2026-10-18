@@ -58,6 +58,7 @@ export const createPackageCacheSummary=(value:InstalledPackage):InstalledPackage
   entries:value.content.entries.map(entry=>({
    senseId:entry.senseId,
    senseVersionId:entry.senseVersionId,
+   expressionId:entry.expressionId,expressionVersionId:entry.expressionVersionId,
    bindingId:entry.bindingId,
    bindingVersionId:entry.bindingVersionId,
    expression:entry.expression,

@@ -33,3 +33,14 @@ test('configuration workflow cannot deploy new app code, migrate data or change 
  expect(workflow).toMatch(/cp -R \.tmp\/domain-baseline-candidate\/packages\/learning-kernel\/dist\/\. packages\/learning-kernel\/dist\//);
  expect(workflow.indexOf('name: Restore verified baseline assets')).toBeLessThan(workflow.indexOf('name: Change only API origin'));
 });
+test('domain baseline keeps build and validation attempts separate after a failed-test rerun',async()=>{
+ const candidate={...manifest.components.application.candidate,validationRunAttempt:'2',artifactName:`sensa-production-${'a'.repeat(40)}-attempt-1`};
+ const baseline=domainMigrationBaseline({...manifest,components:{application:{...manifest.components.application,candidate}}},env);
+ expect(baseline.ciRunAttempt).toBe('1');expect(baseline.ciValidationAttempt).toBe('2');expect(baseline.candidateArtifactName).toBe(candidate.artifactName);
+ const requested=[];
+ await verifyDomainBaseline(baseline,env,async url=>{
+  requested.push(url);
+  return new Response(JSON.stringify(url.startsWith('https://api.github.com/')?{conclusion:'success',status:'completed',event:'push',head_branch:'main',head_sha:baseline.sourceCommit,run_attempt:2,head_repository:{full_name:env.GITHUB_REPOSITORY}}:{success:true,result:{deployments:[{versions:[{version_id:baseline.webVersionId,percentage:100}]}]}}));
+ });
+ expect(requested[0]).toContain('/actions/runs/12/attempts/2');
+});

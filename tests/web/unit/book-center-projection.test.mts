@@ -156,10 +156,12 @@ test('independent Portable versions share one card and require an explicit updat
  assert.equal(library.length,1);
  assert.equal(library[0]?.installed[0]?.key,next.key);
  assert.equal(library[0]?.updateDownloaded,true);
+ assert.equal(library[0]?.updateAvailable,true);
  assert.equal(library[0]?.enrolled,false);
  const applied=buildPackageCenterItems({...controller,enrollments:[{source:{kind:'portable_package',packageId,packageVersion:2}}] as Controller['enrollments']}).library;
  assert.equal(applied[0]?.listKey,library[0]?.listKey,'detail selection must survive a version change');
  assert.equal(applied[0]?.updateDownloaded,false);
+ assert.equal(applied[0]?.updateAvailable,false);
  assert.equal(applied[0]?.enrolled,true);
 });
 
@@ -185,6 +187,12 @@ test('Book content windows retain the full count while projecting only visible r
  assert.equal(projection.entries[0]?.entry.expression,'entry-0');
  assert.equal(projection.entries[0]?.target?.targetId,'target-0');
  assert.equal(projection.entries[49]?.entry.expression,'entry-49');
+ const last=projectPackageContentWindow([pack],indexPackageTargets(targets),24,{offset:9_984});
+ assert.equal(last.entries.length,16);assert.equal(last.entries[15]?.entry.expression,'entry-9999');
+ assert.equal(last.total,10_000);assert.equal(last.offset,9_984);
+ const searched=projectPackageContentWindow([pack],indexPackageTargets(targets),24,{query:'entry-9999',locale:'en',offset:9_984});
+ assert.equal(searched.total,1);assert.equal(searched.offset,0);assert.equal(searched.entries[0]?.entry.expression,'entry-9999');
+ assert.equal(projectPackageContentWindow([pack],indexPackageTargets(targets),24,{query:'absent'}).entries.length,0);
 });
 
 test('learning source lookup resolves the exact admitted publication instead of a shared Book or latest edition',()=>{
@@ -204,4 +212,73 @@ test('learning source lookup resolves the exact admitted publication instead of 
  const portable=projectPackageSource(controller,first.key);
  assert.equal(portable?.title,'First expression','without a Book identity show the exact Portable source rather than choosing a Book');
  assert.equal(portable?.sourceVersion,1);
+});
+
+test('complete catalog browsing filters before paging, clamps stale URLs and breaks title/date ties by stable identity',async()=>{
+ const {browseCatalog,parseCatalogBrowsing,catalogBrowsingParams,catalogPageNumbers}=await import('../../../apps/web/src/experience/library/packageCatalogBrowsing');
+ const items=Array.from({length:137},(_,index)=>({
+  key:`book-${index}`,listKey:`published:${String(index).padStart(3,'0')}`,kind:'published' as const,
+  title:index===136?'Deep needle':'Same title',description:'Verified public description',count:3,
+  targetLanguage:index%2?'ja':'en',supportLanguage:'zh-Hans',installed:[],updateAvailable:false,updateDownloaded:false,enrolled:false,routeMatchesActive:true,
+  descriptor:{publisher:{name:'Real publisher'},publishedAt:'2026-10-10T00:00:00Z'},
+ })) as unknown as import('../../../apps/web/src/experience/library/packageCenterProjection').PackageCenterItem[];
+ const names=new Map([['en','英语'],['ja','日语'],['zh-Hans','简体中文']]);
+ const state=parseCatalogBrowsing({page:'6',pageSize:'24',view:'list'});
+ const page=browseCatalog(items,state,names,'zh-CN');
+ assert.deepEqual([page.page,page.pages,page.total,page.start,page.end],[6,6,137,121,137]);
+ assert.equal(page.items.length,17);
+ assert.deepEqual(browseCatalog([...items].reverse(),state,names,'zh-CN').items.map(item=>item.key),page.items.map(item=>item.key));
+ assert.equal(browseCatalog(items,{...state,query:'Deep needle'},names,'zh-CN').items[0]?.key,'book-136');
+ assert.equal(browseCatalog(items,{...state,query:'英语'},names,'zh-CN').total,69);
+ assert.equal(browseCatalog(items,{...state,target:'ja',support:'zh-Hans'},names,'zh-CN').total,68);
+ const empty=browseCatalog(items,{...state,query:'absent'},names,'zh-CN');
+ assert.deepEqual([empty.start,empty.end,empty.total,empty.page],[0,0,0,1]);
+ assert.equal(browseCatalog(items,{...state,pageSize:96,page:999},names,'zh-CN').page,2);
+ assert.deepEqual(parseCatalogBrowsing({page:'-2',pageSize:'12',sort:'unknown',view:'unknown'}),{query:'',target:'',support:'',sort:'title',page:1,pageSize:24,view:'cards'});
+ assert.deepEqual(parseCatalogBrowsing(catalogBrowsingParams({...state,query:'日语',target:'ja',support:'zh-Hans',sort:'newest'})),{...state,query:'日语',target:'ja',support:'zh-Hans',sort:'newest'});
+ assert.deepEqual(catalogPageNumbers(6,12),[1,'gap',5,6,7,'gap',12]);
+ assert.deepEqual(catalogPageNumbers(1,1),[1]);
+ const offsetItems=[
+  {...items[0]!,descriptor:{...items[0]!.descriptor!,publishedAt:'2026-10-10T00:30:00+09:00'}},
+  {...items[1]!,descriptor:{...items[1]!.descriptor!,publishedAt:'2026-10-09T18:00:00Z'}},
+ ];
+ assert.deepEqual(browseCatalog(offsetItems,{...state,page:1,sort:'newest'},names,'zh-CN').items.map(item=>item.key),['book-1','book-0']);
+
+});
+
+test('detail metadata separates a newer public edition from the installed examples and never infers absent author/license',async()=>{
+ const {projectPackageMetadata}=await import('../../../apps/web/src/experience/library/packageCenterProjection');
+ const source=publication({namespace:'publisher',bookId:uuid('601'),bookKey:'meaningful-book',version:1,title:'Earlier title',archive:digest('1'),memberCount:1,targetLanguage:'en',supportLanguage:'zh-CN'});
+ const raw=packageSummary({key:'member',packageId:uuid('602'),version:1,title:'Verified member',targetLanguage:'en',supportLanguage:'zh-CN',publications:[source]});
+ const installed={...raw,portableOrigin:{...raw.portableOrigin,manifest:{...raw.portableOrigin.manifest,metadata:{...raw.portableOrigin.manifest.metadata,author:{name:'Actual author',url:'https://author.example'},license:{name:'CC0',url:'https://creativecommons.org/publicdomain/zero/1.0/'}}}}};
+ const publicItem=descriptor({namespace:'publisher',bookId:uuid('601'),bookKey:'meaningful-book',version:2,title:'Latest title',sha256:digest('2'),memberCount:1,targetLanguage:'en',supportLanguage:'zh-CN'});
+ const [item]=buildPackageCenterItems({catalog:[publicItem],packages:[installed],enrollments:[],languageContext:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'} as Controller['languageContext']}).catalog;
+ const metadata=projectPackageMetadata(item!);
+ assert.equal(metadata.version,2);assert.equal(metadata.installedVersion,1);
+ assert.deepEqual(metadata.authors,[installed.portableOrigin.manifest.metadata.author]);
+ assert.deepEqual(metadata.licenses,[installed.portableOrigin.manifest.metadata.license]);
+ assert.equal(metadata.publisher?.name,'publisher');
+ const partialNewPublication={...source,book:{...source.book,versionNumber:2},bookArchiveSha256:digest('2'),memberCount:2};
+ const shared={...installed,portableOrigin:{...installed.portableOrigin,publications:[source,partialNewPublication]}};
+ const [partial]=buildPackageCenterItems({catalog:[{...publicItem,memberCount:2}],packages:[shared],enrollments:[],languageContext:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'} as Controller['languageContext']}).catalog;
+ assert.equal(partial!.installedArchiveSha256,digest('1'));
+ assert.equal(projectPackageMetadata(partial!).installedVersion,1,'partial newer cache membership cannot relabel the complete installed edition');
+
+ const undownloaded=projectPackageMetadata({...item!,installed:[]});
+ assert.deepEqual(undownloaded.authors,[]);assert.deepEqual(undownloaded.licenses,[]);assert.equal(undownloaded.installedVersion,undefined);
+});
+
+
+test('generated catalog display names use exact description phrases and preserve unknown titles',async()=>{
+ const {packagePresentation}=await import('../../../apps/web/src/experience/library/packagePresentation');
+ const source={title:'IDS Route Foundation: ar / de',description:'Three shared everyday Senses for target ar with support de.'};
+ assert.deepEqual(packagePresentation(source),{title:'Three shared everyday Senses',description:'',originalTitle:source.title});
+ assert.equal(source.title,'IDS Route Foundation: ar / de');
+ assert.deepEqual(packagePresentation({title:'IDS 轻量学习：英语 → de',description:'以英语为目标语言、de 为支持语言的常用共同概念学习包。'}),{title:'常用共同概念',description:'',originalTitle:'IDS 轻量学习：英语 → de'});
+ assert.deepEqual(packagePresentation({title:'An author’s own title',description:'A real description'}),{title:'An author’s own title',description:'A real description',originalTitle:undefined});
+ assert.equal(packagePresentation({title:source.title,description:'Unrecognized description'}).title,source.title);
+ const distinctive={...source,title:'IDS Route Foundation: ar / de — Weather'};
+ assert.equal(packagePresentation(distinctive).title,distinctive.title);
+ const Chinese={title:'IDS 轻量学习：英语 → de：天气',description:'以英语为目标语言、de 为支持语言的常用共同概念学习包。'};
+ assert.equal(packagePresentation(Chinese).title,Chinese.title);
 });

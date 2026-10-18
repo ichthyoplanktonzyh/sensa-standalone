@@ -1,3 +1,4 @@
+import {storeMeaningContexts,collectMeaningContexts,contextKey,contextRecordId,type ContextRecord} from '../../../apps/web/src/experience/personalMeaningJourney/contextRecords';
 /** Candidate storage fixture, not a learner-fact write or a cloud restore. */
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import {decodeBackupValue,encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
@@ -10,8 +11,10 @@ export type SemanticCandidateRecord={table:SemanticWorldRecordTable;key:string;v
 export type LibraryCandidateRecord={table:SqliteLibraryTable;key:string;value:unknown};
 const ids={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
 export function* semanticRecords(state:JourneyState):Generator<SemanticCandidateRecord>{
+ state={...state,contexts:{...state.contexts}};collectMeaningContexts(state);
  yield {table:'semanticState',key:'root',value:{version:state.version}};
- for(const value of state.meanings)yield {table:'semanticMeanings',key:value.personalMeaning.personalMeaningId,value};
+ for(const value of state.meanings)yield {table:'semanticMeanings',key:value.personalMeaning.personalMeaningId,value:storeMeaningContexts(value)};
+ for(const kind of ['anchors','anchorRevisions'] as const)for(const value of state.contexts[kind]){const row={kind,value,...(kind==='anchorRevisions'?{parentRevisionId:state.contexts.anchorRevisionParents[(value as JourneyState['contexts']['anchorRevisions'][number]).personalSemanticAnchorRevisionId]}:{})} as ContextRecord;yield {table:'semanticContexts',key:contextKey(kind,contextRecordId(row)),value:row};}
  for(const kind of Object.keys(ids) as Array<keyof typeof ids>){let ordinal=0;for(const value of state.registry[kind])yield {table:'semanticRegistry',key:`${kind}:${(value as unknown as Record<string,string>)[ids[kind]]}`,value:{kind,ordinal:ordinal++,value}};}
  for(const value of state.inboxItems)yield {table:'semanticInbox',key:value.intakeId,value};
  for(const value of state.clarificationDrafts)yield {table:'semanticDrafts',key:value.intakeId,value};

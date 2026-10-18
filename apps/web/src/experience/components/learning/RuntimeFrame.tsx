@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Pause } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SensaPageLayout } from "../../ui/SensaPageLayouts";
+import './LearningJourney.css';
 
 export const runtimePrimary =
   "inline-flex min-h-14 items-center justify-center gap-3 rounded-control bg-action-primary px-7 text-sm font-medium text-action-on-primary transition-colors hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus disabled:opacity-40";
@@ -11,20 +12,30 @@ export function RuntimeFrame({
   title,
   stepLabel,
   progress,
+  progressLabel,
+  progressValueText,
   onExit,
   children,
   tools,
   pauseShortcut,
+  controls,
+  feedback,
+  completed=false,
 }: {
   id: string;
   active: boolean;
   title: string;
   stepLabel: string;
   progress: number | null;
+  progressLabel?: string;
+  progressValueText?: string;
   onExit: () => void;
   children: ReactNode;
   tools?: ReactNode;
   pauseShortcut?: string;
+  controls?: ReactNode;
+  feedback?: ReactNode;
+  completed?:boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -37,16 +48,17 @@ export function RuntimeFrame({
         header: (
           <>
             <span className="sensa-runtime-title text-sm font-medium">{title}</span>
-            <span className="hidden h-4 w-px bg-border-subtle sm:block" />
+            {!completed&&<span className="hidden h-4 w-px bg-border-subtle sm:block" />}
+            {!completed&&
             <span className="sensa-runtime-stage hidden text-xs text-fg-tertiary sm:block">
               {stepLabel}
-            </span>
+            </span>}
           </>
         ),
         tools: (
           <>
             {tools}
-            <button
+            {!completed&&<button
               type="button"
               onClick={onExit}
               aria-label={t("runtime.pause")}
@@ -55,14 +67,15 @@ export function RuntimeFrame({
               <Pause size={16} className="shrink-0" />
               {t("runtime.pause")}
               {pauseShortcut && <kbd className="sensa-shortcut-hint hidden sm:inline" aria-hidden="true">{pauseShortcut}</kbd>}
-            </button>
+            </button>}
           </>
         ),
         progress: progress===null?null:(
           <div
             className="sensa-runtime-progress"
             role="progressbar"
-            aria-label={t("runtime.progress")}
+            aria-label={progressLabel??t("runtime.progress")}
+            aria-valuetext={progressValueText}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(progress)}
@@ -83,12 +96,14 @@ export function RuntimeFrame({
         ),
         primary: (
           <>
-            <p className="sensa-runtime-mobile-stage mb-7 text-xs tracking-wide text-fg-tertiary sm:hidden">
+            {!completed&&<p className="sensa-runtime-mobile-stage mb-7 text-xs tracking-wide text-fg-tertiary sm:hidden">
               {stepLabel}
-            </p>
+            </p>}
             {children}
           </>
         ),
+        controls,
+        feedback,
       }}
     />
   );

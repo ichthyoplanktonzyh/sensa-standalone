@@ -1,91 +1,65 @@
-import { ArrowLeft, ArrowRight, Plus, Search } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import { studyButton } from '../StudyScreen';
-import type {LearningPolicy,LearningReadiness} from '../../../learning/system';
-import { SensaCollectionBrowserLayout } from '../../ui/SensaPageLayouts';
-import { useScreenState } from '../../ui/ScreenHost';
-import type {ReactNode} from 'react';
+import {ArrowLeft,ArrowRight,Plus,Search,SlidersHorizontal} from 'lucide-react';
+import {useEffect,useRef,type ReactNode} from 'react';
+import {useTranslation} from 'react-i18next';
+import {studyButton} from '../StudyScreen';
+import {SensaCollectionBrowserLayout} from '../../ui/SensaPageLayouts';
+import {useScreenState} from '../../ui/ScreenHost';
 import {localFlowText} from '../../../i18n/localFlowText';
+import {learningLibrarySelection,type LearningLibraryItem,type LearningLibraryFilter,type LearningLibrarySort} from '../../library/learningTargetBrowsing';
+import type {ShellParams} from '../../router/screenRegistry';
 
-interface LearningTargetLibraryScreenProps {
-  active: boolean;
-  notice?:ReactNode;
-  availability?:'loading'|'ready'|'unavailable';
-  pendingEntries?:readonly {enrollmentId:string;expression:string;meaning:string}[];
-  onOpenPending?:(enrollmentId:string)=>void;
-  targets: Readonly<Record<string, {expression: string; meaning: string; sourceKind: string}>>;
-  targetIds: readonly string[];
-  /** Effective policy and readiness are projected from the persisted local Target. */
-  policyByTarget: Readonly<Record<string, LearningPolicy>>;
-  preparationByTarget: Readonly<Record<string, LearningReadiness>>;
-  committedTargetIds: ReadonlySet<string>;
-  completedTargetIds: ReadonlySet<string>;
-  reviewDueTargetIds: ReadonlySet<string>;
-  relearningTargetIds: ReadonlySet<string>;
-  reviewingTargetIds: ReadonlySet<string>;
-  relearningRepairTargetIds: ReadonlySet<string>;
-  relearningRetestTargetIds: ReadonlySet<string>;
-  declaredMasteryTargetIds: ReadonlySet<string>;
-  onBack: () => void;
-  onAddLearning: () => void;
-  onOpenTarget: (targetId: string) => void;
+interface LearningTargetLibraryScreenProps{
+ active:boolean;embedded?:boolean;notice?:ReactNode;availability:'loading'|'ready'|'unavailable';
+ items:readonly LearningLibraryItem[];routeKey:string;routeLabel:string;
+ params:ShellParams;onParamsChange:(params:ShellParams)=>void;
+ onBack:()=>void;onAddLearning:()=>void;onOpenTarget:(targetId:string)=>void;onOpenPending:(enrollmentId:string)=>void;
 }
-
-
-type Filter = 'all' | 'new' | 'active' | 'review' | 'complete';
-export const LearningTargetLibraryScreen = (props: LearningTargetLibraryScreenProps) => {
-  const { t } = useTranslation();
-  const [query, setQuery] = useScreenState('learning-library:query', '');
-  const [filter, setFilter] = useScreenState<Filter>('learning-library:filter', 'all');
-  const [page,setPage]=useScreenState('learning-library:page',0);
-  const items = [...props.targetIds.map(id => {
-    const state = props.declaredMasteryTargetIds.has(id) ? 'declared'
-      : props.relearningRetestTargetIds.has(id) ? 'relearning-retest'
-      : props.relearningRepairTargetIds.has(id) ? 'relearning-repair'
-      : props.reviewingTargetIds.has(id) ? 'reviewing'
-      : props.relearningTargetIds.has(id) ? 'relearning'
-      : props.reviewDueTargetIds.has(id) ? 'review-due'
-      : props.completedTargetIds.has(id) ? 'completed'
-      : props.committedTargetIds.has(id) ? 'committed' : props.preparationByTarget[id];
-    const group: Filter = ['declared', 'completed'].includes(state) ? 'complete'
-      : ['review-due', 'relearning', 'relearning-repair', 'relearning-retest', 'reviewing'].includes(state) ? 'review'
-      : state === 'committed' ? 'active' : 'new';
-    const target=props.targets[id];
-    if(!target)throw new Error(`Missing Learning Target presentation: ${id}`);
-    return { id, target, state, group, pendingId:null as string|null };
-  }),...(props.pendingEntries??[]).map(entry=>({id:`enrollment:${entry.enrollmentId}`,target:{expression:entry.expression,meaning:entry.meaning,sourceKind:'direct'},state:'awaiting_content',group:'new' as Filter,pendingId:entry.enrollmentId}))];
-  const visible = items.filter(item => (filter === 'all' || item.group === filter)
-    && `${item.target.expression} ${item.target.meaning}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const currentPage=Math.min(page,Math.max(0,Math.ceil(visible.length/40)-1));
-  return <SensaCollectionBrowserLayout
-    id="s-learning-library"
-    measure="wide"
-    className={`screen z-20 ${props.active ? 'active' : 'invisible pointer-events-none'}`}
-    regions={{
-      header: <>
-      {props.notice}
-      <button className={`${studyButton} -ml-4 text-fg-secondary`} onClick={props.onBack}><ArrowLeft size={18}/>{t('study.back')}</button>
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-        <div><h1 className="text-3xl font-medium tracking-tight">{t('study.library')}</h1>{(!props.availability||props.availability==='ready')&&<p className="mt-3 text-sm text-fg-secondary">{t('study.count', { count: items.length })}</p>}</div>
-        <button className={`${studyButton} bg-action-primary text-action-on-primary hover:bg-action-primary-hover`} onClick={props.onAddLearning}><Plus size={17}/>{t('study.add')}</button>
-      </div>
-      </>,
-      controls: <div className="flex flex-wrap gap-3">
-        <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-4 focus-within:outline-2 focus-within:outline-focus"><Search size={18} className="shrink-0 text-fg-tertiary"/><input value={query} onChange={event => {setQuery(event.target.value);setPage(0);}} aria-label={t('study.search')} placeholder={t('study.search')} className="min-w-0 flex-1 bg-transparent py-3 text-sm text-fg-primary outline-none"/></label>
-        <select aria-label={t('study.status')} value={filter} onChange={event => {setFilter(event.target.value as Filter);setPage(0);}} className="min-h-12 max-w-full rounded-control border border-border-subtle bg-surface-panel px-4 text-sm focus-visible:outline-2 focus-visible:outline-focus">
-          {(['all','new','active','review','complete'] as const).map(value => <option key={value} value={value}>{t('study.filters.' + value)}</option>)}
-        </select>
-      </div>,
-      collection: <>
-      <ul className="divide-y divide-border-subtle">
-        {visible.slice(currentPage*40,(currentPage+1)*40).map(({id, target, state,pendingId}) => <li key={id}><button onClick={() => pendingId?props.onOpenPending?.(pendingId):props.onOpenTarget(id)} className="flex w-full items-center gap-4 rounded-control py-6 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus">
-          <span className="min-w-0 flex-1"><strong className="font-language text-xl font-medium">{target.expression}</strong><span className="mt-2 block text-sm text-fg-secondary">{target.meaning}</span><span className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-fg-tertiary"><span className="rounded-control bg-surface-selected px-2 py-1 text-action-primary">{pendingId?localFlowText('prepareResources'):t('study.states.' + state)}</span><span>{t('study.sources.' + target.sourceKind)}</span>{!pendingId&&<span>{t('learningPreferences.policies.' + props.policyByTarget[id])}</span>}</span></span>
-          <ArrowRight size={18} className="shrink-0 text-fg-tertiary"/>
-        </button></li>)}
-      </ul>
-      {visible.length>40&&<nav className="my-5 flex gap-3"><button className={studyButton} disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>{t('directLearning.previous',{ns:'learning'})}</button><button className={studyButton} disabled={(currentPage+1)*40>=visible.length} onClick={()=>setPage(currentPage+1)}>{t('directLearning.next',{ns:'learning'})}</button></nav>}
-      {!visible.length&&(!props.availability||props.availability==='ready')&&<p className="py-20 text-center text-sm text-fg-tertiary">{t(items.length ? 'study.noMatches' : 'study.empty')}</p>}
-      </>,
-    }}
-  />;
-};
+export function LearningTargetLibraryScreen(props:LearningTargetLibraryScreenProps){
+ const {t,i18n}=useTranslation(),locale=i18n.resolvedLanguage??'zh-CN';
+ const numbers=new Intl.NumberFormat(locale);
+ const query=props.params.learningQuery??'';
+ const filter:LearningLibraryFilter=['new','due','paused','active','complete'].includes(props.params.learningFilter??'')?props.params.learningFilter as LearningLibraryFilter:'all';
+ const sort:LearningLibrarySort=props.params.learningSort==='expression'?'expression':'due';
+ const page=/^\d+$/u.test(props.params.learningPage??'')?Math.max(1,Math.min(1_000_000,Number(props.params.learningPage))):1;
+ const [returnFocus,setReturnFocus]=useScreenState<string|null>(`learning-library:${props.routeKey}:returnFocus`,null);
+ const root=useRef<HTMLDivElement>(null);
+ const visible=learningLibrarySelection(props.items,query,filter,sort,locale);
+ const pages=Math.max(1,Math.ceil(visible.length/40)),currentPage=Math.min(page,pages);
+ const start=visible.length?(currentPage-1)*40+1:0,end=Math.min(currentPage*40,visible.length);
+ const change=(next:ShellParams)=>props.onParamsChange({...props.params,learningPage:'1',...next});
+ useEffect(()=>{
+  if(props.availability==='ready'&&page!==currentPage)props.onParamsChange({...props.params,learningPage:String(currentPage)});
+ },[props.availability,page,currentPage]);
+ useEffect(()=>{
+  if(!props.active||props.availability!=='ready'||!returnFocus)return;
+  const frame=requestAnimationFrame(()=>root.current?.querySelector<HTMLButtonElement>(`[data-learning-target="${CSS.escape(returnFocus)}"]`)?.focus({preventScroll:true}));
+  return()=>cancelAnimationFrame(frame);
+ },[props.active,props.availability,returnFocus]);
+ const stateLabel=(state:string)=>state==='paused'?localFlowText('learningPaused'):state==='not_planned'?localFlowText('learningNotPlanned'):state==='awaiting_content'?localFlowText('prepareResources'):t('study.states.'+state);
+ const filterLabel=(value:LearningLibraryFilter)=>value==='due'?localFlowText('learningFilterDue'):value==='new'?localFlowText('learningFilterNew'):value==='paused'?localFlowText('learningFilterPaused'):t('study.filters.'+value);
+ const regions={
+  header:<>{props.notice}<button className={studyButton+' -ml-4 text-fg-secondary'} onClick={props.onBack}><ArrowLeft size={18}/>{t('study.back')}</button>
+   <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-3xl font-medium tracking-tight">{t('study.library')}</h1><p className="mt-2 text-sm text-fg-secondary">{props.routeLabel}</p></div><button className={studyButton+' bg-action-primary text-action-on-primary hover:bg-action-primary-hover'} onClick={props.onAddLearning}><Plus size={17}/>{t('study.add')}</button></div></>,
+  controls:props.items.length>0?<div className="flex flex-wrap gap-2">
+   <label className="flex min-h-11 min-w-0 basis-full items-center gap-2 rounded-control border border-border-subtle bg-surface-panel px-3 focus-within:outline-2 focus-within:outline-focus md:basis-0 md:flex-1"><Search size={17} className="shrink-0 text-fg-tertiary"/><input type="search" value={query} onChange={event=>change({learningQuery:event.target.value||undefined})} aria-label={t('study.search')} placeholder={t('study.search')} className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none"/></label>
+   <select aria-label={t('study.status')} value={filter} onChange={event=>change({learningFilter:event.target.value})} className="min-h-11 min-w-0 flex-1 md:flex-none max-w-full rounded-control border border-border-subtle bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus">{(['all','due','new','paused','active','complete'] as const).map(value=><option key={value} value={value}>{filterLabel(value)}</option>)}</select>
+   <details className={"sensa-learning-options"+(props.embedded?" sensa-learning-options-compact":"")}><summary aria-label={localFlowText('catalogOptions')} title={localFlowText('catalogOptions')}>{props.embedded?<SlidersHorizontal size={17} aria-hidden="true"/>:localFlowText('catalogOptions')}</summary><label className="mt-2 block text-sm">{localFlowText('learningSort')}<select aria-label={localFlowText('learningSort')} value={sort} onChange={event=>change({learningSort:event.target.value})} className="mt-2 min-h-11 w-full max-w-full rounded-control border border-border-subtle bg-surface-panel px-3 text-sm focus-visible:outline-2 focus-visible:outline-focus"><option value="due">{localFlowText('learningSortDue')}</option><option value="expression">{localFlowText('learningSortExpression')}</option></select></label></details>
+  </div>:null,
+  collection:<div ref={root}>{props.availability==='ready'&&<>
+   {props.items.length>0&&<p role="status" className="my-3 text-sm tabular-nums text-fg-secondary">{localFlowText('learningVisibleCount',{start:numbers.format(start),end:numbers.format(end),count:visible.length})}</p>}
+   {props.items.length>0&&<div aria-hidden="true" className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_1rem] gap-4 border-b border-border-subtle px-3 py-2 text-xs text-fg-tertiary md:grid"><span>{localFlowText('learningExpression')}</span><span>{localFlowText('learningSource')}</span><span>{localFlowText('learningState')}</span><span>{localFlowText('nextReviewLabel')}</span></div>}
+   <ul className="divide-y divide-border-subtle">{visible.slice((currentPage-1)*40,currentPage*40).map(item=><li key={item.id}><button data-learning-target={item.id} onClick={()=>{setReturnFocus(item.id);if(item.enrollmentId)props.onOpenPending(item.enrollmentId);else if(item.targetId)props.onOpenTarget(item.targetId);}} className="sensa-learning-row grid w-full min-w-0 grid-cols-[minmax(0,1fr)_1rem] items-center gap-x-4 gap-y-2 rounded-control px-3 py-4 text-start hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_1rem]">
+    <span className="min-w-0 break-words"><strong lang={item.targetLanguageTag} dir="auto" className="block font-language text-lg font-medium">{item.expression}</strong><span lang={item.supportLanguageTag} dir="auto" className="mt-1 block text-sm text-fg-secondary">{item.meaning}</span></span>
+    <span className="sensa-learning-row-meta">
+     <span className="min-w-0 break-words text-xs text-fg-secondary"><bdi>{item.sourceLabel}</bdi></span>
+     <span className="text-xs font-medium text-fg-primary">{stateLabel(item.state)}</span>
+     <span className="text-xs tabular-nums text-fg-secondary">{item.nextReviewAt?<time dateTime={item.nextReviewAt}>{new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeStyle:'short'}).format(new Date(item.nextReviewAt))}</time>:<span className="hidden md:block" aria-label={localFlowText('learningNotScheduled')}>—</span>}</span>
+    </span>
+    <ArrowRight size={16} className="col-start-2 row-start-1 shrink-0 text-fg-tertiary md:col-auto md:row-auto"/>
+   </button></li>)}</ul>
+   {visible.length>40&&<nav aria-label={localFlowText('catalogPagination')} className="my-5 flex flex-wrap items-center gap-3"><button className={studyButton} disabled={currentPage===1} onClick={()=>props.onParamsChange({...props.params,learningPage:String(currentPage-1)})}>{t('directLearning.previous',{ns:'learning'})}</button><span className="text-sm tabular-nums">{numbers.format(currentPage)} / {numbers.format(pages)}</span><button className={studyButton} disabled={currentPage===pages} onClick={()=>props.onParamsChange({...props.params,learningPage:String(currentPage+1)})}>{t('directLearning.next',{ns:'learning'})}</button></nav>}
+   {!visible.length&&<p className="py-12 text-center text-sm text-fg-tertiary">{t(props.items.length?'study.noMatches':'study.empty')}</p>}
+  </>}</div>
+ };
+ return props.embedded?<section className="sensa-learning-list" aria-label={t('study.library')}>{props.notice}{regions.controls}{regions.collection}</section>:<SensaCollectionBrowserLayout id="s-learning-library" measure="wide" className={`screen sensa-learning-list z-20 ${props.active?'active':'invisible pointer-events-none'}`} regions={regions}/>;
+}

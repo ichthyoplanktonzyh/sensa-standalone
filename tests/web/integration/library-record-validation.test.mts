@@ -1,6 +1,7 @@
 /** Complete integrity rules through decoded rows, lazy wire references and a
  * real SQLite/Wasm candidate. No OPFS, staged restore or capacity claim. */
 import {afterAll,beforeAll,expect,test,vi} from 'vitest';
+import {stableUuid,canonicalJsonDigest} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
@@ -12,13 +13,24 @@ import {libraryRowsReader,libraryRecordViews} from '../../../apps/web/src/data/l
 import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,type LibraryReplicaEntry} from '../../../apps/web/src/data/library/replication/libraryReplica';
 import {sqliteLibraryCandidate,type LibraryCandidateRecord} from '../support/semanticWorldRecordFixture.mts';
 import type {BackupRows} from '../../../apps/web/src/data/library/backupValidation';
+import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
+import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
+import {SqliteSyncDependencies,syncAdmission} from '../../../apps/web/src/data/library/sqliteSyncDependencies';
+import {admitLearningDelta} from '../../../apps/web/src/data/library/learningDeltaAdmission';
+import {sealedRecordReader} from '../../../apps/web/src/data/library/sealedRecordReader';
+import {observeReplicaWork} from '../../../apps/web/src/data/library/replicaWork';
+import {backupEqual} from '../../../apps/web/src/data/library/backupCodec';
+import {libraryRestoreValidationVersion} from '../../../apps/web/src/data/library/replication/libraryReplicaValidation';
+import type {LibraryRecordReader} from '../../../apps/web/src/data/library/libraryRecordReader';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined,location:new URL('http://library-record-reader.fixture.invalid/')});
 const database=await useNodeLearningCapacityStorage();afterAll(()=>database.close());
-const {validateBackupRows,validateLibraryRecords,validateLibraryRecordsCooperatively,validateLibraryRecordSteps}=await import('../../../apps/web/src/data/library/backupValidation');
+const {validateBackupRows,validateLibraryRecords,validateLibraryRecordsCooperatively,validateLibraryRecordSteps,validateRestoreBackupRows,validateLibraryRestoreRecords,validateLibraryRestoreRecordsCooperatively,validateLibrarySyncRecords}=await import('../../../apps/web/src/data/library/backupValidation');
 const {validateLibraryReplica,validateLibraryReplicaCooperatively}=await import('../../../apps/web/src/data/library/replication/libraryReplicaValidation');
 const context=sensaPinnedLanguageContext(defaultSensaLanguageRoute),id=()=>crypto.randomUUID();
-let source:BackupRows,identity:LibraryIdentity;
+let source:BackupRows,baseline:BackupRows,identity:LibraryIdentity;
+const snapshot=()=>readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)]))) as BackupRows);
+const replicated=(rows:BackupRows):BackupRows=>Object.fromEntries(libraryTables.map(table=>[table,rows[table].filter(row=>isReplicatedLibraryEntry(table,row.key)).map(row=>({key:row.key,value:normalizeLibraryReplicaEntry({...structuredClone(row),table:table as LibraryReplicaEntry['table']},identity).value}))])) as BackupRows;
 const action=async(kind:'reveal'|'rate')=>{
  const runtime=(await learningSystem.read({kind:'runtime',languageContext:context,clock:Date.now()})).runtime!;
  if(runtime.kind!=='lightweight')throw Error('Expected lightweight learning');
@@ -39,12 +51,109 @@ beforeAll(async()=>{
    await learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext:context,dailyLimit:20});
    await action('reveal');const runId=await action('rate');await learningSystem.execute({kind:'finish',operationId:id(),runId});vi.setSystemTime(Date.now()+1000);
   }
+  baseline=replicated(await snapshot());
   const target=await readLibrary(tx=>tx.get<any>('learningTargets',targets[0]!));vi.setSystemTime(target.memory.dueAt);
   await learningSystem.execute({kind:'start',operationId:id(),targetId:targets[0]!,languageContext:context,dailyLimit:20,sessionIntent:'review_only'});
   await action('reveal');const runId=await action('rate');await learningSystem.execute({kind:'finish',operationId:id(),runId});
   source=await readLibrary(async tx=>Object.fromEntries(await Promise.all(libraryTables.map(async table=>[table,await tx.entries(table)]))) as BackupRows);
   source.packageCache=[];source.operations=[];
  }finally{vi.useRealTimers();}
+});
+const deltaChanges=(before:BackupRows,after:BackupRows)=>libraryTables.flatMap(table=>{
+ const old=new Map(before[table].map(row=>[row.key,row.value])),current=new Map(after[table].map(row=>[row.key,row.value]));
+ return [...new Set([...old.keys(),...current.keys()])].filter(key=>!backupEqual(old.get(key),current.get(key))).map(key=>({table:table as LibraryReplicaEntry['table'],key,...(!current.has(key)?{deleted:true}:{})}));
+});
+async function deltaFixture(after=replicated(source),prior=baseline){
+ const sqlite=await sqlite3InitModule(),raw=new sqlite.oo1.DB(':memory:','c'),storage=new SqliteRecordDatabase(sqlite,raw,'memory');storage.initialize();
+ const dependencies=new SqliteSyncDependencies(raw),admission=syncAdmission();
+ for(const row of records(prior))dependencies.observe(admission,row.table,row.key,JSON.stringify(encodeBackupValue(row.value)),row.value);
+ const owner={subject:id(),accountId:id()},state={owner,incarnation:'delta-fixture',revision:1,checkpointVersion:7 as const,restoreValidationVersion:libraryRestoreValidationVersion,syncedLocalRevision:0,status:'synced' as const};
+ dependencies.certify(admission,state,identity,0);const certificate=dependencies.certificate()!;expect(certificate).toBeDefined();
+ const alive=()=>dependencies.assert(certificate),beforeReader=libraryRowsReader(prior),afterReader=libraryRowsReader(after);
+ const controlled=(reader:LibraryRecordReader):LibraryRecordReader=>({...reader,get:(table,key)=>{alive();return reader.get(table,key);},has:(table,key)=>{alive();return reader.has(table,key);}});
+ return {raw,dependencies,certificate,alive,base:controlled(beforeReader),remote:controlled(afterReader),changes:deltaChanges(prior,after),close:()=>{dependencies.close();storage.close();}};
+}
+test('eight independent deltas use one bounded saved-state window and prepare metadata without rereading bodies',async()=>{
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-10-20T00:00:00Z');
+ const targets:string[]=[];
+ const settle=async(targetId:string)=>{const target=await readLibrary(tx=>tx.get<any>('learningTargets',targetId));vi.setSystemTime(Math.max(Date.now()+1000,target.memory?.dueAt.getTime()??0));await learningSystem.execute({kind:'start',operationId:id(),targetId,languageContext:context,dailyLimit:20});await action('reveal');const runId=await action('rate');await learningSystem.execute({kind:'finish',operationId:id(),runId});};
+ let prior:BackupRows,after:BackupRows;
+ try{
+  for(let i=0;i<8;i++){const pack=portablePackageFixture({packageId:id(),expression:`window-${i}`}),installed=await contentSupplySystem.execute({kind:'install_portable_package',bytes:pack.bytes,expectedArchiveDigest:pack.archiveDigest});targets.push((await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:installed.key,languageContext:context}))[0]!);await settle(targets.at(-1)!);}
+  prior=replicated(await snapshot());for(const target of targets)await settle(target);after=replicated(await snapshot());
+ }finally{vi.useRealTimers();}
+ expect(validateLibraryRestoreRecords(libraryRowsReader(after!))).toMatchObject({id:identity.id,learnerId:identity.learnerId});
+ const fixture=await deltaFixture(after!,prior!);let held=0,peak=0,physical=0;const work:Record<string,number>={},componentLoads=new Map<string,number>();let inWindow=false;
+ const reader=(rows:BackupRows,side:string)=>{const texts=new Map([...records(rows)].map(row=>[JSON.stringify([row.table,row.key]),JSON.stringify(encodeBackupValue(row.value))]));return sealedRecordReader({cloneDecoded:true,alive:fixture.alive,beforePage:fixture.alive,get(table,key){physical++;const identity=JSON.stringify([table,key]);const text=texts.get(identity);if(inWindow&&text!==undefined){const k=side+identity;componentLoads.set(k,(componentLoads.get(k)??0)+1);}return text===undefined?undefined:{record_key:key,value_json:text};},has:(table,key)=>texts.has(JSON.stringify([table,key])),keys(){return [];},rows(){return [];},plain(_table,row){return row.value_json;},missing():never{throw Error('missing fixture row');}});};
+ const base=reader(prior!,'base'),remote=reader(after!,'remote');
+ observeReplicaWork((kind,n)=>{work[kind]=(work[kind]??0)+n;if(kind==='window.heldBytes'){held+=n;peak=Math.max(peak,held);}});
+ try{
+  const prepared=await admitLearningDelta({...fixture,base,remote,window(){inWindow=true;const a=base.beginWindow(),b=remote.beginWindow();return ()=>{b();a();inWindow=false;};},canonical:(side,table,key)=>(side==='base'?base:remote).canonical(table,key),consume:async()=>{expect(held).toBeGreaterThan(0);}});
+  expect(work['admission.windowOpen']).toBe(1);expect(work['admission.windowRelease']).toBe(1);expect(held).toBe(0);expect(peak).toBeLessThanOrEqual(8*1024*1024);expect(work['window.bypass']??0).toBe(0);
+  const historyLoads=[...componentLoads].filter(([key])=>/learningTargets|learningRuns|learningEvents|studyScopes|learningSessions/.test(key));expect(historyLoads.length).toBeGreaterThan(40);expect(historyLoads.every(([,count])=>count===1)).toBe(true);
+  const before=physical;expect(await prepared.prepare()).toEqual(fixture.changes.map(({table,key})=>({table,key})));const metadata=await prepared.prepare();metadata[0]!.key='caller mutation';expect((await prepared.prepare())[0]!.key).not.toBe('caller mutation');expect(physical).toBe(before);
+  // A valid shared Scope joins all affected histories without adding support
+  // rows to admission. Its predicate result still matches the full oracle.
+  const shared=structuredClone(after!),oldRuns=new Set(prior!.learningRuns.map(row=>row.key)),newRuns=shared.learningRuns.filter(row=>!oldRuns.has(row.key)),replaced=new Set(newRuns.map(row=>row.value.studyScopeRevisionId));
+  const selectedScopes=shared.studyScopes.filter(row=>replaced.has(row.key));expect(selectedScopes).toHaveLength(8);
+  const scope=structuredClone(selectedScopes[0]!.value);scope.members=selectedScopes.flatMap(row=>row.value.members);scope.enrollments=[...new Map(selectedScopes.flatMap(row=>row.value.enrollments).map((row:any)=>[row.id,row])).values()];
+  const {id:discardId,createdAt,createdByOperationId,definitionDigest:discardDigest,...body}=scope;scope.definitionDigest=canonicalJsonDigest(body);scope.id=stableUuid(`local-study-scope:${createdByOperationId}:${scope.definitionDigest}`);shared.studyScopes.push({key:scope.id,value:scope});
+  for(const row of newRuns)row.value.studyScopeRevisionId=scope.id;
+  const oldSessions=new Set(prior!.learningSessions.map(row=>row.key));for(const row of shared.learningSessions)if(!oldSessions.has(row.key)&&replaced.has(row.value.scopeRevisionId))row.value.scopeRevisionId=scope.id;
+  expect(validateLibraryRestoreRecords(libraryRowsReader(shared))).toMatchObject({id:identity.id});
+  const connected=await deltaFixture(shared,prior!);try{const start=work['admission.windowOpen']!;const result=await admitLearningDelta(connected);expect(work['admission.windowOpen']!-start).toBe(1);expect(await result.prepare()).toEqual(connected.changes.map(({table,key})=>({table,key})));}finally{connected.close();}
+  // The same shared Scope can support one changed participant without loading
+  // the other members' Run/Event histories.
+  const single=structuredClone(prior!),selectedRun=newRuns[0]!.value,selectedTarget=selectedRun.targetId;
+  single.learningTargets.find(row=>row.key===selectedTarget)!.value=structuredClone(shared.learningTargets.find(row=>row.key===selectedTarget)!.value);
+  single.studyScopes.push({key:scope.id,value:scope});single.learningRuns.push({key:selectedRun.id,value:selectedRun});
+  single.learningEvents.push(...shared.learningEvents.filter(row=>row.value.runId===selectedRun.id));
+  single.learningSessions.push(...shared.learningSessions.filter(row=>row.value.runIds.includes(selectedRun.id)));
+  expect(validateLibraryRestoreRecords(libraryRowsReader(single))).toMatchObject({id:identity.id});
+  const only=await deltaFixture(single,prior!);try{const admitted=await admitLearningDelta(only);expect(admitted.evidence.runs).toBe(1);expect(admitted.evidence.events).toBe(2);expect(admitted.evidence.targets).toBe(1);expect(scope.members.length).toBe(8);}finally{only.close();}
+
+ }finally{observeReplicaWork(undefined);fixture.close();}
+});
+
+test('changed Event closure reads each side once rather than scanning the overlay for every related Run',async()=>{
+ const after=replicated(source),fixture=await deltaFixture(after);let phase='',beforeEvents=0,afterEvents=0;
+ const count=(reader:LibraryRecordReader,side:'before'|'after'):LibraryRecordReader=>({...reader,get(table,key){if(phase==='directReferences'&&table==='learningEvents'){if(side==='before')beforeEvents++;else afterEvents++;}return reader.get(table,key);}});
+ try{
+  expect(validateLibraryRestoreRecords(libraryRowsReader(after))).toMatchObject({id:identity.id,learnerId:identity.learnerId});
+  const result=await admitLearningDelta({...fixture,base:count(fixture.base,'before'),remote:count(fixture.remote,'after'),phase:name=>{phase=name;}});
+  const changedEvents=fixture.changes.filter(row=>row.table==='learningEvents').length;
+  expect(changedEvents).toBe(2);expect(result.evidence.runs).toBe(1);expect(result.evidence.events).toBe(2);
+  expect(beforeEvents).toBe(0);expect(afterEvents).toBeGreaterThanOrEqual(changedEvents);
+  expect(await result.prepare()).toEqual(fixture.changes.map(({table,key})=>({table,key})));
+ }finally{fixture.close();}
+});
+test('redundant immutable Event puts preserve both baseline and overlay reachability without duplicate edges',async()=>{
+ const fixture=await deltaFixture();try{
+  const targetId=source.learningEvents.find(row=>!baseline.learningEvents.some(prior=>prior.key===row.key))!.value.targetId;
+  const old=baseline.learningEvents.find(row=>row.value.targetId===targetId)!;
+  const result=await admitLearningDelta({...fixture,changes:[...fixture.changes,{table:'learningEvents',key:old.key}]});
+  expect(result.evidence.runs).toBe(2);expect(result.evidence.events).toBe(3);
+  expect((await result.prepare()).some(row=>row.key===old.key)).toBe(false);
+ }finally{fixture.close();}
+});
+for(const fault of ['delete-old-event','rebind-old-run','retarget-old-event','missing-changed-event','missing-event-run','cross-target-event'] as const)test(`Event adjacency retains fail-closed admission for ${fault}`,async()=>{
+ const after=replicated(source),old=baseline.learningEvents[0]!,fresh=after.learningEvents.find(row=>!baseline.learningEvents.some(prior=>prior.key===row.key))!;
+ if(fault==='delete-old-event')after.learningEvents=after.learningEvents.filter(row=>row.key!==old.key);
+ else if(fault==='rebind-old-run')after.learningEvents.find(row=>row.key===old.key)!.value.runId=fresh.value.runId;
+ else if(fault==='retarget-old-event')after.learningEvents.find(row=>row.key===old.key)!.value.targetId=after.learningTargets.find(row=>row.key!==old.value.targetId)!.key;
+ else if(fault==='missing-changed-event')after.learningEvents=after.learningEvents.filter(row=>row.key!==fresh.key);
+ else if(fault==='missing-event-run')fresh.value.runId=id();
+ else fresh.value.targetId=after.learningTargets.find(row=>row.key!==fresh.value.targetId)!.key;
+ const fixture=await deltaFixture(after);try{
+  const work=admitLearningDelta({...fixture,changes:fault==='missing-changed-event'?[...fixture.changes,{table:'learningEvents',key:fresh.key}]:fixture.changes});
+  await expect(work).rejects.toThrow('libraryBackup.errors.inconsistent');
+  expect(()=>validateLibraryRestoreRecords(libraryRowsReader(after))).toThrow();
+ }finally{fixture.close();}
+});
+test('Event adjacency construction and consumption keep checking the certified baseline generation',async()=>{
+ for(const at of ['eligibility','directReferences','savedAdmission']){const fixture=await deltaFixture();try{
+  await expect(admitLearningDelta({...fixture,phase(name){if(name===at)fixture.raw.exec('DELETE FROM sensa_sync_dependency_edges_v1');}})).rejects.toThrow('library_sync_local_changed');
+ }finally{fixture.close();}}
 });
 function* records(rows:BackupRows):Generator<LibraryCandidateRecord>{for(const table of libraryTables)for(const row of rows[table])yield {table,...row};}
 const corrupt=(change:(rows:BackupRows)=>void)=>{const rows=structuredClone(source);change(rows);return rows;};
@@ -53,7 +162,7 @@ const cases=[
  {name:'a forged final memory revision',change:(rows:BackupRows)=>{rows.learningTargets[0]!.value.memoryRevision++;}},
  {name:'a missing Action from the first Run',change:(rows:BackupRows)=>{rows.learningEvents.shift();}},
  {name:'an orphan Action outside the replay inventory',change:(rows:BackupRows)=>{rows.learningEvents[0]!.value.runId=id();}},
- {name:'a changed historical evaluation result',change:(rows:BackupRows)=>{const event=rows.learningEvents.find(row=>row.value.detail.transition.retention)!;event.value.detail.transition.retention.nextDueAt='2099-01-01T00:00:00.000Z';}},
+ {name:'a changed historical evaluation result',change:(rows:BackupRows)=>{const event=rows.learningEvents.find(row=>row.value.detail.formalEvaluation)!;event.value.detail.formalEvaluation.evaluation.result={historicalAlgorithmDisagreement:true};}},
  {name:'a dangling Session scope',change:(rows:BackupRows)=>{rows.learningSessions[0]!.value.scopeRevisionId=id();}},
 ];
 for(const sample of cases)test(`complete row and indexed candidate rules agree: ${sample.name}`,async()=>{
@@ -153,5 +262,101 @@ test('a genuine long Run checks and replays individual Action bodies between coo
   // a body-fetch locality assertion, not a whole-process heap/latency claim.
   expect(maxReads).toBeLessThanOrEqual(2);
   expect(await validateLibraryRecordsCooperatively(indexed)).toEqual(identity);
+ }finally{vi.useRealTimers();}
+});
+
+for(const sample of cases)test(`saved-state restoration retains structural rejection: ${sample.name}`,async()=>{
+ const rows=sample.change?corrupt(sample.change):structuredClone(source);
+ const accepted=sample.change===null||sample.name==='a changed historical evaluation result';
+ const candidate=await sqliteLibraryCandidate(records(rows));
+ try{for(const reader of [libraryRowsReader(rows),candidate.reader]){
+  if(accepted)expect(validateLibraryRestoreRecords(reader)).toEqual(identity);
+  else expect(()=>validateLibraryRestoreRecords(reader)).toThrow();
+ }}finally{candidate.close();}
+});
+test('saved Memory is authoritative at restore; explicit history audit still detects algorithm disagreement',async()=>{
+ const rows=corrupt(rows=>{rows.learningTargets[0]!.value.memory.fsrsStability+=0.125;});
+ const original=structuredClone(rows);
+ expect(validateRestoreBackupRows(rows)).toEqual(identity);
+ expect(await validateLibraryRestoreRecordsCooperatively(libraryRowsReader(rows))).toEqual(identity);
+ expect(rows).toEqual(original);
+ expect(()=>validateBackupRows(rows)).toThrow('libraryBackup.errors.inconsistent');
+});
+for(const mutation of [
+ (rows:BackupRows)=>{rows.learningTargets[0]!.value.memory.fsrsCardState='invented';},
+ (rows:BackupRows)=>{rows.learningTargets[0]!.value.memory.dueAt=new Date(NaN);},
+ (rows:BackupRows)=>{rows.learningTargets[0]!.value.memory.fsrsStability=-1;},
+ (rows:BackupRows)=>{rows.learningRuns[0]!.value.protocolState.value.phase='invented';},
+ (rows:BackupRows)=>{rows.learningRuns[0]!.value.participants[rows.learningRuns[0]!.value.targetId].progress.progressEpoch=-1;},
+ (rows:BackupRows)=>{rows.learningEvents[0]!.value.detail.formalEvaluation.attempt.learnerUserId=id();},
+])test(`restore rejects invalid saved state shape ${mutation.toString()}`,()=>expect(()=>validateRestoreBackupRows(corrupt(mutation))).toThrow());
+
+test('a well-formed historical scheduling contradiction restores verbatim and remains detectable by audit',()=>{
+ const rows=corrupt(rows=>{const event=rows.learningEvents.find(row=>row.value.detail.transition.retention?.kind==='memory_outcome')!;event.value.detail.transition.retention.schedulingDecision.nextDueAt='2099-01-01T00:00:00.000Z';});
+ expect(validateRestoreBackupRows(rows)).toEqual(identity);
+ expect(()=>validateBackupRows(rows)).toThrow('libraryBackup.errors.inconsistent');
+});
+
+for(const mutation of ['run-identity','protocol-version','checkpoint-set'] as const)test(`restore rejects a mismatched inner lightweight progress ${mutation}`,()=>{
+ const rows=corrupt(rows=>{const run=rows.learningRuns.find(row=>row.value.purpose==='initial_learning')!.value,progress=run.protocolState.value.initial.progress;
+  if(mutation==='run-identity')progress.protocolRunId=id();
+  if(mutation==='protocol-version')progress.protocolVersion='unavailable';
+  if(mutation==='checkpoint-set')progress.checkpointCredits.extra={status:'unresolved',creditedInEpoch:null,lastObservationId:null};
+ });
+ expect(()=>validateRestoreBackupRows(rows)).toThrow('libraryBackup.errors.inconsistent');
+});
+
+test('ordinary restoration never calls the historical protocol reducer or settlement scheduler; audit still does',async()=>{
+ const protocol=await import('../../../apps/web/src/learning/runtime/localProtocol'),settlement=await import('../../../apps/web/src/data/library/learningSettlement');
+ const reducer=vi.spyOn(protocol,'reduceLocalProtocolAction');
+ const scheduler=vi.spyOn(settlement,'applyLocalProtocolTransition');
+ try{
+  expect(validateRestoreBackupRows(structuredClone(source))).toEqual(identity);expect(reducer).not.toHaveBeenCalled();expect(scheduler).not.toHaveBeenCalled();
+  expect(validateBackupRows(structuredClone(source))).toEqual(identity);expect(reducer).toHaveBeenCalled();expect(scheduler).toHaveBeenCalled();
+ }finally{reducer.mockRestore();scheduler.mockRestore();}
+});
+
+test('own-account saved-state sync accepts old business disagreement; strict import and audit retain their checks',()=>{
+ const rows=corrupt(rows=>{rows.learningTargets[0]!.value.memoryRevision++;rows.learningEvents.shift();});
+ const before=structuredClone(rows);expect(validateLibrarySyncRecords(libraryRowsReader(rows))).toEqual(identity);expect(rows).toEqual(before);
+ expect(()=>validateLibraryRestoreRecords(libraryRowsReader(rows))).toThrow();expect(()=>validateBackupRows(rows)).toThrow();
+});
+for(const location of ['target','participant'] as const)test(`saved sync rejects a missing ${location} commitment owner`,()=>{
+ const rows=corrupt(rows=>{if(location==='target')rows.learningTargets[0]!.value.committedPolicy.committedByProtocolRunId=id();else rows.learningRuns[0]!.value.participants[rows.learningRuns[0]!.value.targetId].policyCommitment.committedByProtocolRunId=id();});
+ expect(()=>validateLibrarySyncRecords(libraryRowsReader(rows))).toThrow('libraryBackup.errors.inconsistent');
+});
+
+test('one review reads the same direct inventory after two and twenty prior reviews',async()=>{
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-10-20T00:00:00Z');
+ const work:Record<string,number>={},results:Array<{prior:number;base:string[];remote:string[];work:Record<string,number>;counts:any}>=[];
+ const fixture=portablePackageFixture({packageId:id(),expression:'bounded-saved-state-history'}),pack=await contentSupplySystem.execute({kind:'install_portable_package',bytes:fixture.bytes,expectedArchiveDigest:fixture.archiveDigest});
+ const [targetId]=await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:pack.key,languageContext:context});
+ const settle=async()=>{const target=await readLibrary(tx=>tx.get<any>('learningTargets',targetId!));vi.setSystemTime(Math.max(Date.now()+1000,target.memory?.dueAt.getTime()??0));await learningSystem.execute({kind:'start',operationId:id(),targetId:targetId!,languageContext:context,dailyLimit:20});await action('reveal');const runId=await action('rate');await learningSystem.execute({kind:'finish',operationId:id(),runId});};
+ try{
+  for(let n=0;n<=20;n++){
+   const before=n===2||n===20?replicated(await snapshot()):undefined;await settle();if(!before)continue;
+   const candidate=await deltaFixture(replicated(await snapshot()),before),base=new Set<string>(),remote=new Set<string>();
+   const reader=(source:LibraryRecordReader,keys:Set<string>):LibraryRecordReader=>({...source,get(table,key){keys.add(JSON.stringify([table,key]));return source.get(table,key);},entries(){throw Error('whole snapshot enumeration');}});
+   for(const key of Object.keys(work))delete work[key];observeReplicaWork((kind,count)=>{work[kind]=(work[kind]??0)+count;});
+   try{const admitted=await admitLearningDelta({...candidate,base:reader(candidate.base,base),remote:reader(candidate.remote,remote)});expect(await admitted.prepare()).toEqual(candidate.changes.map(({table,key})=>({table,key})));results.push({prior:n,base:[...base],remote:[...remote],work:{...work},counts:admitted.evidence});}
+   finally{observeReplicaWork(undefined);candidate.close();}
+  }
+  expect(results).toHaveLength(2);expect(results.map(row=>row.counts.runs)).toEqual([1,1]);expect(results.map(row=>row.counts.events)).toEqual([2,2]);
+  expect(results[0]!.base.length).toBe(results[1]!.base.length);expect(results[0]!.remote.length).toBe(results[1]!.remote.length);
+  console.log(JSON.stringify({savedSyncDirectWork:results.map(row=>({priorReviews:row.prior,baselinePointKeys:row.base.length,candidatePointKeys:row.remote.length,work:row.work,counts:row.counts}))}));
+  for(const row of results){expect(row.work['admission.savedRun']).toBe(1);expect(row.work['admission.savedEvent']).toBe(2);expect(row.counts.baselineBuildRecords).toBe(0);}
+ }finally{observeReplicaWork(undefined);vi.useRealTimers();}
+});
+
+
+test('an updated Run admits witnessed successor pins and rejects an unwitnessed future presentation',async()=>{
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-10-20T00:00:00Z');
+ try{
+  const pack=portablePackageFixture({packageId:id(),expression:'direct-successor-witness'}),installed=await contentSupplySystem.execute({kind:'install_portable_package',bytes:pack.bytes,expectedArchiveDigest:pack.archiveDigest});
+  const [targetId]=await learningSystem.execute({kind:'enroll_package',operationId:id(),packageKey:installed.key,languageContext:context});
+  await learningSystem.execute({kind:'start',operationId:id(),targetId:targetId!,languageContext:context,dailyLimit:20});const before=replicated(await snapshot());const runId=await action('reveal'),after=replicated(await snapshot());
+  const valid=await deltaFixture(after,before);try{expect(await (await admitLearningDelta(valid)).prepare()).toEqual(valid.changes.map(({table,key})=>({table,key})));}finally{valid.close();}
+  const broken=structuredClone(after),run=broken.learningRuns.find(row=>row.key===runId)!.value,p=run.participants[targetId!];p.presentedMaterials['future:unwitnessed']=p.material;p.presentationOrder.push('future:unwitnessed');run.revision++;
+  const invalid=await deltaFixture(broken,before);try{await expect(admitLearningDelta(invalid)).rejects.toThrow('libraryBackup.errors.inconsistent');}finally{invalid.close();}
  }finally{vi.useRealTimers();}
 });

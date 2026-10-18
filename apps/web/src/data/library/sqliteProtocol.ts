@@ -1,3 +1,5 @@
+import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
+import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 /** Internal protocol between the local-library module and its SQLite Worker. */
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
@@ -14,7 +16,7 @@ export type {PracticeExpressionQuery,PracticeExpressionPage} from './practiceExp
 import type {PracticeExpressionQuery} from './practiceExpressionProjection';
 import type {RegistrySelectionQuery,RegistrySelection} from './semanticRegistrySelection';
 import type {MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
-import type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
+import type {WorldGraphQuery,WorldGraphRead,WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import type {
   PortableMediaBlob,
   PortableMediaStorageDiagnostics,
@@ -24,10 +26,12 @@ import type {
 export const sqliteLibraryFile = "/sensa-local-library-v12.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v12";
 /** First supported production-user baseline; prototype formats stay unsupported. */
-export const sqliteLibraryBaselineVersion = 10;
-export const sqliteLibrarySchemaVersion = 18;
+export const sqliteLibraryBaselineVersion = 19;
+export const sqliteLibrarySchemaVersion = 19;
+/** Durable physical data; every other application table is a derived cache. */
+export const sqliteSourceDataTables=new Set(['sensa_records','sensa_record_tombstones','sensa_sync_base','sensa_shared_record_content','sensa_shared_record_content_owners','sensa_portable_media','sensa_portable_package_media']);
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 58;
+export const sqliteCoordinatorProtocolVersion = 76;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -53,6 +57,7 @@ export const sqliteLibraryTables = [
   "annotations",
   "semanticState",
   "semanticMeanings",
+  "semanticContexts",
   "semanticRegistry",
   "semanticInbox",
   "semanticDrafts",
@@ -63,6 +68,7 @@ export const sqliteLibraryTables = [
 export type SqliteLibraryTable = (typeof sqliteLibraryTables)[number];
 
 export type SqliteMutation = {
+  initialPublication?:string;
   /** Present only for learner-content transactions. State/probe writes do not
    * enter the incremental synchronization journal. */
   contentRevision?: number;
@@ -73,13 +79,16 @@ export type SqliteMutation = {
   portablePackages?:PortablePackageMediaWrite[];
   /** Atomic replacement of the last server-confirmed checkpoint baseline. */
   syncBaseReplacement?: SqliteSyncBaseEntry[];
+  /** Trusted sync caller has admitted these exact wire bodies and refs. */
+  syncBaseValidated?: true;
   /** Confirmed local publication: replace only the affected baseline records. */
   syncBasePatch?:{puts:SqliteSyncBaseEntry[];deletes:Array<{table:SqliteLibraryTable;key:string}>};
   /** Fresh population or a Worker-prepared update of a confirmed checkpoint.
    * Bodies stay in SQLite; COMMIT rechecks the owner, revision and private plan. */
-  replicaCandidateRestore?:{id:string;tables:SqliteLibraryTable[];update?:import('./replicaCandidateProtocol').ReplicaCandidateUpdate};
+  replicaCandidateRestore?:{id:string;tables:SqliteLibraryTable[];update?:import('./replicaCandidateProtocol').ReplicaCandidateUpdate|import('./replicaCandidateProtocol').ReplicaCandidateRebase};
 };
 
+export type SqliteChangePage={after?:{contentRevision:number;table:SqliteLibraryTable;key:string};limit:number};
 export type SqliteRecordChange = {
   table: SqliteLibraryTable;
   key: string;
@@ -96,7 +105,15 @@ export type SqliteSyncBaseEntry = {
 export type SqliteSyncBaseReference=Pick<SqliteSyncBaseEntry,'table'|'key'|'blockRefs'>;
 
 export type SqliteWorkerRequest =
-  | { id: number; kind: "initialize"; namespace?:string|null }
+  | {id:number;kind:'snapshotSource';request:import('./sqliteSnapshotSource').SnapshotSourceRequest}
+  | { id: number; kind: "initialize"; namespace?:string|null;requireExisting?:boolean;privateFreshRestore?:boolean }
+  | {id:number;kind:'initializeSnapshot';namespace:string;snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot}
+  | {id:number;kind:'exportLocalSnapshot';expectedRevision:number}
+  | {id:number;kind:'exportOwnCloudSnapshot';fence:import('./replicaCandidateProtocol').ReplicaCandidateFence}
+  | {id:number;kind:'initializeOwnCloudSnapshot';namespace:string;snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot;binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'];reconnectDeviceId?:string}
+  | {id:number;kind:'initializeNativeCloudSnapshot';namespace:string;source:File;binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'];reconnectDeviceId?:string}
+  | {id:number;kind:'ownCloudBaselinePage';page:import('@sensa/contracts/sensa').LibrarySyncSnapshotPageResult}
+  | {id:number;kind:'installPrivateRestore';mutation:SqliteMutation}
   | { id: number; kind: "close" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }
@@ -105,14 +122,17 @@ export type SqliteWorkerRequest =
   | {id:number;kind:'existingRecordKeys';table:SqliteLibraryTable;keys:string[]}
   | { id:number;kind:'packageCacheProjection';query:PackageCacheProjectionQuery }
   | {id:number;kind:'meaningLookup';query:string}
+  | {id:number;kind:'contextBrowse';query:ContextBrowseQuery}
+  | {id:number;kind:'worldGraph';query:WorldGraphQuery}
   | {id:number;kind:'worldBrowse';query:WorldBrowseQuery}
   | {id:number;kind:'worldSceneMeaning';sceneId:string}
   | {id:number;kind:'registrySelection';query:RegistrySelectionQuery}
+  | {id:number;kind:'personalEnrollmentIndex'}
   | {id:number;kind:'learningSemanticMemory';targetId?:string}
   | {id:number;kind:'worldLearningChoices';query:WorldLearningChoiceQuery}
   | {id:number;kind:'practiceExpressions';query:PracticeExpressionQuery}
   | {id:number;kind:'existingJourneyIdentities';ids:string[]}
-  | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[] }
+  | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[];page?:SqliteChangePage }
   | { id:number;kind:'hasChangesSince';contentRevision:number;tables:SqliteLibraryTable[] }
   | { id: number; kind: "syncBaseEntries"; keys?: Array<{ table: SqliteLibraryTable; key: string }> }
   | {id:number;kind:'syncBaseReferences'}
@@ -120,6 +140,7 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "estimateRecordBytes"; tables: SqliteLibraryTable[] }
   | { id: number; kind: "homeLearningProjection"; languageRouteId: string;clock:number }
   | { id:number;kind:'learningHistoryPage';query:LearningHistoryRequest }
+  | {id:number;kind:'learningSchedulePage';query:LearningScheduleQuery}
   | {id:number;kind:'learningManagementSummary';query:LearningManagementSummaryQuery}
   | {id:number;kind:'runtimeLearningCandidates';query:RuntimeLearningCandidateQuery}
   | {id:number;kind:'studyScopeMember';scopeRevisionId:string;targetId:string}
@@ -133,7 +154,7 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "portableMedia"; sha256: string }
   | { id: number; kind: "portableMediaDiagnostics" }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
-  | {id:number;kind:'replicaCandidate';request:ReplicaCandidateRequest}
+  | {id:number;kind:'replicaCandidate';request:ReplicaCandidateRequest;reportProgress?:boolean}
   | { id: number; kind: "diagnostics";verifyIntegrity?:boolean };
 
 export type SqliteWorkerInput = Exclude<SqliteWorkerRequest,{id:number;kind:'close'}> extends infer Request
@@ -146,9 +167,12 @@ export type SqliteWorkerResult =
   | { id: number; ok: true; value: unknown }
   | { id: number; ok: false; error: string };
 
+export type SqliteWorkerProgress={id:number;kind:'replicaCandidateProgress';progress:import('./replicaCandidateProtocol').ReplicaCandidateProgress};
+export type SqliteWorkerResponse=SqliteWorkerResult|SqliteWorkerProgress;
+
 export type {HomeLearningStorageProjection};
 export type {MeaningLookupResult};
-export type {WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage};
+export type {WorldGraphQuery,WorldGraphRead,WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage};
 
 export type SqliteStorageDiagnostics = {
   integrityCheck?:Readonly<{status:'ok';checkedAt:string;durationMs:number}>;
@@ -298,7 +322,7 @@ CREATE INDEX IF NOT EXISTS sensa_content_attempts_task_created
   ON sensa_content_attempts(task_id,created_at);
 CREATE TABLE IF NOT EXISTS sensa_media_references(
   media_id TEXT NOT NULL,
-  owner_table TEXT NOT NULL CHECK(owner_table IN ('semanticMeanings','semanticInbox')),
+  owner_table TEXT NOT NULL CHECK(owner_table IN ('semanticContexts','semanticInbox')),
   owner_key TEXT NOT NULL,
   PRIMARY KEY(media_id,owner_table,owner_key)
 ) WITHOUT ROWID;

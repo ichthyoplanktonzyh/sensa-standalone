@@ -209,7 +209,7 @@
     "feedback": "反饋與內容糾錯",
     "feedbackText": "產品回饋、內容修正、帳號恢復或刪除問題均可聯絡支援。僅在確有幫助時附上診斷檔案；檔案包含執行狀態和數量，不包含學習內容、電子郵件地址、記錄標識、網址、token 或呼叫堆疊。",
     "contact": "聯絡支援",
-    "unavailable": "此構建未設定支援聯絡方式，不應釋出給使用者。",
+    "unavailable": "支援聯絡方式暫時無法使用。",
     "diagnostics": "脫敏診斷",
     "diagnosticsText": "下載一份本機 JSON 報告，其中僅含釋出版本、瀏覽器能力、儲存和同步狀態。附在支援請求前請先自行檢視。",
     "diagnosticsDownload": "下載診斷檔案",
@@ -229,7 +229,7 @@
     "storageBudget": "瀏覽器為本站估算：已使用 {{used}} MiB / {{quota}} MiB。該數值也可能包含應用檔案。",
     "storageBudgetWarning": "瀏覽器為本站提供的空間已使用超過 80%：{{used}} MiB / {{quota}} MiB。請儘快匯出備份並釋放裝置空間。",
     "clearTitle": "清除本機資料",
-    "clearIntro": "僅清除這個瀏覽器中的資料、學習進度和模型設定，不刪除帳號。需要保留的內容請先在上方匯出備份。",
+    "clearIntro": "僅清除這個瀏覽器中的資料、學習進度和模型設定，不刪除帳號。需要保留的內容請先匯出備份。",
     "clearInspect": "檢查要清除的資料",
     "clearSummary": "將移除 {{drafts}} 份材料、{{meanings}} 個意思、{{packages}} 個學習包、{{targets}} 項學習內容和 {{events}} 條學習記錄。",
     "clearPending": "還有 {{count}} 項未完成準備；清除後將無法繼續。",
@@ -237,5 +237,24 @@
     "clearConfirm": "我已儲存需要的備份，確認清除以上本機資料。",
     "clearAction": "確認清除本機資料",
     "clearDone": "本機資料已清除。重新開啟應用可開始使用空資料庫。"
+  },
+  "syncRecovery": {
+    "blocked": "同步需要檢查後才能繼續。本機資料仍在。請先備份並下載診斷，再聯絡支援。",
+    "hint": "備份只儲存本機資料，不會解決同步問題，也不包含尚未下載的雲端變更。",
+    "backup": "備份本機資料",
+    "hideBackup": "收起備份"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "為新裝置準備資料",
+    "preparing": "正在為其他裝置準備帳號資料…",
+    "preparingUpload": "正在傳送新裝置所需的資料…",
+    "receiving": "正在接收帳號資料…",
+    "prepared": "已為新裝置準備好帳號資料。",
+    "preparationFailed": "新裝置的資料尚未準備完成，可稍後重試。已同步的資料仍在。",
+    "preparationCancelled": "已停止新裝置的資料準備。已同步的資料仍在。",
+    "stop": "停止本次同步",
+    "stopping": "正在停止…",
+    "cancelled": "本次同步已停止，可重試。",
+    "processed": "已處理資料：{{amount}} MiB"
   }
 }

@@ -55,7 +55,9 @@ export function assertPersonalContextPin(record:MeaningJourneyRecord,pin:unknown
 export function orderPersonalContextImages(record:MeaningJourneyRecord,revisionIds:readonly string[],images:readonly SensaContextImage[]):SensaContextImage[]{
  const revisions=revisionIds.map(id=>{const revision=record.personalSemanticAnchorRevisions.find(row=>row.personalSemanticAnchorRevisionId===id);if(!revision)throw Error('localFlow.meaningChanged');return revision;});
  const byId=new Map(images.map(image=>[image.id,image]));
- const order=[...new Set(revisions.flatMap(revision=>[...(revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]),...(Array.isArray(revision.structuredPayload.media)?revision.structuredPayload.media.flatMap(media=>media&&typeof media==='object'&&typeof (media as Record<string,unknown>).mediaId==='string'?[(media as {mediaId:string}).mediaId]:[]):[])]))];
+ const order=[...new Set(revisions.flatMap(revision=>Array.isArray(revision.structuredPayload.blocks)
+  ? revision.structuredPayload.blocks.flatMap(block=>block.kind==='image'?[block.personalMediaObjectId]:[])
+  : [...(revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]),...(Array.isArray(revision.structuredPayload.media)?revision.structuredPayload.media.flatMap(media=>media&&typeof media==='object'&&typeof (media as Record<string,unknown>).mediaId==='string'?[(media as {mediaId:string}).mediaId]:[]):[])]))];
  return order.flatMap(id=>byId.has(id)?[byId.get(id)!]:[]);
 }
 
@@ -64,7 +66,7 @@ export async function hydratePersonalLearningImages(record:MeaningJourneyRecord,
  const images=new Map<string,Promise<SensaContextImage>>();
  return Promise.all(sources.map(async source=>{
   const revisions=source.context.personalSemanticAnchorRevisionIds.map(id=>record.personalSemanticAnchorRevisions.find(revision=>revision.personalSemanticAnchorRevisionId===id)!);
-  const mediaIds=[...new Set(revisions.flatMap(revision=>revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]))];
+  const mediaIds=[...new Set(revisions.flatMap(revision=>[...(revision.personalMediaObjectId?[revision.personalMediaObjectId]:[]),...(Array.isArray(revision.structuredPayload.mediaReferenceIds)?revision.structuredPayload.mediaReferenceIds as string[]:[])]))];
   const loaded=await Promise.all(mediaIds.map(id=>{if(!images.has(id))images.set(id,read(id));return images.get(id)!;}));
   return {...source,context:{...source.context,images:orderPersonalContextImages(record,source.context.personalSemanticAnchorRevisionIds,[...source.context.images,...loaded])}};
  }));
@@ -155,6 +157,8 @@ const meaningLearningSources = (
             : null,
           senseId: alignment.senseId,
           senseVersionId: alignment.senseVersionId,
+          expressionId: expression.expressionId,
+          expressionVersionId: expressionVersion.expressionVersionId,
           bindingId: binding.senseExpressionBindingId,
           bindingVersionId: bindingVersion.bindingVersionId,
         },

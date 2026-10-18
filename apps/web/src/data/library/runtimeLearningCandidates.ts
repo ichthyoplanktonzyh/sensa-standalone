@@ -1,3 +1,5 @@
+import {learningScheduleWindow,learningSchedulePageFromTargets,type LearningScheduleQuery,type LearningSchedulePage} from '../../learning/system/learningScheduleModel';
+import {localLearningHistoryDay} from '../../learning/system/learningHistoryModel';
 import type {Database} from '@sqlite.org/sqlite-wasm';
 import type {SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {canonicalJsonDigest,sha256,stableUuid} from '@sensa/learning-kernel';
@@ -31,8 +33,8 @@ export interface RuntimeLearningCandidates {
  readonly initialReady:readonly RuntimeLearningCandidate[];
  readonly nextChangeAt:number|null;
 }
-export type LearningManagementSummaryQuery=Pick<RuntimeLearningCandidateQuery,'languageContext'|'clock'|'dailyLimit'|'supportedPolicies'>;
-export interface LearningManagementStorageSummary{readonly targetIds:readonly string[];readonly policies:readonly string[];readonly readyInitialCount:number;readonly reviewDueCount:number;}
+export type LearningManagementSummaryQuery=Pick<RuntimeLearningCandidateQuery,'languageContext'|'clock'|'dailyLimit'|'supportedPolicies'>&{readonly includeLibraryItems?:boolean;readonly includeTargetIds?:boolean;readonly includeInventory?:boolean;readonly currentTargetIds?:readonly string[]};
+export interface LearningManagementStorageSummary{readonly items?:readonly import('../../learning/system/learningReadModels').LearningManagementListItem[];readonly targetIds:readonly string[];readonly policies:readonly string[];readonly readyInitialCount:number;readonly reviewDueCount:number;readonly currentCandidateCount:number;readonly routeTargetCount:number|null;readonly libraryTargetCount:number|null;readonly nextReviewAt:number|null;}
 const bounds=(query:RuntimeLearningCandidateQuery)=>{
  if(!Number.isFinite(query.clock))throw new Error('localFlow.clockChanged');
  const start=new Date(query.clock);start.setHours(0,0,0,0);
@@ -59,8 +61,21 @@ function planningQueueFromRecords(stored:HomeLearningStorageProjection,query:Lea
  return {input,queue:resolveLearningQueue(input)};
 }
 export function learningManagementSummaryFromRecords(stored:HomeLearningStorageProjection,query:LearningManagementSummaryQuery):LearningManagementStorageSummary{
- const {queue}=planningQueueFromRecords(stored,query);
- return {targetIds:stored.targets.map(target=>target.id),policies:[...new Set(stored.targets.map(target=>target.committedPolicy?.profileId??target.policyAssignment.profileId))],readyInitialCount:queue.initialReady.length,reviewDueCount:queue.due.length};
+ const {queue,input}=planningQueueFromRecords(stored,query);
+ const context=query.languageContext,targets=stored.targets.filter(target=>target.curriculumMemberships.some(member=>member.languageContext.languageRouteId===context.languageRouteId&&member.languageContext.targetLanguageTag===context.targetLanguageTag&&member.languageContext.supportLanguageTag===context.supportLanguageTag));
+ const future=queue.activeTargets.flatMap(target=>{
+  const dueAt=target.relearnAt?Date.parse(target.relearnAt):target.memory?.dueAt.getTime();
+  return !target.planningOverrides.some(override=>override.kind==='declared_mastery')&&input.readiness[target.id]==='ready'&&input.eligibility[target.id]?.ongoing&&dueAt!==undefined&&dueAt>query.clock?[dueAt]:[];
+ });
+ const current=new Set(query.currentTargetIds);
+ return {targetIds:query.includeTargetIds===false?[]:targets.map(target=>target.id),policies:query.includeTargetIds===false?[]:[...new Set(targets.map(target=>target.committedPolicy?.profileId??target.policyAssignment.profileId))],readyInitialCount:queue.initialReady.length,reviewDueCount:queue.due.length,currentCandidateCount:[...queue.initialReady,...queue.due].filter(target=>current.has(target.id)).length,routeTargetCount:query.includeInventory===false?null:targets.length,libraryTargetCount:query.includeInventory===false?null:stored.targets.length,nextReviewAt:future.length?Math.min(...future):null};
+}
+export function learningScheduleFromRecords(stored:HomeLearningStorageProjection,query:LearningScheduleQuery):LearningSchedulePage{
+ const {queue,input}=planningQueueFromRecords(stored,{...query,dailyLimit:undefined});
+ return learningSchedulePageFromTargets(queue.activeTargets.flatMap(target=>{
+  const dueAt=target.relearnAt?Date.parse(target.relearnAt):target.memory?.dueAt.getTime();
+  return !target.planningOverrides.some(override=>override.kind==='declared_mastery')&&input.readiness[target.id]==='ready'&&input.eligibility[target.id]?.ongoing&&dueAt!==undefined?[{targetId:target.id,dueAt,kind:target.relearnAt?'relearning' as const:'retention_review' as const}]:[];
+ }),query);
 }
 export function runtimeLearningCandidatesFromRecords(stored:HomeLearningStorageProjection,query:RuntimeLearningCandidateQuery,scope?:LocalStudyScope):RuntimeLearningCandidates{
  if(query.scopeRevisionId&&!scope)throw new Error('localFlow.progressReadFailed');
@@ -92,7 +107,7 @@ const tableNames=['sensa_runtime_learning_candidate_sources','sensa_runtime_lear
  * authoritative learning history nor an eligibility override. No material or
  * Run is decoded when selecting an ordinary continuation. */
 export class SqliteRuntimeLearningCandidates {
- constructor(private readonly database:Database,private readonly decodeTarget:(encoded:string)=>LocalLearningTarget=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalLearningTarget,private readonly decodeEnrollment:(encoded:string)=>LocalCurriculumEnrollment=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalCurriculumEnrollment,private readonly rebuiltTarget?:(id:string,target:LocalLearningTarget)=>void,private readonly decodeScope:(encoded:string)=>LocalStudyScope=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalStudyScope){}
+ constructor(private readonly database:Database,private readonly decodeTarget:(encoded:string)=>LocalLearningTarget=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalLearningTarget,private readonly decodeEnrollment:(encoded:string)=>LocalCurriculumEnrollment=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalCurriculumEnrollment,private readonly rebuiltTarget?:(id:string,target:LocalLearningTarget)=>void,private readonly decodeScope:(encoded:string)=>LocalStudyScope=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalStudyScope){database.createFunction({name:'sensa_schedule_day',arity:1,innocuous:true,xFunc:(_context,at)=>localLearningHistoryDay(new Date(Number(at)))});}
  initialize():void{
   const tables=this.database.exec({sql:"SELECT name FROM sqlite_schema WHERE type='table' AND name IN (SELECT value FROM json_each(?))",bind:[JSON.stringify(tableNames)],rowMode:0,returnValue:'resultRows'}) as unknown[];
   if(tables.length===tableNames.length){
@@ -200,7 +215,7 @@ export class SqliteRuntimeLearningCandidates {
   for(const [index,membership] of target.curriculumMemberships.entries()){
    const context=membership.languageContext;
    const due=target.relearnAt?Date.parse(target.relearnAt):target.memory?.dueAt.getTime()??null;
-   this.database.exec({sql:'INSERT INTO sensa_runtime_learning_candidate_sources VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',bind:[context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag,targetId,membership.id??`${targetId}:${index}`,index,typeof membership.provenance?.curriculumEnrollmentId==='string'?membership.provenance.curriculumEnrollmentId:null,typeof membership.provenance?.publicationArchiveSha256==='string'?membership.provenance.publicationArchiveSha256:null,Number(membership.status==='superseded'),membership.material.snapshot.provenance?.senseVersionId as string??membership.provenance?.senseVersionId as string??target.identity?.senseVersionId??null,membership.material.snapshot.provenance?.bindingVersionId as string??membership.provenance?.bindingVersionId as string??target.identity?.bindingVersionId??null,policy,profileVersion,Number(membership.material.snapshot.validationStatus==='validated'),Number(target.planningOverrides.some(override=>override.kind==='declared_mastery')),membership.packageKey,membership.assurancePackageKey??null,Number(!!target.startedAt),Number(!!target.completedAt),due,target.relearnAt]});
+   this.database.exec({sql:'INSERT INTO sensa_runtime_learning_candidate_sources VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',bind:[context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag,targetId,membership.id??`${targetId}:${index}`,index,typeof membership.provenance?.curriculumEnrollmentId==='string'?membership.provenance.curriculumEnrollmentId:null,typeof membership.provenance?.publicationArchiveSha256==='string'?membership.provenance.publicationArchiveSha256:null,Number(membership.status==='superseded'),membership.material.snapshot.provenance?.senseVersionId as string??membership.provenance?.senseVersionId as string??null,membership.material.snapshot.provenance?.bindingVersionId as string??membership.provenance?.bindingVersionId as string??null,policy,profileVersion,Number(membership.material.snapshot.validationStatus==='validated'),Number(target.planningOverrides.some(override=>override.kind==='declared_mastery')),membership.packageKey,membership.assurancePackageKey??null,Number(!!target.startedAt),Number(!!target.completedAt),due,target.relearnAt]});
   }
  }
  private qualifiedSources(scopeRevisionId?:string,parameterOffset=0):string{
@@ -250,12 +265,22 @@ export class SqliteRuntimeLearningCandidates {
   const next=Number(introduced[0]??0)>0?end:null,futureAt=future[0]===null||future[0]===undefined?null:Number(future[0]);
   return {due,initialReady,nextChangeAt:next===null?futureAt:futureAt===null?next:Math.min(next,futureAt)};
  }
+ schedule(query:LearningScheduleQuery):LearningSchedulePage{
+  const window=learningScheduleWindow(query),context=query.languageContext;
+  const selected=`SELECT candidate.target_key AS targetId,candidate.due_at AS dueAt,CASE WHEN candidate.relearn_at IS NULL THEN 'retention_review' ELSE 'relearning' END AS kind ${this.qualifiedSources()} AND candidate.due_at>?5 AND candidate.due_at<?6 AND (?7='all' OR CASE WHEN candidate.relearn_at IS NULL THEN 'retention_review' ELSE 'relearning' END=?7) GROUP BY candidate.target_key`;
+  const bind=[context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag,JSON.stringify(query.supportedPolicies),window.from,window.until,query.kind];
+  const grouped=this.database.exec({sql:`SELECT sensa_schedule_day(dueAt) AS day,SUM(kind='retention_review') AS retention_review,SUM(kind='relearning') AS relearning FROM (${selected}) GROUP BY day ORDER BY day`,bind,rowMode:'object',returnValue:'resultRows'}) as {day:string;retention_review:number;relearning:number}[];
+  const targets=this.database.exec({sql:`SELECT * FROM (${selected}) ORDER BY dueAt,targetId LIMIT ?8 OFFSET ?9`,bind:[...bind,query.limit+1,query.offset],rowMode:'object',returnValue:'resultRows'}) as {targetId:string;dueAt:number;kind:'retention_review'|'relearning'}[];
+  const more=targets.length>query.limit;if(more)targets.pop();
+  return {clock:query.clock,total:grouped.reduce((sum,row)=>sum+Number(row.retention_review)+Number(row.relearning),0),fromDay:window.fromDay,throughDay:window.throughDay,days:grouped,targets,nextOffset:more?query.offset+targets.length:null};
+ }
  management(query:LearningManagementSummaryQuery):LearningManagementStorageSummary{
   const {start,end}=bounds({...query,currentTargetIds:[],retryTargetIds:[]}),context=query.languageContext;
-  const rows=this.database.exec({sql:'SELECT DISTINCT target_key,policy_id FROM sensa_runtime_learning_candidate_sources WHERE language_route_id=? ORDER BY target_key',bind:[context.languageRouteId],rowMode:'object',returnValue:'resultRows'}) as {target_key:string;policy_id:string}[];
-  const counts=this.database.exec({sql:`SELECT COALESCE(SUM(due_at<=?),0) AS due,COALESCE(SUM(completed=0 AND started=1),0) AS resumed,COALESCE(SUM(completed=0 AND started=0),0) AS fresh FROM
-   (SELECT candidate.target_key,candidate.due_at,candidate.completed,candidate.started ${this.qualifiedSources(undefined,1)} GROUP BY candidate.target_key)`,bind:[query.clock,context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag,JSON.stringify(query.supportedPolicies)],rowMode:'object',returnValue:'resultRows'}) as {due:number;resumed:number;fresh:number}[];
+  const rows=query.includeTargetIds===false?[]:this.database.exec({sql:'SELECT DISTINCT target_key,policy_id FROM sensa_runtime_learning_candidate_sources WHERE language_route_id=? AND target_language_tag=? AND support_language_tag=? ORDER BY target_key',bind:[context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag],rowMode:'object',returnValue:'resultRows'}) as {target_key:string;policy_id:string}[];
+  const counts=this.database.exec({sql:`SELECT COALESCE(SUM(due_at<=?1),0) AS due,COALESCE(SUM(completed=0 AND started=1),0) AS resumed,COALESCE(SUM(completed=0 AND started=0),0) AS fresh,MIN(CASE WHEN due_at>?1 THEN due_at END) AS next_review,COALESCE(SUM(target_key IN (SELECT value FROM json_each(?6)) AND (due_at<=?1 OR (completed=0 AND started=1))),0) AS current_count FROM
+   (SELECT candidate.target_key,candidate.due_at,candidate.completed,candidate.started ${this.qualifiedSources(undefined,1)} GROUP BY candidate.target_key)`,bind:[query.clock,context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag,JSON.stringify(query.supportedPolicies),JSON.stringify(query.currentTargetIds??[])],rowMode:'object',returnValue:'resultRows'}) as {due:number;resumed:number;fresh:number;next_review:number|null;current_count:number}[];
+  const totals=query.includeInventory===false?null:this.database.exec({sql:'SELECT COUNT(DISTINCT target_key) AS library,COUNT(DISTINCT CASE WHEN language_route_id=? AND target_language_tag=? AND support_language_tag=? THEN target_key END) AS route FROM sensa_runtime_learning_candidate_sources',bind:[context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag],rowMode:'object',returnValue:'resultRows'}) as {library:number;route:number}[];
   const introduced=this.database.exec({sql:'SELECT COUNT(*) FROM sensa_runtime_learning_introductions WHERE language_route_id=? AND started_at>=? AND started_at<?',bind:[context.languageRouteId,start,end],rowMode:0,returnValue:'resultRows'}) as unknown[];
-  return {targetIds:rows.map(row=>row.target_key),policies:[...new Set(rows.map(row=>row.policy_id))],readyInitialCount:Number(counts[0]!.resumed)+Math.min(Number(counts[0]!.fresh),Math.max(0,(query.dailyLimit??20)-Number(introduced[0]??0))),reviewDueCount:Number(counts[0]!.due)};
+  return {targetIds:[...new Set(rows.map(row=>row.target_key))],policies:[...new Set(rows.map(row=>row.policy_id))],readyInitialCount:Number(counts[0]!.resumed)+Math.min(Number(counts[0]!.fresh),Math.max(0,(query.dailyLimit??20)-Number(introduced[0]??0))),reviewDueCount:Number(counts[0]!.due),currentCandidateCount:Number(counts[0]!.current_count),routeTargetCount:totals?Number(totals[0]!.route):null,libraryTargetCount:totals?Number(totals[0]!.library):null,nextReviewAt:counts[0]!.next_review===null?null:Number(counts[0]!.next_review)};
  }
 }

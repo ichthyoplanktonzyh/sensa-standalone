@@ -16,10 +16,14 @@ import { LearningExampleLookup } from "../../examples/LearningExampleLookup";
 import { ClickableSentence } from "../../ClickableSentence";
 import { useImmediateDictionaryLookup } from "../../useImmediateDictionaryLookup";
 import { cardText } from "../../../../i18n/originalCards";
+import {localFlowText} from '../../../../i18n/localFlowText';
 
 const stripMarkup = (value: string): string => value.replace(/<[^>]*>/gu, "").trim();
 
 interface ExpressionRevealCardProps {
+  readonly targetLanguageTag?: string;
+  readonly supportLanguageTag?: string;
+  readonly hidePrimaryAction?: boolean;
   readonly initial?: boolean;
   readonly active: boolean;
   readonly presentation: ExpressionRevealCardPresentation;
@@ -34,6 +38,9 @@ interface ExpressionRevealCardProps {
 }
 
 export function ExpressionRevealCard({
+  hidePrimaryAction=false,
+  targetLanguageTag,
+  supportLanguageTag,
   presentation,
   active,
   initial = true,
@@ -184,6 +191,8 @@ export function ExpressionRevealCard({
   const renderExample = (sentence: Sentence) => (
     <LearningExampleCard
       sentence={sentence}
+      targetLanguageTag={targetLanguageTag}
+      supportLanguageTag={supportLanguageTag}
       compact
       isPlaying={playingExampleId === sentence.exampleId}
       onPlay={sentence.audioUrl
@@ -226,7 +235,7 @@ export function ExpressionRevealCard({
       <div className="sensa-expression-hero">
         <header className="sensa-expression-heading">
           <div className="flex items-start gap-4">
-            <h1 className="min-w-0 flex-1 break-words font-language text-learning-expression font-medium tracking-tight text-action-primary sm:text-6xl">
+            <h1 lang={targetLanguageTag} dir="auto" className="min-w-0 flex-1 break-words font-language text-learning-expression font-medium tracking-tight text-action-primary sm:text-6xl">
               {expressionPrimary.surface}
             </h1>
             {pronunciation?.audioUrl && (
@@ -264,20 +273,16 @@ export function ExpressionRevealCard({
             </p>
           )}
           {audioFailed && <p className="mt-3 text-sm text-fg-secondary" role="status">{t("runtime.audioError")}</p>}
-          <p className="sensa-expression-meaning">{senseConfirmation.meaning}</p>
+          <p lang={supportLanguageTag} dir="auto" className="sensa-expression-meaning">{senseConfirmation.meaning}</p>
         </header>
 
-        {sceneBridge && (
-          <p className="sensa-expression-scene-bridge mt-7 border-l-2 border-action-primary pl-4 text-base leading-7 text-fg-secondary">
-            {sceneBridge.text}
-          </p>
-        )}
+        {sceneBridge&&sceneBridge.text!==senseConfirmation.meaning&&<details className="sensa-expression-disclosure border-t border-border-subtle"><summary>{localFlowText('packagePreviewMore')}</summary><p lang={supportLanguageTag} dir="auto" className="pb-3 text-base leading-7">{sceneBridge.text}</p></details>}
 
         {languageStructure?.usagePattern && (
-          <section className="sensa-expression-structure mt-6 grid gap-2 border-t border-border-subtle pt-5" aria-labelledby={usagePatternLabelId}>
-            <h2 id={usagePatternLabelId} className="text-xs font-medium uppercase tracking-wide text-fg-tertiary">{t("runtime.usagePattern")}</h2>
-            <p className="font-language text-base font-semibold leading-7 text-action-primary">{languageStructure.usagePattern}</p>
-          </section>
+          <details className="sensa-expression-structure sensa-expression-disclosure mt-6 border-t border-border-subtle" aria-labelledby={usagePatternLabelId}>
+            <summary id={usagePatternLabelId}>{t("runtime.usagePattern")}</summary>
+            <p lang={targetLanguageTag} dir="auto" className="font-language text-base font-semibold leading-7 text-action-primary">{languageStructure.usagePattern}</p>
+          </details>
         )}
       </div>
 
@@ -348,7 +353,7 @@ export function ExpressionRevealCard({
       )}
 
       {categoryResources?.map(resource=><details key={resource.resourceKey} className="sensa-expression-disclosure"><summary>{learningResourceLabel(resource.materialRoleKey)}</summary><LearningResource resource={resource}/></details>)}
-      <RuntimeRating initial={initial} showDescriptions={false} onRate={onRate} />
+      {!hidePrimaryAction&&<RuntimeRating initial={initial} showDescriptions={false} onRate={onRate} />}
       {activeLookup && (
         <LearningExampleLookup
           entry={activeLookup.entry}

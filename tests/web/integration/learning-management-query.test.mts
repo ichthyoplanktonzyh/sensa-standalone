@@ -1,13 +1,14 @@
 import {afterAll,test,expect,vi} from 'vitest';
 import sqlite3InitModule,{type Database} from '@sqlite.org/sqlite-wasm';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
-import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
+import {portablePackageFixture,portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
 import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system';
 import {learningSystem} from '../../../apps/web/src/learning/system';
-import {openLibrary,readLibrary} from '../../../apps/web/src/data/library/store';
+import {openLibrary,readLibrary,libraryTables} from '../../../apps/web/src/data/library/store';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
+import {MemoryRecordAdapter} from '../../../apps/web/src/data/library/sqliteMemoryAdapter';
 import type {LocalLearningTarget} from '../../../apps/web/src/learning/runtime/localProtocol';
 
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
@@ -115,4 +116,57 @@ test('fresh-device replica order admits Runs before Targets without losing genui
   expect(destination.learningHistoryProjection()).toEqual(database.learningHistoryProjection());
   expect(destination.entries('learningRuns')).toEqual(database.entries('learningRuns'));expect(destination.entries('learningTargets')).toEqual(database.entries('learningTargets'));
  }finally{destination.close();}
+});
+
+test('current due forecast follows real scheduler facts, reads only its bounded target page and never writes a plan',async()=>{
+ const target=await readLibrary(tx=>tx.get<LocalLearningTarget>('learningTargets',targetId));const due=target!.memory!.dueAt.getTime(),clock=due-1000;
+ const before={targets:database.entries('learningTargets'),runs:database.entries('learningRuns'),events:database.entries('learningEvents')};
+ const adapter=await sqliteRecordAdapter(),entries=adapter.entries.bind(adapter),get=adapter.get.bind(adapter);let targetReads=0;
+ adapter.entries=async table=>{if(['learningTargets','learningRuns','packageCache'].includes(table))throw Error('forecast enumerated full facts');return entries(table);};
+ adapter.get=async(table,key)=>{if(table==='learningRuns')throw Error('forecast decoded Run');if(table==='learningTargets')targetReads++;return get(table,key);};
+ try{
+  const result=await learningSystem.read({kind:'schedule',languageContext:context,clock,days:7,recordKind:'all',day:null,offset:0});expect(result.total).toBe(1);expect(result.targets).toEqual([{targetId,dueAt:due,kind:'retention_review',expression:target!.expression}]);expect(targetReads).toBe(1);
+  expect((await learningSystem.read({kind:'schedule',languageContext:context,clock,days:30,recordKind:'relearning',day:null,offset:0})).total).toBe(0);
+  expect((await learningSystem.read({kind:'schedule',languageContext:context,clock:due,days:30,recordKind:'all',day:null,offset:0})).total).toBe(0);
+  const day=result.days[0]!.day;expect((await learningSystem.read({kind:'schedule',languageContext:context,clock,days:7,recordKind:'all',day,offset:0})).total).toBe(1);
+ }finally{adapter.entries=entries;adapter.get=get;}
+ expect({targets:database.entries('learningTargets'),runs:database.entries('learningRuns'),events:database.entries('learningEvents')}).toEqual(before);
+});
+
+
+test('expression list selects the same active source as learning and matches native and memory summaries after pause and removal',async()=>{
+ const fixture=portableBookDeliveryFixture({packageId:id(),memberExpressions:['shared-list-source','book-only-list-source']});
+ const originalFetch=globalThis.fetch;globalThis.fetch=async()=>new Response(new Uint8Array(fixture.bookBytes).buffer);
+ try{await contentSupplySystem.execute({kind:'install_catalog_item',descriptor:fixture.descriptor,signal:new AbortController().signal});}finally{globalThis.fetch=originalFetch;}
+ const choice=(await learningSystem.read({kind:'direct_choices',query:'shared-list-source',targetLanguageTag:'en',page:0})).items[0]!;
+ const source=await learningSystem.read({kind:'direct_source',reference:choice.reference});
+ const enrolled=await learningSystem.execute({kind:'enroll_direct',operationId:id(),reference:choice.reference,expectedDigest:source.sourceDigest,languageContext:context});
+ await learningSystem.execute({kind:'prepare_direct',operationId:id(),enrollmentId:enrolled.enrollmentId!});
+ await learningSystem.execute({kind:'enroll_book',operationId:id(),languageContext:context,publicationArchiveSha256:fixture.descriptor.sha256});
+ const query={languageContext:context,clock:Date.now(),dailyLimit:20,supportedPolicies:['lightweight'],includeLibraryItems:true};
+ const check=async()=>{
+  const memory=new MemoryRecordAdapter();await memory.commit({clears:[],deletes:[],puts:libraryTables.flatMap(table=>database.entries(table).map(row=>({table,...row})))});
+  const facts=database.entries('learningTargets'),entries=database.entries.bind(database),get=database.get.bind(database),forbidden=new Set(['learningTargets','learningRuns','learningEvents','packageCache']);
+  database.entries=table=>{if(forbidden.has(table))throw Error('list enumerated full source');return entries(table);};
+  database.get=(table,key)=>{if(forbidden.has(table))throw Error('list hydrated full source');return get(table,key);};
+  let native;
+  try{native=database.learningManagementSummary(query);}finally{database.entries=entries;database.get=get;}
+  expect(await memory.learningManagementSummary(query)).toEqual(native);expect(database.entries('learningTargets')).toEqual(facts);
+  return native.items!.find(item=>item.expression==='shared-list-source')!;
+ };
+ expect((await check()).sourceKind).toBe('sense_learning_package');
+ const plan=(await learningSystem.read({kind:'book_plans',languageContext:context})).at(-1)!;
+ await learningSystem.execute({kind:'change_book_plan',operationId:id(),enrollmentId:plan.enrollmentId,expectedRevision:plan.revision,languageContext:context,mode:'paused',selection:plan.selection});
+ expect((await check()).sourceKind).toBe('stable_sense');
+ await learningSystem.execute({kind:'change_supplemental_membership',operationId:id(),source:{kind:'stable_sense',id:enrolled.enrollmentId!},expectedRevision:0,active:false,languageContext:context});
+ expect((await check()).state).toBe('paused');
+ const pending=await learningSystem.read({kind:'management',languageContext:context});expect(pending.pendingDirectCount).toBe(0);
+ const rows=database.entries('learningTargets'),items=database.learningManagementSummary(query).items;
+ raw.exec('ALTER TABLE sensa_learning_semantic_memory DROP COLUMN list_json');
+ new SqliteRecordDatabase(Reflect.get(database,'sqlite3'),raw,'memory').initialize();
+ expect(database.learningManagementSummary(query).items).toEqual(items);expect(database.entries('learningTargets')).toEqual(rows);
+ raw.exec("UPDATE sensa_learning_semantic_memory SET list_json=NULL WHERE target_key=(SELECT target_key FROM sensa_learning_semantic_memory LIMIT 1)");
+ expect(()=>database.learningManagementSummary(query)).toThrow('localFlow.progressReadFailed');
+ raw.exec('DROP TABLE sensa_learning_semantic_memory');new SqliteRecordDatabase(Reflect.get(database,'sqlite3'),raw,'memory').initialize();
+ expect(database.learningManagementSummary(query).items).toEqual(items);
 });

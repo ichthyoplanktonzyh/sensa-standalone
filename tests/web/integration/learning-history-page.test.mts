@@ -23,7 +23,7 @@ const base:LearningHistoryRequest={surface:'statistics',range:'all',start:'',end
 test('bounded pages and whole-range aggregates agree with complete records across filters, future facts, exact language scope and DST',()=>{
  const previous=process.env.TZ;process.env.TZ='America/New_York';
  try{
-  for(const request of [base,{...base,range:'today' as const},{...base,range:'week' as const},{...base,range:'month' as const,kind:'retention_review' as const},{...base,range:'custom' as const,start:'2026-11-01',end:'2026-11-01',languageChoice:'all'},{...base,range:'custom' as const,start:'2026-02-30',end:'2026-11-01'},{...base,range:'custom' as const,start:'2026-11-03',end:'2026-11-02'},{...base,range:'custom' as const,start:'2026-11-01',end:'2026-11-03'},{...base,languageChoice:'es'},{...base,activeLanguageTag:'fr'},{...base,activeLanguageTag:'ja'},{...base,surface:'study' as const,kind:'initial_learning' as const}]){
+  for(const request of [base,{...base,range:'year' as const,year:2026},{...base,range:'today' as const},{...base,range:'week' as const},{...base,range:'month' as const,kind:'retention_review' as const},{...base,range:'custom' as const,start:'2026-11-01',end:'2026-11-01',languageChoice:'all'},{...base,range:'custom' as const,start:'2026-02-30',end:'2026-11-01'},{...base,range:'custom' as const,start:'2026-11-03',end:'2026-11-02'},{...base,range:'custom' as const,start:'2026-11-01',end:'2026-11-03'},{...base,languageChoice:'es'},{...base,activeLanguageTag:'fr'},{...base,activeLanguageTag:'ja'},{...base,surface:'study' as const,kind:'initial_learning' as const}]){
    const expected=learningHistoryPageFromRecords(records,request),actual=database.learningHistoryPage(request);
    expect(actual).toEqual(expected);expect(actual.records.length).toBeLessThanOrEqual(request.limit);
    if(actual.nextCursor)expect(database.learningHistoryPage({...request,cursor:actual.nextCursor})).toEqual(learningHistoryPageFromRecords(records,{...request,cursor:actual.nextCursor}));
@@ -52,4 +52,19 @@ test('the public history projection decodes only a bounded list page; counts and
   expect(new Set([...first.records,...second.records].map(row=>row.recordId)).size).toBe(40);expect(decoded).toBe(42);
   await expect(learningSystem.read({kind:'history',languageContext:context,filter,limit:0})).rejects.toThrow();
  }finally{adapter.entries=entries;adapter.entriesPage=entryPage;adapter.get=get;raw.exec=exec;}
+});
+
+
+test('Session aggregates select only exact Run keys, preserve kinds and return true zero for an empty Session selection',()=>{
+ const sessionRows:StoredLearningRecord[]=[
+  {recordId:'session-a:target-a',targetId:'target-a',expression:'same',languageTag:'en',kind:'retention_review',occurredAt:'2026-10-10T12:00:00Z'},
+  {recordId:'session-b:target-a',targetId:'target-a',expression:'same',languageTag:'en',kind:'relearning',occurredAt:'2026-10-10T12:01:00Z'},
+ ];
+ for(const row of sessionRows)raw.exec({sql:'INSERT INTO sensa_learning_history(record_key,run_key,occurred_at,language_tag,record_kind,projection_json) VALUES(?,?,?,?,?,?)',bind:[row.recordId,row.recordId.split(':')[0]!,Date.parse(row.occurredAt),row.languageTag,row.kind,JSON.stringify(row)]});
+ for(const runIds of [['session-a','session-b'],['session-b'],[],['missing-session']]){
+  const request={...base,surface:'study' as const,runIds,limit:1};
+  expect(database.learningHistoryPage(request)).toEqual(learningHistoryPageFromRecords([...records,...sessionRows],request));
+ }
+ const actual=database.learningHistoryPage({...base,surface:'study',runIds:['session-a','session-b'],limit:1});
+ expect(actual.total).toBe(2);expect(actual.counts).toEqual({initial_learning:0,retention_review:1,relearning:1});expect(actual.records).toHaveLength(1);
 });

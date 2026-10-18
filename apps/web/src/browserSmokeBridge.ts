@@ -23,6 +23,7 @@ type BrowserSmokeBridge = {
   retainExampleForTest(unavailable?:boolean):Promise<{exampleId:string;word:string|null;text:string|null}>;
   retainedExampleIdsForTest():Promise<string[]>;
   failAnnotationReadsForTest(active:boolean):Promise<void>;
+  failNextSenseNoteCommitForTest():Promise<void>;
   failLearningSceneReadsForTest(active:boolean):Promise<void>;
   failNextSceneLinkCommitForTest():Promise<void>;
   personalLearningScenesForTest():Promise<import('./personalContent/system').PersonalLearningScene[]>;
@@ -38,8 +39,13 @@ type BrowserSmokeBridge = {
   holdDirectEnrollmentResultForTest():Promise<void>;
   releaseDirectEnrollmentResultForTest():void;
   failLearningWorkspaceReadsForTest(active:boolean):Promise<void>;
+  holdLearningWorkspaceReadsForTest():Promise<void>;
+  releaseLearningWorkspaceReadsForTest():void;
   failLearningManagementReadsForTest(active:boolean):Promise<void>;
+  failLearningHomeReadsForTest(active:boolean):Promise<void>;
+  failLearningScheduleReadsForTest(active:boolean):Promise<void>;
   failLearningHistoryReadsForTest(active:boolean):Promise<void>;
+  failLearningRuntimeReadsForTest(active:boolean):Promise<void>;
   failLearningTargetReadsForTest(active:boolean):Promise<void>;
   learningReadsForTest(reset?:boolean):Promise<Record<string,number>>;
   traceLearningReadsForTest(active:boolean):Promise<void>;
@@ -59,6 +65,8 @@ type BrowserSmokeBridge = {
   releaseLearningActionResponseForTest():void;
   holdWorldDetailReadsForTest():Promise<void>;
   releaseWorldDetailReadsForTest():void;
+  holdWorldGraphReadsForTest():Promise<void>;
+  releaseWorldGraphReadsForTest(fail?:boolean):void;
   holdWorldInboxReadsForTest():Promise<void>;
   releaseWorldInboxReadsForTest(fail?:boolean):void;
   notifyWorldReadForTest():Promise<void>;
@@ -67,6 +75,8 @@ type BrowserSmokeBridge = {
   semanticMediaCheckpoint():Promise<{mediaId:string;dataUrl:string}[]>;
   draftCount(): Promise<number>;
   syncStatus(): Promise<string>;
+  cloudSyncStateForTest():ReturnType<typeof readCloudSync>;
+  cloudCheckpointForTest():Promise<{state:Awaited<ReturnType<typeof readCloudSync>>;refs:import('./data/library/sqliteProtocol').SqliteSyncBaseReference[]}>;
   semanticWorldContainsExpression(surfaceForm: string): Promise<boolean>;
   intakeInboxCount(): Promise<number>;
   provisioningCheckpoint():Promise<{taskId:string;targetId:string;status:string;useContext:boolean}[]>;
@@ -107,6 +117,7 @@ type BrowserSmokeBridge = {
     records:{recordId:string;targetId:string;kind:string}[];
     completedTargets:{targetId:string;nextReviewAt:string|null}[];
   }>;
+  rawLearningFactsForTest():Promise<Record<string,{count:number;sha256:string}>>;
 };
 
 declare global {
@@ -129,6 +140,8 @@ const randomDataUrl = (size: number): string => {
 
 if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   let releaseWorldReads:(()=>void)|undefined;
+  let releaseGraphReads:((fail?:boolean)=>void)|undefined;
+  let releaseWorkspaceReads:(()=>void)|undefined;
   let releaseInboxReads:((fail?:boolean)=>void)|undefined;
   let hiddenInboxMedia:import('./data/library/media').StoredMedia|undefined;
   let releaseDirectResult:(()=>void)|undefined,restoreLearningReads:(()=>void)|undefined,restoreAnnotationReads:(()=>void)|undefined,restoreSceneReads:(()=>void)|undefined;
@@ -272,7 +285,9 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     async setSpeechFixtureForTest(unavailable){
       // Provider-boundary fixture only. Preparation still constructs requests,
       // validates all candidates and admits material through production code.
-      const {replaceClientSpeechProvider}=await import('./data/library/speech/provider');
+      // Initialize the composition root before installing the fixture: a later
+      // lazy default-provider import must not overwrite the isolated substitute.
+      const {replaceClientSpeechProvider}=await import('./data/library/speech/defaultProvider');
       replaceClientSpeechProvider({id:'browser-fixture',revision:1,displayName:'Synthetic browser fixture',synthesize:async input=>{
         if(unavailable)throw new Error('speech_language_unavailable');
         return {...input,audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'Synthetic browser fixture, not audible quality evidence',method:'tts'};
@@ -290,9 +305,25 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       const {learningSystem}=await import('./learning/system');
       if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
       if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
-      learningSystem.read=(async query=>{if(query.kind==='workspace')throw new Error('fixture-workspace-read-failure');return original(query);}) as typeof original;
+      learningSystem.read=(async query=>{if(query.kind==='workspace'||query.kind==='personal_enrollment_index')throw new Error('fixture-workspace-read-failure');return original(query);}) as typeof original;
       restoreLearningReads=()=>{learningSystem.read=original;};
       window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['curriculumEnrollments']}}));
+    },
+    async holdLearningWorkspaceReadsForTest(){
+      if(releaseWorkspaceReads)throw new Error('Learning workspace read already held');
+      const {learningSystem}=await import('./learning/system');const read=learningSystem.read;
+      let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
+      learningSystem.read=(async query=>{if(query.kind==='workspace'||query.kind==='personal_enrollment_index')await held;return read(query);}) as typeof read;
+      releaseWorkspaceReads=()=>{learningSystem.read=read;release();releaseWorkspaceReads=undefined;};
+    },
+    releaseLearningWorkspaceReadsForTest(){releaseWorkspaceReads?.();},
+    async failLearningHomeReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
+      if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
+      learningSystem.read=(async query=>{if(query.kind==='home')throw new Error('fixture-home-read-failure');return original(query);}) as typeof original;
+      restoreLearningReads=()=>{learningSystem.read=original;};
+      window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['learningTargets']}}));
     },
     async failLearningManagementReadsForTest(active){
       const {learningSystem}=await import('./learning/system');
@@ -301,12 +332,26 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       learningSystem.read=(async query=>{if(query.kind==='management')throw new Error('fixture-management-read-failure');return original(query);}) as typeof original;
       restoreLearningReads=()=>{learningSystem.read=original;};
     },
+    async failLearningScheduleReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      let control=Reflect.get(learningSystem,'scheduleReadFailureForTest') as {active:boolean}|undefined;
+      if(control)control.active=active;else{control={active};const read=learningSystem.read;Reflect.set(learningSystem,'scheduleReadFailureForTest',control);const held=control;learningSystem.read=(async query=>{if(query.kind==='schedule'&&held.active)throw Error('fixture schedule read failed');return read(query);}) as typeof read;}
+      window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['learningTargets']}}));
+    },
     async failLearningHistoryReadsForTest(active){
       const {learningSystem}=await import('./learning/system');
       if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
       if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
       learningSystem.read=(async query=>{if(query.kind==='history')throw new Error('fixture-history-read-failure');return original(query);}) as typeof original;
       restoreLearningReads=()=>{learningSystem.read=original;};
+    },
+    async failLearningRuntimeReadsForTest(active){
+      const {learningSystem}=await import('./learning/system');
+      if(!active){restoreLearningReads?.();restoreLearningReads=undefined;return;}
+      if(restoreLearningReads)throw new Error('Learning read fault already active');const original=learningSystem.read;
+      learningSystem.read=(async query=>{if(query.kind==='runtime')throw new Error('fixture-runtime-read-failure');return original(query);}) as typeof original;
+      restoreLearningReads=()=>{learningSystem.read=original;};
+      window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['learningRuns']}}));
     },
     async failLearningTargetReadsForTest(active){
       const {learningSystem}=await import('./learning/system');
@@ -358,11 +403,19 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       if(!active){restoreAnnotationReads?.();restoreAnnotationReads=undefined;return;}
       if(restoreAnnotationReads)throw Error('Annotation read fault already active');
       const [{sqliteRecordAdapter},{personalContentSystem}]=await Promise.all([import('./data/library/sqliteAdapter'),import('./personalContent/system')]);
-      const adapter=await sqliteRecordAdapter(),entries=adapter.entries.bind(adapter);
+      const adapter=await sqliteRecordAdapter(),entries=adapter.entries.bind(adapter),graph=adapter.worldGraph.bind(adapter),browse=adapter.worldBrowse.bind(adapter);
+      adapter.worldGraph=async query=>{if(query.referenceFilter&&query.referenceFilter!=='all')throw Error('fixture annotation read failed');return graph(query);};
+      adapter.worldBrowse=async query=>{if(query.referenceFilter&&query.referenceFilter!=='all')throw Error('fixture annotation read failed');return browse(query);};
       adapter.entries=async table=>{if(table==='annotations')throw Error('fixture annotation read failed');return entries(table);};
-      restoreAnnotationReads=()=>{adapter.entries=entries;};
+      restoreAnnotationReads=()=>{adapter.entries=entries;adapter.worldGraph=graph;adapter.worldBrowse=browse;};
       await personalContentSystem.refresh().catch(()=>undefined);
       if(personalContentSystem.read({kind:'snapshot'}).status!=='error')throw Error('Annotation read fault was not exercised');
+      window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:['annotations']}}));
+    },
+    async failNextSenseNoteCommitForTest(){
+      const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');
+      const adapter=await sqliteRecordAdapter(),commit=adapter.commit.bind(adapter);
+      adapter.commit=async mutation=>{if(mutation.puts.some(row=>row.table==='annotations'&&row.key.startsWith('sense_note:'))){adapter.commit=commit;throw Error('fixture note commit failed');}return commit(mutation);};
     },
     async failNextInboxCommitForTest(intakeId){
       const {sqliteRecordAdapter}=await import('./data/library/sqliteAdapter');
@@ -418,6 +471,15 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       releaseWorldReads=()=>{worldReadRepository.detail=original;resume();releaseWorldReads=undefined;};
     },
     releaseWorldDetailReadsForTest(){releaseWorldReads?.();},
+    async holdWorldGraphReadsForTest(){
+      if(releaseGraphReads)throw new Error('Graph read fixture is already held');
+      const {worldReadRepository}=await import('./experience/personalMeaningJourney/worldRepository');
+      const original=worldReadRepository.graph;let resume!:(fail:boolean)=>void;
+      const held=new Promise<boolean>(resolve=>{resume=resolve;});
+      worldReadRepository.graph=async(query,signal)=>{const snapshot=await original(query,signal);if(await held)throw new Error('fixture-graph-read-failure');return snapshot;};
+      releaseGraphReads=(fail=false)=>{worldReadRepository.graph=original;resume(fail);releaseGraphReads=undefined;};
+    },
+    releaseWorldGraphReadsForTest(fail){releaseGraphReads?.(fail);},
     async notifyWorldReadForTest(){
       // A coarse semantic invalidation hint, not an unrelated meta write.
       // It forces a coherent reread without manufacturing learner facts.
@@ -536,6 +598,18 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
         completedTargets:snapshot.targets.filter(target=>target.completed).map(target=>({targetId:target.targetId,nextReviewAt:target.nextReviewAt})),
       };
     },
+    async rawLearningFactsForTest(){
+      const {encodeBackupValue}=await import('./data/library/backupCodec');
+      return readLibrary(async tx=>{
+        const result:Record<string,{count:number;sha256:string}>={};
+        for(const table of ['curriculumEnrollments','supplementalMembershipStates','studyScopes','learningSessions','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts'] as const){
+          const rows=(await tx.entries(table)).map(row=>({key:String(row.key),value:encodeBackupValue(row.value)})).sort((a,b)=>a.key.localeCompare(b.key));
+          const bytes=new TextEncoder().encode(JSON.stringify(rows)),digest=await crypto.subtle.digest('SHA-256',bytes);
+          result[table]={count:rows.length,sha256:Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('')};
+        }
+        return result;
+      });
+    },
     async seedDrafts(drafts, images) {
       await openLibrary();
       // Reuse one real-sized image under differently shaped rows. Canonical sync should
@@ -562,6 +636,8 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     async syncStatus() {
       return (await readCloudSync())?.status ?? 'none';
     },
+    cloudSyncStateForTest:readCloudSync,
+    async cloudCheckpointForTest(){return {state:await readCloudSync(),refs:await readLibrary(tx=>tx.syncBaseReferences())};},
     async semanticWorldContainsExpression(surfaceForm) {
       const state=await loadJourneyStateFromLibrary();
       return state.meanings.some((meaning) =>

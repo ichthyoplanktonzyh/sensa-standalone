@@ -3,6 +3,7 @@ import type {Database,PreparedStatement,SqlValue} from '@sqlite.org/sqlite-wasm'
 import {decodeBackupValue} from './backupCodec';
 import {ensureSqliteSchemaIndexes} from './sqliteSchemaIndexes';
 import type {SqliteMutation} from './sqliteProtocol';
+import type {LibraryRecordReader} from './libraryRecordReader';
 import {confirmedLookupConnections,normalizeMeaningQuery,validateMeaningQuery,meaningLookupFactFields,type MeaningLookupFacts,type LookupRegistryRead} from '../../experience/personalMeaningJourney/meaningLookupFacts';
 import {MEANING_LOOKUP_MAX_BYTES,type MeaningLookupMatch,type MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
 
@@ -48,7 +49,7 @@ function lookupFacts(encoded:string):MeaningLookupFacts{
 type Row=Record<string,any>;
 export class SqliteMeaningLookupProjection{
  private statements=new Map<string,PreparedStatement>();
- constructor(private readonly database:Database,private readonly get:(table:'semanticRegistry'|'semanticMeanings',key:string)=>string|null){}
+ constructor(private readonly database:Database,private readonly get:(table:'semanticRegistry'|'semanticMeanings',key:string)=>string|null,private readonly decodedReader?:()=>LibraryRecordReader|undefined){}
  private statement(sql:string,bind:unknown[]):PreparedStatement{
   let statement=this.statements.get(sql);if(!statement){statement=this.database.prepare(sql);this.statements.set(sql,statement);}
   statement.reset(true);if(bind.length)statement.bind(bind as SqlValue[]);return statement;
@@ -106,11 +107,13 @@ export class SqliteMeaningLookupProjection{
    }
    this.write('DELETE FROM sensa_meaning_lookup_connections WHERE meaning_id=?',[meaningId]);
    this.write('DELETE FROM sensa_meaning_lookup_dependencies WHERE meaning_id=?',[meaningId]);
-   const encoded=this.get('semanticMeanings',meaningId);if(!encoded)continue;
-   const facts=lookupFacts(encoded);if(facts.personalMeaning?.status!=='active'||facts.personalMeaning.personalMeaningId!==meaningId)continue;
+   const decoded=this.decodedReader?.(),encoded=decoded?null:this.get('semanticMeanings',meaningId);
+   const facts=decoded?decoded.get('semanticMeanings',meaningId) as MeaningLookupFacts|undefined:encoded?lookupFacts(encoded):undefined;
+   if(!facts||facts.personalMeaning?.status!=='active'||facts.personalMeaning.personalMeaningId!==meaningId)continue;
    const dependencies=new Set<string>();
    const read:LookupRegistryRead=(kind,id)=>{
     const key=`${kind}:${id}`;dependencies.add(key);
+    if(decoded){const row=decoded.get('semanticRegistry',key) as any;return (row?.kind===kind&&row.value?.[registryIds[kind]]===id?row.value:undefined) as never;}
     const cached=registry.get(key);
     if(cached){registry.delete(key);registry.set(key,cached);return cached.value as never;}
     const encoded=this.get('semanticRegistry',key),row=encoded?decodeBackupValue(JSON.parse(encoded)):undefined;
@@ -155,10 +158,11 @@ export class SqliteMeaningLookupProjection{
     WHERE registry_key IN (SELECT value FROM json_each(?))`,[JSON.stringify(registryKeys)]))affected.add(row.meaning_id);
   if(affected.size)this.replace([...affected]);
  }
- rebuild():void{
+ rebuild():void{for(const _ of this.rebuildPages())void _;}
+ /** Yields bounded rebuild steps for an unselected private generation. */
+ *rebuildPages(selectKeys?:(table:string,keys:string[])=>string[]):Generator<number>{
   for(const table of ['connections','dependencies','versions','search','documents','expressions'])this.write(`DELETE FROM sensa_meaning_lookup_${table}`);
-  const ids=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' ORDER BY record_key").map(row=>row.record_key);
-  this.replace(ids);
+  yield 0;let after='';for(;;){const keys=this.rows("SELECT record_key FROM sensa_records WHERE table_name='semanticMeanings' AND record_key>? ORDER BY record_key LIMIT 64",[after]).map(row=>row.record_key),ids=selectKeys?selectKeys('semanticMeanings',keys):keys;if(!ids.length)break;this.replace(ids);after=ids.at(-1)!;yield ids.length;}
   this.write('INSERT INTO sensa_meaning_lookup_meta VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version',[meaningLookupProjectionVersion]);
  }
  query(raw:string):MeaningLookupResult{

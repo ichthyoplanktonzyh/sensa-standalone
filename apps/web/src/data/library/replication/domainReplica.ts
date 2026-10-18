@@ -20,6 +20,8 @@ export type DomainReplicaModule={
  readonly namespace:string;
  owns(table:ReplicaEntry['table'],key:string):boolean;
  normalize?(entry:ReplicaEntry,identity:LibraryIdentity):ReplicaEntry;
+ /** A domain with normalization may explicitly identify unchanged records. */
+ canCopyNormalizedValue?(entry:ReplicaRecordReference):boolean;
  restore?(entry:ReplicaEntry,value:unknown,identity:LibraryIdentity):unknown;
  mergeSteps?(input:ReplicaMergeInput,ordinary:(input:ReplicaMergeInput)=>ReplicaMergeSteps):ReplicaMergeSteps;
  /** Records that must remain on the same side when this record conflicts. */

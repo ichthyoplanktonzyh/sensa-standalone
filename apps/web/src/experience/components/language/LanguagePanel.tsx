@@ -1,5 +1,5 @@
 import '../../../i18n/profileResources';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Archive,Check,Pause,Play,Plus,RotateCcw,X} from 'lucide-react';
 import {useTranslation} from 'react-i18next';
 import {
@@ -34,6 +34,8 @@ interface Props {
   activeRoute:SensaLanguageLearningRoute;
   availabilityFor:(targetLanguageTag:string,supportLanguageTag:string)=>LanguageRouteAvailability|undefined;
   busy:boolean;
+  loadStatus?:'loading'|'ready'|'unavailable';
+  onRetry?:()=>void;
   notice:string;
   onAdd:(targetLanguageTag:string,supportLanguageTag:string)=>void;
   onUpdateSupport:(routeId:string,supportLanguageTag:string)=>void;
@@ -45,7 +47,7 @@ interface Props {
   onClose:()=>void;
 }
 
-export function LanguagePanel({collection,activeRoute,availabilityFor,busy,notice,onAdd,onUpdateSupport,onArchive,onPause,onResume,onRestore,onSetActive,onClose}:Props){
+export function LanguagePanel({collection,activeRoute,availabilityFor,busy,loadStatus='ready',notice,onRetry,onAdd,onUpdateSupport,onArchive,onPause,onResume,onRestore,onSetActive,onClose}:Props){
   const {t,i18n}=useTranslation();
   const [pendingTarget,setPendingTarget]=useState('');
   const [pendingSupport,setPendingSupport]=useState(activeRoute.defaultSupportLanguageTag);
@@ -56,6 +58,8 @@ export function LanguagePanel({collection,activeRoute,availabilityFor,busy,notic
   const archived=collection.routes.filter(route=>route.status==='archived');
   const activeCount=collection.routes.filter(route=>route.status==='active').length;
   const pendingAvailability=pendingTarget&&pendingSupport?availabilityFor(pendingTarget,pendingSupport):undefined;
+  const supportDefault=useRef<string|null>(null);
+  useEffect(()=>{if(loadStatus!=='ready')return;const key=JSON.stringify([activeRoute.id,activeRoute.defaultSupportLanguageTag]);if(supportDefault.current!==key){supportDefault.current=key;setPendingSupport(activeRoute.defaultSupportLanguageTag);}},[loadStatus,activeRoute.id,activeRoute.defaultSupportLanguageTag]);
   useEffect(()=>{
     const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();}};
     document.addEventListener('keydown',escape,true);
@@ -66,7 +70,8 @@ export function LanguagePanel({collection,activeRoute,availabilityFor,busy,notic
         <h2 id="languages-title" className="text-lg font-medium">{t('languages.title')}</h2>
         <button autoFocus type="button" className="grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus" onClick={onClose} aria-label={t('languages.close')}><X size={20}/></button>
       </div>,
-    primary: <div className="space-y-7">
+    primary: <div className="space-y-7" aria-busy={loadStatus==='loading'}>
+        {loadStatus==='loading'?<p role="status" className="text-sm text-fg-secondary">{t('reliability.loading')}</p>:loadStatus==='ready'?<>
         <section>
           <h3 className="text-sm font-medium">{t('languages.routes')}</h3>
           <p className="mt-2 text-xs leading-6 text-fg-tertiary">{t('languages.routesNote')}</p>
@@ -127,7 +132,8 @@ export function LanguagePanel({collection,activeRoute,availabilityFor,busy,notic
           <h3 className="text-sm font-medium">{t('languages.archived')}</h3>
           <div className="mt-3 space-y-2">{archived.map(route=>{const target=languageNames(route.targetLanguageTag,locale);return <div key={route.id} className="flex items-center gap-3 rounded-card border border-border-subtle bg-surface-panel px-4 py-3 text-sm"><span className="min-w-0 flex-1 truncate">{target.name}</span><button type="button" disabled={busy} onClick={()=>onRestore(route.id)} className="inline-flex min-h-11 items-center gap-2 rounded-control px-3 text-action-primary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus"><RotateCcw size={16}/>{t('languages.restore')}</button></div>;})}</div>
         </section>}
-        {notice&&<p role="status" className="rounded-control bg-accent-soft p-4 text-sm text-action-primary">{notice}</p>}
+        </>:null}
+        {notice&&<div role="status" className="rounded-control bg-accent-soft p-4 text-sm text-action-primary"><p>{notice}</p>{onRetry&&<button type="button" disabled={busy} onClick={onRetry} className="mt-3 min-h-11 underline focus-visible:outline-2 focus-visible:outline-focus">{t('reliability.retry')}</button>}</div>}
       </div>,
     controls: <button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onClose}>{t('languages.done')}</button>,
   }} />;
@@ -135,5 +141,5 @@ export function LanguagePanel({collection,activeRoute,availabilityFor,busy,notic
 
 export function LanguagePanelHost({onClose}:{onClose:()=>void}){
   const language=useLanguageRoutes();
-  return <LanguagePanel collection={language.collection} activeRoute={language.activeRoute} availabilityFor={language.availabilityFor} busy={language.busy} notice={language.notice} onAdd={(target,support)=>void language.addRoute(target,support)} onUpdateSupport={(id,support)=>void language.updateSupport(id,support)} onArchive={id=>void language.setStatus(id,'archived')} onPause={id=>void language.setStatus(id,'paused')} onResume={id=>void language.setStatus(id,'active')} onRestore={id=>void language.setStatus(id,'active')} onSetActive={id=>void language.setActive(id)} onClose={onClose}/>;
+  return <LanguagePanel collection={language.collection} activeRoute={language.activeRoute} availabilityFor={language.availabilityFor} busy={language.busy} loadStatus={language.loadStatus} onRetry={language.retryable?language.retry:undefined} notice={language.notice} onAdd={(target,support)=>void language.addRoute(target,support)} onUpdateSupport={(id,support)=>void language.updateSupport(id,support)} onArchive={id=>void language.setStatus(id,'archived')} onPause={id=>void language.setStatus(id,'paused')} onResume={id=>void language.setStatus(id,'active')} onRestore={id=>void language.setStatus(id,'active')} onSetActive={id=>void language.setActive(id)} onClose={onClose}/>;
 }

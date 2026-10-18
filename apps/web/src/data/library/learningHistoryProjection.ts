@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS sensa_learning_history_meta(key TEXT PRIMARY KEY NOT 
 /** Controlled in-memory adapter oracle; production performs these selections,
  * counts and calendar/language groups in SQLite without transferring all rows. */
 export function learningHistoryPageFromRecords(records:readonly StoredLearningRecord[],request:LearningHistoryRequest):StoredLearningHistoryPage{
+ records=[...new Map(records.map(row=>[row.recordId,row])).values()];
+ if(request.runIds){const runs=new Set(request.runIds);records=records.filter(row=>runs.has(row.recordId.split(':')[0]!));}
  const window=learningHistoryWindow(request),languages=[...new Set(records.map(row=>row.languageTag))].sort();
  const languageScope=request.surface==='study'?'all':request.languageChoice??(languages.includes(request.activeLanguageTag)?request.activeLanguageTag:'all');
  const available=records.filter(row=>(languageScope==='all'||row.languageTag===languageScope)&&(window.availableAt===null||Date.parse(row.occurredAt)<=window.availableAt));
@@ -27,12 +29,12 @@ export function learningHistoryPageFromRecords(records:readonly StoredLearningRe
  for(const row of selected){counts[row.kind]++;breakdown.get(row.languageTag)![row.kind]++;const day=localLearningHistoryDay(new Date(row.occurredAt)),key=JSON.stringify([day,row.languageTag]),group=groups.get(key)??{day,languageTag:row.languageTag,counts:emptyLearningHistoryCounts()};group.counts[row.kind]++;groups.set(key,group);}
  const page=selected.filter(row=>!request.cursor||Date.parse(row.occurredAt)<request.cursor.occurredAt||Date.parse(row.occurredAt)===request.cursor.occurredAt&&row.recordId>request.cursor.recordId).slice(0,request.limit+1),more=page.length>request.limit;
  if(more)page.pop();const last=page.at(-1);
- return {records:page,total:selected.length,hasRecords:available.length>0,invalidRange:window.invalidRange,languages,languageScope,counts,days:[...groups.values()].sort((a,b)=>b.day.localeCompare(a.day)||a.languageTag.localeCompare(b.languageTag)),breakdown:languageScope==='all'?[...breakdown].map(([tag,counts])=>({tag,counts})):[],nextCursor:more&&last?{occurredAt:Date.parse(last.occurredAt),recordId:last.recordId,clock:request.clock}:null};
+ return {clock:request.clock,fromDay:window.fromDay,throughDay:window.throughDay,records:page,total:selected.length,hasRecords:available.length>0,invalidRange:window.invalidRange,languages,languageScope,counts,days:[...groups.values()].sort((a,b)=>b.day.localeCompare(a.day)||a.languageTag.localeCompare(b.languageTag)),breakdown:languageScope==='all'?[...breakdown].map(([tag,counts])=>({tag,counts})):[],nextCursor:more&&last?{occurredAt:Date.parse(last.occurredAt),recordId:last.recordId,clock:request.clock}:null};
 }
 
 /** Rebuildable local presentation index, not learning authority or new facts. */
 export class SqliteLearningHistoryProjection{
- constructor(private readonly database:Database,private readonly target:(id:string)=>LocalLearningTarget|undefined,private readonly decodeRun:(encoded:string)=>LocalLearningRun=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalLearningRun){
+ constructor(private readonly database:Database,private readonly target:(id:string)=>Pick<LocalLearningTarget,'targetLanguageTag'>|undefined,private readonly decodeRun:(encoded:string)=>LocalLearningRun=encoded=>decodeBackupValue(JSON.parse(encoded)) as LocalLearningRun){
   database.createFunction({name:'sensa_learning_history_day',arity:1,innocuous:true,xFunc:(_context,at)=>localLearningHistoryDay(new Date(Number(at)))});
  }
  initialize(){
@@ -57,15 +59,17 @@ export class SqliteLearningHistoryProjection{
   for(const targetId of run.targetIds){
    const participant=run.participants[targetId],target=this.target(targetId);if(!participant||!target)continue;
    const material=localLastPresentedMaterial(participant),meaning=material?learningSupportMeaning(material.content.resources,participant.languageContext.supportLanguageTag):undefined;
-   const row:StoredLearningRecord={recordId:`${run.id}:${targetId}`,targetId,expression:target.expression,languageTag:target.targetLanguageTag,...(typeof meaning==='string'?{meaning}:{}),occurredAt:run.targetCompletions?.[targetId]?.at??run.completedAt,kind:run.purpose};
+   const row:StoredLearningRecord={recordId:`${run.id}:${targetId}`,targetId,expression:String(material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface??''),languageTag:target.targetLanguageTag,...(typeof meaning==='string'?{meaning}:{}),occurredAt:run.targetCompletions?.[targetId]?.at??run.completedAt,kind:run.purpose};
    this.database.exec({sql:'INSERT INTO sensa_learning_history(record_key,run_key,occurred_at,language_tag,record_kind,projection_json) VALUES(?,?,?,?,?,?)',bind:[row.recordId,runId,Date.parse(row.occurredAt),row.languageTag,row.kind,JSON.stringify(row)]});
   }
  }
  records():StoredLearningRecord[]{const rows=this.database.exec({sql:'SELECT projection_json FROM sensa_learning_history ORDER BY occurred_at DESC,record_key',rowMode:0,returnValue:'resultRows'}) as unknown[];return rows.map(row=>JSON.parse(String(row)) as StoredLearningRecord);}
  page(request:LearningHistoryRequest):StoredLearningHistoryPage{
-  const window=learningHistoryWindow(request),languages=(this.database.exec({sql:'SELECT DISTINCT language_tag FROM sensa_learning_history ORDER BY language_tag',rowMode:0,returnValue:'resultRows'}) as unknown[]).map(String);
+  const window=learningHistoryWindow(request),runCondition=request.runIds?' WHERE run_key IN (SELECT value FROM json_each(?))':'';
+  const languages=(this.database.exec({sql:'SELECT DISTINCT language_tag FROM sensa_learning_history'+runCondition+' ORDER BY language_tag',bind:request.runIds?[JSON.stringify(request.runIds)]:[],rowMode:0,returnValue:'resultRows'}) as unknown[]).map(String);
   const languageScope=request.surface==='study'?'all':request.languageChoice??(languages.includes(request.activeLanguageTag)?request.activeLanguageTag:'all');
   const availableWhere:string[]=[],availableBind:(string|number)[]=[];
+  if(request.runIds){availableWhere.push('run_key IN (SELECT value FROM json_each(?))');availableBind.push(JSON.stringify(request.runIds));}
   if(languageScope!=='all'){availableWhere.push('language_tag=?');availableBind.push(languageScope);}
   if(window.availableAt!==null){availableWhere.push('occurred_at<=?');availableBind.push(window.availableAt);}
   const count=(where:string[],bind:(string|number)[])=>Number((this.database.exec({sql:`SELECT COUNT(*) FROM sensa_learning_history${where.length?' WHERE '+where.join(' AND '):''}`,bind,rowMode:0,returnValue:'resultRows'}) as unknown[])[0]??0);
@@ -82,6 +86,6 @@ export class SqliteLearningHistoryProjection{
   if(request.cursor){pageWhere.push('(occurred_at<? OR (occurred_at=? AND record_key>?))');pageBind.push(request.cursor.occurredAt,request.cursor.occurredAt,request.cursor.recordId);}
   const rows=this.database.exec({sql:`SELECT projection_json FROM sensa_learning_history${pageWhere.length?' WHERE '+pageWhere.join(' AND '):''} ORDER BY occurred_at DESC,record_key LIMIT ?`,bind:[...pageBind,request.limit+1],rowMode:0,returnValue:'resultRows'}) as unknown[];
   const more=rows.length>request.limit;if(more)rows.pop();const records=rows.map(row=>JSON.parse(String(row)) as StoredLearningRecord),last=records.at(-1);
-  return {records,total,hasRecords,invalidRange:window.invalidRange,languages,languageScope,counts,days:[...days.values()],breakdown:languageScope==='all'?[...breakdown].map(([tag,counts])=>({tag,counts})):[],nextCursor:more&&last?{occurredAt:Date.parse(last.occurredAt),recordId:last.recordId,clock:request.clock}:null};
+  return {clock:request.clock,fromDay:window.fromDay,throughDay:window.throughDay,records,total,hasRecords,invalidRange:window.invalidRange,languages,languageScope,counts,days:[...days.values()],breakdown:languageScope==='all'?[...breakdown].map(([tag,counts])=>({tag,counts})):[],nextCursor:more&&last?{occurredAt:Date.parse(last.occurredAt),recordId:last.recordId,clock:request.clock}:null};
  }
 }

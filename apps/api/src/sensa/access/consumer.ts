@@ -30,9 +30,10 @@ import {agentVerifier,createAgentConnectionSetup,exchangeAgentConnectionSetup,li
 import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@sensa/contracts/sensa';
 import {serviceTelemetry,setTelemetryError,setTelemetryFailure,type ServiceRequestRecord} from './telemetry.js';
 import {registerBrowserTelemetry,type BrowserTelemetrySink,type BrowserTelemetryRateLimiter} from './browserTelemetry.js';
-import {readLearningContentRegistry} from './learningContentRegistry.js';
+import {readLearningContentRegistry,registryWithoutBookPreviews} from './learningContentRegistry.js';
 import {synthesizeEdgeSpeech} from '../speech/edgeTts.js';
 import {createStreamAuthorizationGate} from './streamAuthorization.js';
+import {releaseCommit} from '../releaseIdentity.js';
 
 const modelDailyLimit=30;
 const uuid=z.string().uuid();
@@ -101,6 +102,10 @@ export type ConsumerRoutesOptions={
 export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   const clock=options.clock??(()=>new Date());
   const app=new Hono();
+  app.get('/sensa/release',context=>{
+    context.header('Cache-Control','no-store');
+    return context.json({format:'sensa-api-release-v1',commit:releaseCommit});
+  });
   const transaction=options.transaction??unsafeTransaction;
   const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
   const verifyAgent=agentVerifier(verify,transaction,clock);
@@ -109,7 +114,7 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
 
   app.use('*',serviceTelemetry(options.telemetry));
   app.use('*',(context,next)=>bodyLimit({
-    maxSize:['/sensa/model/turn','/sensa/model/turn/stream'].includes(context.req.path)?12*1024*1024:context.req.path.endsWith('/sensa/library-sync/blocks/store')?librarySyncBlockStoreChars+1024*1024:256*1024,
+    maxSize:['/sensa/model/turn','/sensa/model/turn/stream'].includes(context.req.path)?12*1024*1024:context.req.path.endsWith('/sensa/library-sync/blocks/store')||context.req.path.endsWith('/sensa/library-sync/staging/page')?librarySyncBlockStoreChars+1024*1024:context.req.path.endsWith('/sensa/library-sync/compact')?2*1024*1024:256*1024,
     onError:c=>{setTelemetryError(c,'body_too_large');return c.json({code:'body_too_large'},413);},
   })(context,next));
   app.onError((error,context)=>{
@@ -208,7 +213,9 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   // Registry descriptors and immutable artifact URLs are public discovery data;
   // account, library-sync and publisher authority stay on their protected routes.
   app.get('/sensa/packages',async context=>{
-    const catalog=await (options.learningContentRegistry??readLearningContentRegistry)();
+    const source=await (options.learningContentRegistry??readLearningContentRegistry)();
+    const catalog='format' in source&&context.req.query('bookPreview')!=='1'
+      ?registryWithoutBookPreviews(source):source;
     if('format' in catalog){
       const etag=`"${catalog.revision}"`;
       context.header('ETag',etag);

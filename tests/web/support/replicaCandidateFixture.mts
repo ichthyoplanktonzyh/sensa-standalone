@@ -14,9 +14,9 @@ export function candidateExpected(records:ReplicaCandidateRecord[],identity:Pick
  return expectedFromRefs(records,identity,revision);
 }
 function expectedFromRefs(records:ReplicaCandidateRecord[],identity:Pick<LibraryIdentity,'id'|'learnerId'>,revision:number):ReplicaCandidateExpected{
- const manifest={version:6,libraryId:identity.id,learnerId:identity.learnerId,rows:records.map(record=>({table:record.table,key:record.key,blocks:record.blockRefs}))};
+ const manifest={version:8,libraryId:identity.id,learnerId:identity.learnerId,rows:records.map(record=>({table:record.table,key:record.key,blocks:record.blockRefs}))};
  const manifestBlocks=blocksForText(JSON.stringify(manifest));
- return {head:{revision,manifest:manifestBlocks.map(block=>block.hash)},manifestBlocks:[...new Map(manifestBlocks.map(block=>[block.hash,block])).values()]};
+ return {head:{revision,manifest:{libraryId:identity.id,learnerId:identity.learnerId,snapshotRevision:revision,floor:revision,records:records.length}},manifestRefs:manifestBlocks.map(block=>block.hash),manifestBlocks:[...new Map(manifestBlocks.map(block=>[block.hash,block])).values()]};
 }
 /** Large HTTP fixtures encode each body once; no second complete producer pass. */
 export function candidateFixture(records:ReplicaCandidateRecord[],identity:Pick<LibraryIdentity,'id'|'learnerId'>,revision=3){

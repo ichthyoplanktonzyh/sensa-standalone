@@ -20,10 +20,13 @@ import { isKnownShellPath, parseShellParams, parseViewMode, type ShellFlow, type
  * pathnames are legal. `useShellNavigation` reads the location back out.
  */
 
-interface ShellSearch extends ShellParams {
+type ShellSearch = Omit<ShellParams,'page'|'pageSize'|'learningPage'> & {
+  readonly page?:string|number;
+  readonly pageSize?:string|number;
+  readonly learningPage?:string|number;
   readonly flow?: ShellFlow;
   readonly candidate?: string;
-}
+};
 
 function SensaRootRoute() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -39,9 +42,15 @@ const rootRoute = createRootRoute({
   notFoundComponent: () => <ProductRecovery kind="not_found" />,
   validateSearch: (search: Record<string, unknown> & SearchSchemaInput): ShellSearch => {
     const candidate=typeof search.candidate==='string'&&/^[0-9a-f-]{36}$/i.test(search.candidate)?search.candidate:undefined;
-    const params = {...parseShellParams(search),...(candidate?{candidate}:{})};
+    const params:ShellSearch = {...parseShellParams(search),...(candidate?{candidate}:{})};
+    const numeric:Partial<Record<'page'|'pageSize'|'learningPage',number>>={};
+    for(const key of ['page','pageSize','learningPage'] as const){
+      const value=params[key];
+      if(typeof value==='string'&&/^\d+$/u.test(value)&&Number.isSafeInteger(Number(value)))numeric[key]=Number(value);
+    }
+    const normalized={...params,...numeric};
     const viewMode = parseViewMode(search.flow);
-    return viewMode === 'main' ? params : { ...params, flow: viewMode };
+    return viewMode === 'main' ? normalized : { ...normalized, flow: viewMode };
   },
 });
 

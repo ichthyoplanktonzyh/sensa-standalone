@@ -1,3 +1,4 @@
+import {stableLearningTargetId} from '../../learning/runtime/learningIdentity';
 import {
   sensaContentGenerationRequestSchema,
   sensaFormalPinnedLanguageContextSchema,
@@ -117,6 +118,8 @@ export async function assertContentSupplyTransition(input: {
         meaningFocusId: z.string().nullable(),
         senseId: z.string().min(1),
         senseVersionId: z.string().min(1),
+        expressionId: uuid,
+        expressionVersionId: uuid,
         bindingId: z.string().min(1),
         bindingVersionId: z.string().min(1),
       }).strict().parse(task.source);
@@ -136,9 +139,7 @@ export async function assertContentSupplyTransition(input: {
         if(change.before===null&&(operation.input as any)?.enrollmentId!==source.enrollmentId)reject('Direct preparation was not explicitly requested.');
       }
       const expectedTaskId = provisioningTaskId(source,context.languageRouteId);
-      const expectedTargetId = stableUuid(
-        `sensa-learning-target:${identity.learnerId}:${source.senseVersionId}:${source.bindingVersionId}`,
-      );
+      const expectedTargetId = stableLearningTargetId(identity.learnerId,source.senseId,source.expressionId);
       const expectedMembershipId = provisioningMembershipId(source,expectedTargetId,context.languageRouteId);
       if (
         change.key !== task.id
@@ -174,7 +175,7 @@ export async function assertContentSupplyTransition(input: {
         const target=await read('learningTargets',task.targetId) as any;
         const member=target?.curriculumMemberships?.find((item:any)=>item.id===task.coveredByMembershipId);
         if(!member||member.languageContext.languageRouteId!==context.languageRouteId||member.languageContext.targetLanguageTag!==context.targetLanguageTag||member.languageContext.supportLanguageTag!==context.supportLanguageTag
-          ||target.identity.senseId!==source.senseId||target.identity.senseVersionId!==source.senseVersionId||target.identity.senseExpressionBindingId!==source.bindingId||target.identity.bindingVersionId!==source.bindingVersionId)reject('Covering membership is missing or has another fixed connection.');
+          ||target.identity.senseId!==source.senseId||target.identity.expressionId!==source.expressionId)reject('Covering membership is missing or has another fixed connection.');
       }else if(task.coveredByMembershipId!==undefined)reject('Unexpected covered preparation reference.');
       continue;
     }

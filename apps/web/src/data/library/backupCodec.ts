@@ -10,15 +10,16 @@ export function encodeBackupValue(value:unknown,depth=0):WireValue{
  if(typeof value==='object'&&Object.getPrototypeOf(value)===Object.prototype)return ['object',Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v])=>[k,encodeBackupValue(v,depth+1)])];
  throw new Error('libraryBackup.errors.valueType');
 }
-export function decodeBackupValue(node:any,depth=0):any{
+export function decodeBackupValue(node:any,depth=0,shared?: (digest:string)=>unknown):any{
  if(depth>80||!Array.isArray(node))throw new Error('libraryBackup.errors.format');
  const [kind,value]=node;
  if(node.length===1&&kind==='null')return null;if(node.length===1&&kind==='undefined')return undefined;
  if(node.length!==2)throw new Error('libraryBackup.errors.format');
+ if(kind==='sensa-shared-content-v1'&&shared&&typeof value==='string'&&/^[a-f0-9]{64}$/u.test(value))return shared(value);
  if(kind==='string'&&typeof value==='string'||kind==='boolean'&&typeof value==='boolean'||kind==='number'&&typeof value==='number'&&Number.isFinite(value))return value;
  if(kind==='date'&&typeof value==='string'&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString()===value)return new Date(value);
- if(kind==='array'&&Array.isArray(value))return value.map(v=>decodeBackupValue(v,depth+1));
- if(kind==='object'&&Array.isArray(value)){const object:Record<string,unknown>={};const seen=new Set();for(const pair of value){if(!Array.isArray(pair)||pair.length!==2||typeof pair[0]!=='string'||seen.has(pair[0]))throw new Error('libraryBackup.errors.fields');seen.add(pair[0]);Object.defineProperty(object,pair[0],{value:decodeBackupValue(pair[1],depth+1),writable:true,enumerable:true,configurable:true});}return object;}
+ if(kind==='array'&&Array.isArray(value))return value.map(v=>decodeBackupValue(v,depth+1,shared));
+ if(kind==='object'&&Array.isArray(value)){const object:Record<string,unknown>={};const seen=new Set();for(const pair of value){if(!Array.isArray(pair)||pair.length!==2||typeof pair[0]!=='string'||seen.has(pair[0]))throw new Error('libraryBackup.errors.fields');seen.add(pair[0]);Object.defineProperty(object,pair[0],{value:decodeBackupValue(pair[1],depth+1,shared),writable:true,enumerable:true,configurable:true});}return object;}
  throw new Error('libraryBackup.errors.format');
 }
 export const backupEqual=(a:unknown,b:unknown)=>JSON.stringify(encodeBackupValue(a))===JSON.stringify(encodeBackupValue(b));

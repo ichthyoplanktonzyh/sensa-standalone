@@ -81,9 +81,15 @@ export class SqlitePracticeExpressionProjection {
   if(ready&&this.rows('SELECT version FROM sensa_practice_expression_meta WHERE id=1')[0]?.version===3){this.database.exec(schema);return;}
   this.database.exec('DROP TABLE IF EXISTS sensa_practice_expressions;DROP TABLE IF EXISTS sensa_practice_expression_owners;DROP TABLE IF EXISTS sensa_practice_expression_meta;DROP TABLE IF EXISTS sensa_practice_expression_dependencies;');
   this.database.exec(schema);
-  for(const [table,source] of [['semanticMeanings','personal'],['packageCache','books']] as const)
-   for(const row of this.rows('SELECT record_key FROM sensa_records WHERE table_name=? ORDER BY record_key',[table]))this.replace(source,row.record_key);
+  this.rebuild();
   this.database.exec('INSERT INTO sensa_practice_expression_meta VALUES(1,3,0)');
+ }
+ /** Caller holds the facts/projection transaction. */
+ rebuild(){for(const _ of this.rebuildPages())void _;}
+ /** Yields bounded rebuild steps for an unselected private generation. */
+ *rebuildPages(selectKeys?:(table:string,keys:string[])=>string[]):Generator<number>{
+  this.database.exec('DELETE FROM sensa_practice_expressions;DELETE FROM sensa_practice_expression_owners;DELETE FROM sensa_practice_expression_dependencies;');
+  yield 0;for(const [table,source]of [['semanticMeanings','personal'],['packageCache','books']] as const){let after='';for(;;){const all=this.rows('SELECT record_key FROM sensa_records WHERE table_name=? AND record_key>? ORDER BY record_key LIMIT 64',[table,after]),keys=all.map(row=>row.record_key),page=selectKeys?selectKeys(table,keys):keys;if(!page.length)break;for(const key of page)this.replace(source,key);after=page.at(-1)!;yield page.length;}}
  }
  private replace(source:PracticeMaterialSource,key:string){
   const value=this.read(source==='personal'?'semanticMeanings':'packageCache',key);

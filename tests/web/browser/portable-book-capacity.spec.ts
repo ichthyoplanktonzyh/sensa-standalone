@@ -1,3 +1,4 @@
+import {IndexedSyncFixture} from '../support/indexedSyncFixture.mts';
 /** Real Chromium/OPFS capacity baselines for structurally large, low-media Books. */
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
@@ -48,6 +49,7 @@ let registry:unknown;
 let cloudRevision=0;
 let cloudManifest:string[]|null=null;
 const cloudBlocks=new Map<string,string>();
+const cloudIndex=new IndexedSyncFixture(cloudBlocks);
 let deliveredBytes=0;
 let deliveryRequests=0;
 
@@ -114,7 +116,7 @@ test.beforeAll(async()=>{
       if(url.pathname==='/sensa/intake/channel'){json({registered:true,libraryId:'capacity-fixture-library'});return;}
       if(url.pathname==='/sensa/intake/deliveries/pull'){json({deliveries:[]});return;}
       if(url.pathname==='/sensa/library-sync/head'){
-        json({revision:cloudRevision,manifest:cloudManifest});return;
+        json(cloudIndex.head(cloudRevision,cloudManifest));return;
       }
       if(url.pathname==='/sensa/library-sync/blocks/missing'){
         const input=await body() as {hashes?:string[]};
@@ -134,11 +136,11 @@ test.beforeAll(async()=>{
           missing:hashes.filter(hash=>!cloudBlocks.has(hash)),
         });return;
       }
+      if(url.pathname==='/sensa/library-sync/snapshot'||url.pathname==='/sensa/library-sync/pull'){
+        json(cloudIndex.page(url.pathname.replace('/sensa/library-sync',''),await body(),cloudRevision,cloudManifest));return;
+      }
       if(url.pathname==='/sensa/library-sync/commit'){
-        const input=await body() as {baseRevision?:number;manifest?:string[]};
-        if(input.baseRevision!==cloudRevision){json({code:'library_sync_conflict'},409);return;}
-        cloudRevision+=1;cloudManifest=input.manifest??[];
-        json({revision:cloudRevision,manifest:cloudManifest});return;
+        try{const result=cloudIndex.commit(await body(),cloudRevision,cloudManifest);cloudRevision=result.revision;cloudManifest=result.manifest;json(result.head);}catch(error){json({code:error instanceof Error?error.message:'library_sync_format'},409);}return;
       }
 
       const deliveryUrl=new URL(url.pathname,origin).href;
@@ -214,7 +216,7 @@ test.beforeEach(()=>{
   activeDelivery=null;
   deliveredBytes=0;
   deliveryRequests=0;
-  cloudRevision=0;
+  cloudRevision=0;cloudIndex.clear();
   cloudManifest=null;
   cloudBlocks.clear();
 });
@@ -424,7 +426,7 @@ const runCapacityJourney=async(count:number,browser:import('@playwright/test').B
     await stage('openBookDetail',async()=>{
       await catalog.getByRole('button',{name:title}).click();
       await expect(detail.getByRole('heading',{name:title,exact:true})).toBeVisible();
-      await expect(detail.getByText(new RegExp(`${count} 个表达`))).toBeVisible();
+      await expect(detail.getByText(`${new Intl.NumberFormat('zh-CN').format(count)} 个表达`,{exact:true})).toBeVisible();
     });
     let activePreparationWorker:import('@playwright/test').Worker|undefined;
     let preparationWorkerClosed:Promise<void>|undefined;
@@ -489,6 +491,27 @@ const runCapacityJourney=async(count:number,browser:import('@playwright/test').B
     assert(supplyAfterInstall.every(item=>item.bookDigests.includes(fixture!.descriptor.sha256)));
     const learningBefore=await stage('readLearningStateBeforeEnrollment',()=>page!.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()));
     assert.deepEqual(learningBefore.targetIds,[],'download must not create learning membership');
+
+    await stage('browseLargeInstalledDirectory',async()=>{
+      const contents=detail.getByRole('region',{name:'包内内容',exact:true});
+      await expect(contents.locator('li')).toHaveCount(3);
+      await contents.getByRole('button',{name:'查看更多',exact:true}).click();
+      await expect(contents.locator('li')).toHaveCount(24);
+      const pages=Math.ceil(count/24),lastExpression=`fixture-sense-${String(count).padStart(5,'0')}`;
+      await contents.getByRole('button',{name:`第 ${new Intl.NumberFormat('zh-CN').format(pages)} 页`,exact:true}).click();
+      await expect(contents.locator('li')).toHaveCount(count-(pages-1)*24);
+      await expect(contents.getByText(lastExpression,{exact:true})).toBeVisible();
+      await contents.getByRole('searchbox',{name:'搜索表达',exact:true}).fill(lastExpression);
+      await expect(contents.locator('li')).toHaveCount(1);
+      await expect(contents.getByText(lastExpression,{exact:true})).toBeVisible();
+      report.directory={pageSize:24,pages,lastPageEntries:count-(pages-1)*24,search:lastExpression,searchResults:1};
+      await page!.screenshot({path:test.info().outputPath(`book-${count}-directory-desktop.png`)});
+      await page!.setViewportSize({width:390,height:844});
+      assert(await detail.evaluate(element=>element.scrollWidth<=element.clientWidth),'large directory must fit a narrow screen');
+      await page!.screenshot({path:test.info().outputPath(`book-${count}-directory-narrow.png`)});
+      await page!.setViewportSize({width:1280,height:720});
+      assert.deepEqual(await page!.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint()),learningBefore,'directory browsing does not enroll or create learning facts');
+    });
 
     await stage('explicitEnrollment',async()=>{
       await detail.getByRole('button',{name:'加入学习',exact:true}).click();

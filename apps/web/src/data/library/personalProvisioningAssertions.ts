@@ -1,3 +1,4 @@
+import {stableLearningTargetId} from '../../learning/runtime/learningIdentity';
 import {canonicalConsumerJson,sensaContentGenerationRequestSchema,sensaFormalPinnedLanguageContextSchema} from '@sensa/contracts/sensa';
 import {sha256,stableUuid} from '@sensa/learning-kernel';
 import {z} from 'zod';
@@ -16,7 +17,7 @@ export function assertPersonalAttemptSource(attempt:any,task:any,source:Personal
  const context=sensaFormalPinnedLanguageContextSchema.parse(fixed.languageContext);
  z.string().uuid().parse(fixed.planRevision);z.boolean().parse(fixed.useContext);
  if(attempt.taskId!==task.id||provisioningTaskId(source.reference,context.languageRouteId)!==task.id
-   ||stableUuid(`sensa-learning-target:${learnerId}:${source.reference.senseVersionId}:${source.reference.bindingVersionId}`)!==task.targetId
+   ||stableLearningTargetId(learnerId,source.reference.senseId,source.reference.expressionId)!==task.targetId
    ||source.targetLanguageTag!==context.targetLanguageTag||!equal(attempt.contextPin,source.context.personalSemanticAnchorRevisionIds))reject('has inconsistent fixed identities');
  if(!attempt.request){
   if(attempt.grant!==null||attempt.bundle||attempt.status==='ready')reject('has evidence without its request');
@@ -42,7 +43,7 @@ export function assertPersonalAttemptSource(attempt:any,task:any,source:Personal
     ||origin.source!=='personal_anchor'||origin.sourceVersion!==grant.contextDigest||origin.personalAnchorUseGrantId!==grant.id
     ||!equal(origin.payload,{scene:source.context.text,senseFocus:source.semanticSpec.coreMeaningFocus,featureLabels:[],...(source.context.images.length?{images:source.context.images}:{})}))reject('request does not match its pinned Context grant');
  }else if(grant!==null||origin.source!=='other_authoritative_source'||origin.sourceVersion!==reference.senseVersionId||origin.personalAnchorUseGrantId!==null
-   ||!equal(origin.payload,{scene:source.semanticSpec.prototypeScenes[0]!.summary,senseFocus:source.semanticSpec.coreMeaningFocus,featureLabels:[]}))reject('request transmits ungranted personal Context');
+   ||!equal(origin.payload,{scene:source.semanticSpec.prototypeScenes[0]?.summary??'',senseFocus:source.semanticSpec.coreMeaningFocus,featureLabels:[]}))reject('request transmits ungranted personal Context');
  for(const artifact of request.contextArtifacts){
   if(artifact.contentDigest!==sha256(canonicalConsumerJson(artifact.payload)))reject('request has altered artifact evidence');
   if(artifact!==origin&&(artifact.source==='personal_anchor'||artifact.personalAnchorUseGrantId!==null))reject('request adds ungranted Context artifacts');

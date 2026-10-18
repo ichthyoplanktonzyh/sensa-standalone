@@ -12,9 +12,7 @@ export class PreparationCovered extends Error {
 export async function provisioningCoverage(tx:Pick<LibraryTransaction,'get'>,task:Pick<ContentProvisioningTask,'targetId'|'languageContext'>,source:ContentProvisioningSource){
  const target=await tx.get<LocalLearningTarget>('learningTargets',task.targetId);
  if(!target)return undefined;
- if(target.id!==task.targetId||target.identity.senseId!==source.reference.senseId||target.identity.senseVersionId!==source.reference.senseVersionId
-   ||target.identity.senseExpressionBindingId!==source.reference.bindingId||target.identity.bindingVersionId!==source.reference.bindingVersionId
-   ||target.expression!==source.expression.surfaceForm||target.targetLanguageTag!==source.targetLanguageTag)throw new Error('localFlow.invalidTarget');
+ if(target.id!==task.targetId||target.identity.senseId!==source.reference.senseId||target.identity.expressionId!==source.reference.expressionId||target.targetLanguageTag!==source.targetLanguageTag)throw new Error('localFlow.invalidTarget');
  return currentPlanningMembership(tx,target,task.languageContext);
 }
 

@@ -7,7 +7,7 @@ import {
   sensaExpressionBindingRelationSchema,
   sensaExpressionTypeSchema,
   sensaSemanticCoverageSchema,
-  sensaSenseSemanticSpecSchema,
+  sensaPublishedSenseSemanticSpecSchema,
 } from './semanticRegistry.js';
 
 const id=z.string().uuid();
@@ -18,7 +18,7 @@ export const publishedLearningSemanticFactsSchema=z.object({
   senseKey:label,
   senseVersionNumber:z.number().int().positive(),
   semanticPolicyVersion:label,
-  semanticSpec:sensaSenseSemanticSpecSchema,
+  semanticSpec:sensaPublishedSenseSemanticSpecSchema,
   expressionId:id,
   expressionVersionId:id,
   expressionType:sensaExpressionTypeSchema,
@@ -34,6 +34,8 @@ export const publishedLearningSemanticFactsSchema=z.object({
 export const installedLearningEntrySchema=z.object({
   senseId:id,
   senseVersionId:id,
+  expressionId:id,
+  expressionVersionId:id,
   bindingId:id,
   bindingVersionId:id,
   expression:label,
@@ -64,6 +66,9 @@ export const installedLearningContentSchema=z.object({
   if(new Set(keys).size!==keys.length){
     context.addIssue({code:'custom',message:'Duplicate learning target'});
   }
+  for(const [index,entry] of content.entries.entries())if(entry.semantic&&(
+    entry.expressionId!==entry.semantic.expressionId||entry.expressionVersionId!==entry.semantic.expressionVersionId
+  ))context.addIssue({code:'custom',path:['entries',index],message:'Expression identity differs from its publication'});
 });
 
 export type PublishedLearningSemanticFacts=z.infer<typeof publishedLearningSemanticFactsSchema>;

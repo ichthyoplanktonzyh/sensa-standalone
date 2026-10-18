@@ -1,3 +1,8 @@
+import {contextBrowseFacts,validateContextQuery,type ContextBrowseQuery,type ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
+import type {ContextRecord} from '../../experience/personalMeaningJourney/contextRecords';
+import {learningScenePersonalMeaningId} from './personalSceneIdentity';
+import {hydrateMeaningContexts,contextMediaReferences} from '../../experience/personalMeaningJourney/contextRecords';
+import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {SqliteRecordAdapter} from './sqliteAdapter';
 import {meaningMediaReferences,meaningHistoryRecords} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import type {HomeLearningStorageProjection,PortableMediaBlob,PortableMediaStorageDiagnostics,SqliteLibraryTable,SqliteMutation,SqliteRecordChange,SqliteSyncBaseEntry,SqliteStorageDiagnostics} from './sqliteProtocol';
@@ -5,7 +10,7 @@ import {sqliteLibrarySchemaVersion} from './sqliteProtocol';
 import {decodeBackupValue} from './backupCodec';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import {createHomeLearningStorageProjection,createHomeLearningTargetRecord} from './homeLearningRecords';
-import {runtimeLearningCandidatesFromRecords,learningManagementSummaryFromRecords,type RuntimeLearningCandidateQuery,type RuntimeLearningCandidates,type LearningManagementSummaryQuery,type LearningManagementStorageSummary} from './runtimeLearningCandidates';
+import {runtimeLearningCandidatesFromRecords,learningManagementSummaryFromRecords,learningScheduleFromRecords,type RuntimeLearningCandidateQuery,type RuntimeLearningCandidates,type LearningManagementSummaryQuery,type LearningManagementStorageSummary} from './runtimeLearningCandidates';
 import {learningHistoryPageFromRecords,type StoredLearningHistoryPage} from './learningHistoryProjection';
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
@@ -13,17 +18,23 @@ import {localLastPresentedMaterial} from '../../learning/runtime/localCurriculum
 import {learningSupportMeaning} from '@sensa/contracts/sensa';
 import {emptyJourneyState,type MeaningJourneyRecord,type SenseRegistryState} from '../../experience/personalMeaningJourney/store';
 import {createMeaningLookup,type MeaningLookupResult} from '../../experience/personalMeaningJourney/meaningLookup';
-import {worldRegistryClosure,worldItemFromRecord,summarizeWorldItem,worldSearchText,isWorldRecordVisible,matchesWorldFilter,validateWorldQuery,type WorldBrowseQuery,type WorldBrowsePage,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
+import {projectWorldGraphItem,type WorldGraphQuery,type WorldGraphRead,worldRegistryClosure,worldItemFromRecord,summarizeWorldItem,worldSearchText,isWorldRecordVisible,matchesWorldFilter,matchesWorldLanguages,worldReferenceSenseIds,validateWorldQuery,type WorldBrowseQuery,type WorldBrowsePage,type WorldRecordRead} from '../../experience/personalMeaningJourney/worldRead';
 import {validateWorldLearningChoiceQuery,worldLearningChoice,type WorldLearningChoiceQuery,type WorldLearningChoicePage} from '../../experience/personalMeaningJourney/worldRead';
 import {buildPersonalMeaningLearningSources} from '../../experience/personalMeaningJourney/learningSource';
 import {indexRegistry} from '../../experience/personalMeaningJourney/registryRead';
 import {practiceExpressionsFromPersonal,practiceExpressionsFromPackage,validatePracticeExpressionQuery,practiceExpressionForm,type PracticeExpressionQuery,type PracticeExpressionPage} from './practiceExpressionProjection';
 import {journeyIdentityTables,journeyReservedIdentities} from '../../experience/personalMeaningJourney/reservedIdentities';
+import {confirmedLookupConnections} from '../../experience/personalMeaningJourney/meaningLookupFacts';
 import {isUuid} from '../../experience/personalMeaningJourney/ids';
 import {memoryRegistrySelection,type RegistrySelectionQuery,type RegistrySelection} from './semanticRegistrySelection';
 
 /** Test/non-browser Adapter. Production never selects this path. */
 export class MemoryRecordAdapter implements SqliteRecordAdapter {
+  async contextBrowse(raw:ContextBrowseQuery):Promise<ContextBrowsePage>{
+    const query=validateContextQuery(raw),decode=(table:string,key:string)=>{const value=this.records.get(`${table}\u0000${key}`);return value===undefined?undefined:decodeBackupValue(JSON.parse(value));},counts=new Map<string,number>();
+    for(const [key,encoded] of this.records)if(key.startsWith('semanticMeanings\u0000')){const record=decodeBackupValue(JSON.parse(encoded));if(record.personalMeaning.status==='active')for(const ref of record.personalSemanticAnchors)if(ref.status==='active')counts.set(ref.personalSemanticAnchorId,(counts.get(ref.personalSemanticAnchorId)??0)+1);}
+    const rows=[...this.records].filter(([key])=>key.startsWith('semanticContexts\u0000anchors:')).flatMap(([,encoded])=>{const head=decodeBackupValue(JSON.parse(encoded)) as ContextRecord;if(head.kind!=='anchors'||(query.status??'active')!=='all'&&head.value.status!==(query.status??'active')||query.contextId!==undefined&&head.value.personalSemanticAnchorId!==query.contextId)return [];const revision=decode('semanticContexts',`anchorRevisions:${head.value.currentRevisionId}`) as ContextRecord|undefined;if(revision?.kind!=='anchorRevisions')throw Error('semantic_context_invalid');return [contextBrowseFacts(head.value,revision.value,counts.get(head.value.personalSemanticAnchorId)??0)];}).filter(row=>row.text.includes(query.query)).sort((a,b)=>b.item.updatedAt.localeCompare(a.item.updatedAt)||a.item.contextId.localeCompare(b.item.contextId));return {items:rows.slice(query.offset,query.offset+query.limit).map(row=>row.item),total:rows.length};
+  }
   async replicaCandidate(_request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{throw Error('sqlite_replica_candidate_unavailable');}
   private practiceRevision=0;
   async practiceExpressions(raw:PracticeExpressionQuery):Promise<PracticeExpressionPage>{
@@ -37,6 +48,10 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     }
     const sorted=[...items.values()].sort((a,b)=>{const af=practiceExpressionForm(a.text,a.languageTag),bf=practiceExpressionForm(b.text,b.languageTag);return af<bf?-1:af>bf?1:a.id<b.id?-1:a.id>b.id?1:0;}),page=sorted.slice(query.offset,query.offset+query.limit);
     return {total:sorted.length,revision:this.practiceRevision,ids:page.map(item=>item.id),items:query.idsOnly?[]:page};
+  }
+  async personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>{
+    const {personalEnrollmentTarget}=await import('./learningSemanticMemoryProjection');
+    return {targets:(await this.entries('learningTargets')).map(row=>personalEnrollmentTarget(decodeBackupValue(JSON.parse(row.encodedValue!))))};
   }
   async learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{
     const {learningSemanticMemoryTarget}=await import('./learningSemanticMemoryProjection');
@@ -55,41 +70,55 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
   }
   async worldLearningChoices(raw:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>{
     const query=validateWorldLearningChoiceQuery(raw);
+    const references=query.referenceFilter&&query.referenceFilter!=='all'?worldReferenceSenseIds((await this.entries('annotations')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue))),query.referenceFilter):null;
     const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
     const choices=(await this.entries('semanticMeanings')).flatMap(row=>{
-      const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
+      const record=hydrateMeaningContexts(decodeBackupValue(JSON.parse(row.encodedValue)),key=>read('semanticContexts',key));
       const registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
-      return query.filter!=='deleted'&&isWorldRecordVisible(record,registry)&&matchesWorldFilter(item,query.filter)&&worldSearchText(item).includes(query.query)&&(query.senseIds===undefined||summarizeWorldItem(item).senseIds?.some(id=>query.senseIds!.includes(id)))
-        ?buildPersonalMeaningLearningSources(record,indexRegistry(registry)).filter(source=>source.targetLanguageTag===query.targetLanguageTag).map(source=>({choice:worldLearningChoice(source),updatedAt:item.updatedAt})):[];
+      return query.filter!=='deleted'&&isWorldRecordVisible(record,registry)&&matchesWorldFilter(item,query.filter)&&matchesWorldLanguages(summarizeWorldItem(item),query.expressionLanguages)&&(references===null||summarizeWorldItem(item).senseIds?.some(id=>references.includes(id)))&&worldSearchText(item).includes(query.query)&&(query.senseIds===undefined||summarizeWorldItem(item).senseIds?.some(id=>query.senseIds!.includes(id)))
+        ?buildPersonalMeaningLearningSources(record,indexRegistry(registry)).filter(source=>source.targetLanguageTag===query.targetLanguageTag&&(!query.expressionLanguages?.length||query.expressionLanguages.includes(source.targetLanguageTag))).map(source=>({choice:worldLearningChoice(source),updatedAt:item.updatedAt})):[];
     }).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||(a.choice.reference.personalMeaningId<b.choice.reference.personalMeaningId?-1:a.choice.reference.personalMeaningId>b.choice.reference.personalMeaningId?1:a.choice.key<b.choice.key?-1:1));
     return {items:choices.slice(query.offset,query.offset+query.limit).map(row=>row.choice),total:choices.length};
   }
+  async worldGraph(raw:WorldGraphQuery):Promise<WorldGraphRead>{
+    const query=validateWorldQuery({...raw,offset:0,limit:256});
+    const references=query.referenceFilter&&query.referenceFilter!=='all'?worldReferenceSenseIds((await this.entries('annotations')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue))),query.referenceFilter):null;
+    const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
+    const rows=(await this.entries('semanticMeanings')).map(row=>{
+      const record=hydrateMeaningContexts(decodeBackupValue(JSON.parse(row.encodedValue)),key=>read('semanticContexts',key)),registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
+      return {item,summary:summarizeWorldItem(item),visible:isWorldRecordVisible(record,registry),confirmed:confirmedLookupConnections(record,indexRegistry(registry)).length>0};
+    }).sort((a,b)=>b.item.updatedAt.localeCompare(a.item.updatedAt)||a.item.personalMeaningId.localeCompare(b.item.personalMeaningId));
+    const selected=rows.filter(row=>row.visible&&row.confirmed&&matchesWorldFilter(row.summary,query.filter)&&matchesWorldLanguages(row.summary,query.expressionLanguages)&&(references===null||row.summary.senseIds?.some(id=>references.includes(id)))&&worldSearchText(row.item).includes(query.query));
+    return {items:selected.map(row=>projectWorldGraphItem(row.item)),expressionLanguages:[...new Set(rows.filter(row=>row.visible).flatMap(row=>row.summary.expressions?.map(expression=>expression.languageTag)??[]))].sort(),expressionCount:new Set(selected.flatMap(row=>row.summary.expressions?.filter(expression=>!query.expressionLanguages?.length||query.expressionLanguages.includes(expression.languageTag)).map(expression=>expression.expressionId)??[])).size};
+  }
   async worldBrowse(raw:WorldBrowseQuery):Promise<WorldBrowsePage>{
     const query=validateWorldQuery(raw);
+    const references=query.referenceFilter&&query.referenceFilter!=='all'?worldReferenceSenseIds((await this.entries('annotations')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue))),query.referenceFilter):null;
     const read:WorldRecordRead=(table,key)=>{const encoded=this.records.get(`${table}\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));};
     const records=(await this.entries('semanticMeanings')).map(row=>{
-      const record=decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord;
+      const record=hydrateMeaningContexts(decodeBackupValue(JSON.parse(row.encodedValue)),key=>read('semanticContexts',key));
       const registry=worldRegistryClosure(record,read),item=worldItemFromRecord(record,read);
       return {item:summarizeWorldItem(item),search:worldSearchText(item),visible:isWorldRecordVisible(record,registry)};
     }).sort((a,b)=>b.item.updatedAt.localeCompare(a.item.updatedAt)||(a.item.personalMeaningId<b.item.personalMeaningId?-1:1));
     const visible=records.filter(row=>row.visible);
     const partition=query.filter==='deleted'?records.filter(row=>row.item.status==='deleted'):visible;
-    const selected=partition.filter(row=>matchesWorldFilter(row.item,query.filter)&&row.search.includes(query.query)&&(query.senseIds===undefined||row.item.references?.some(reference=>query.senseIds!.includes(reference.senseId))));
+    const selected=partition.filter(row=>matchesWorldFilter(row.item,query.filter)&&matchesWorldLanguages(row.item,query.expressionLanguages)&&(references===null||row.item.senseIds?.some(id=>references.includes(id)))&&row.search.includes(query.query)&&(query.senseIds===undefined||row.item.references?.some(reference=>query.senseIds!.includes(reference.senseId))));
     return {items:selected.slice(query.offset,query.offset+query.limit).map(row=>row.item),total:selected.length,
+      expressionLanguages:[...new Set(visible.flatMap(row=>row.item.expressions?.map(expression=>expression.languageTag)??[]))].sort(),
+      expressionCount:new Set(selected.flatMap(row=>row.item.expressions?.filter(expression=>!query.expressionLanguages?.length||query.expressionLanguages.includes(expression.languageTag)).map(expression=>expression.expressionId)??[])).size,
       pending:visible.filter(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound').length,
       next:visible.find(row=>row.item.senseFormation.phase!=='sense_confirmed'||row.item.expressionBinding.phase!=='bound')?.item??null};
   }
   async worldSceneMeaning(sceneId:string):Promise<string|null>{
     if(!isUuid(sceneId))throw new Error('scene_identity_invalid');
-    const owners=[...this.records].filter(([key])=>key.startsWith('semanticMeanings\u0000')).flatMap(([,encoded])=>{
-      const record=decodeBackupValue(JSON.parse(encoded)) as MeaningJourneyRecord;
-      return meaningHistoryRecords(record).some(branch=>branch.personalSemanticAnchorRevisions.some(revision=>(revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId===sceneId))?[record.personalMeaning.personalMeaningId]:[];
-    });
-    if(owners.length>1)throw new Error('scene_owner_ambiguous');return owners[0]??null;
+    const owner=learningScenePersonalMeaningId(sceneId),encoded=this.records.get(`semanticMeanings\u0000${owner}`);
+    if(encoded===undefined)return null;
+    const record=hydrateMeaningContexts(decodeBackupValue(JSON.parse(encoded)),key=>{const encoded=this.records.get(`semanticContexts\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));});
+    return meaningHistoryRecords(record).some(branch=>branch.personalSemanticAnchorRevisions.some(revision=>(revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId===sceneId))?owner:null;
   }
   async lookupMeanings(query:string):Promise<MeaningLookupResult>{
     const state=emptyJourneyState();
-    state.meanings=(await this.entries('semanticMeanings')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue)) as MeaningJourneyRecord);
+    state.meanings=(await this.entries('semanticMeanings')).map(row=>hydrateMeaningContexts(decodeBackupValue(JSON.parse(row.encodedValue)),key=>{const encoded=this.records.get(`semanticContexts\u0000${key}`);return encoded===undefined?undefined:decodeBackupValue(JSON.parse(encoded));}));
     for(const row of await this.entries('semanticRegistry')){
       const decoded=decodeBackupValue(JSON.parse(row.encodedValue)) as {kind:keyof SenseRegistryState;value:unknown};
       (state.registry[decoded.kind] as unknown[]).push(decoded.value);
@@ -165,13 +194,17 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .filter(key=>afterKey===null||key>afterKey).sort().slice(0,limit);
   }
 
-  async changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
+  async changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]> {
     const selected = new Set(tables);
+    if(page&&(!Number.isSafeInteger(page.limit)||page.limit<1||page.limit>128))throw Error('sqlite_invalid_page_size');
+    const after=page?.after;
     return [...this.changes.values()]
+      .filter(change=>!after||change.contentRevision>after.contentRevision||change.contentRevision===after.contentRevision&&(change.table>after.table||change.table===after.table&&change.key>after.key))
       .filter((change) => change.contentRevision > contentRevision && selected.has(change.table))
       .sort((left, right) => left.contentRevision - right.contentRevision
-        || left.table.localeCompare(right.table)
-        || left.key.localeCompare(right.key))
+        || (left.table<right.table?-1:left.table>right.table?1:0)
+        || (left.key<right.key?-1:left.key>right.key?1:0))
+      .slice(0,page?.limit)
       .map((change) => ({ ...change }));
   }
 
@@ -219,7 +252,12 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
       .map((row) => decode<LocalLearningTarget>(row.encodedValue)!);
     const availablePackageKeys = (await this.entries('packageCache')).map((row) => row.key);
     const activeId = decode<string>(this.records.get('meta\u0000learning-active'));
-    return createHomeLearningStorageProjection({
+    const enrollments=(await this.entries('curriculumEnrollments')).map(row=>decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(row.encodedValue)!);
+    const enrollmentMap=new Map(enrollments.map(item=>[item.id,item]));
+    const removed=new Set((await this.entries('supplementalMembershipStates')).filter(row=>decode<{status:string}>(row.encodedValue)?.status==='removed').map(row=>row.key));
+    const {curriculumSourceEligibility}=await import('../../learning/runtime/curriculumEligibility');
+    const sourceEligibility=Object.fromEntries(targets.flatMap(target=>target.curriculumMemberships.map((member,index)=>[member.id??`${target.id}:${index}`,removed.has(member.id??'')?{introduce:false,ongoing:false}:curriculumSourceEligibility(member,enrollmentMap.get(String(member.provenance.curriculumEnrollmentId)),!!target.startedAt)])));
+    return {...createHomeLearningStorageProjection({
       clock,
       targets,
       availablePackageKeys,
@@ -227,9 +265,9 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
         ? decode<LocalLearningRun>(this.records.get(`learningRuns\u0000${activeId}`)) ?? null
         : null,
       studyPlans: decode(this.records.get('settings\u0000language-route-study-plans')) ?? {},
-      enrollments:(await this.entries('curriculumEnrollments')).map(row=>decode<import('./curriculumEnrollments').LocalCurriculumEnrollment>(row.encodedValue)!),
+      enrollments,
       languageRouteId,
-    });
+    }),sourceEligibility};
   }
   async studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{
     const encoded=await this.get('studyScopes',scopeRevisionId);
@@ -248,7 +286,24 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const targets=(await this.entries('learningTargets')).map(row=>decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget).filter(target=>ids.has(target.id)||today.has(target.id)).map(createHomeLearningTargetRecord);
     return runtimeLearningCandidatesFromRecords({...stored,targets,availablePackageKeys:(await this.entries('packageCache')).map(row=>row.key)},query,scope);
   }
-  async learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return learningManagementSummaryFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query);}
+  async learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>{return learningScheduleFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query);}
+  async learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{
+    const summary={...learningManagementSummaryFromRecords(await this.homeLearningProjection(query.languageContext.languageRouteId,query.clock),query),libraryTargetCount:query.includeInventory===false?null:(await this.entries('learningTargets')).length};
+    if(!query.includeLibraryItems)return summary;
+    const {learningManagementListRecord,learningManagementListItem}=await import('./learningManagementList');
+    const {curriculumSourceEligibility}=await import('../../learning/runtime/curriculumEligibility');
+    const enrollments=new Map((await this.entries('curriculumEnrollments')).map(row=>{const item=decodeBackupValue(JSON.parse(row.encodedValue)) as import('./curriculumEnrollments').LocalCurriculumEnrollment;return [item.id,item] as const;}));
+    const titles=new Map([...enrollments].map(([id,item])=>[id,{title:item.source.kind==='published_book'?item.source.title??null:null,paused:item.bookPlan?.mode==='paused'}] as const));
+    const removed=new Set((await this.entries('supplementalMembershipStates')).filter(row=>(decodeBackupValue(JSON.parse(row.encodedValue)) as {status:string}).status==='removed').map(row=>row.key));
+    const available=new Set((await this.entries('packageCache')).map(row=>row.key));
+    const items=(await this.entries('learningTargets')).flatMap(row=>{
+      const target=decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget;
+      const eligibility=Object.fromEntries(target.curriculumMemberships.map((member,index)=>[member.id??`${target.id}:${index}`,removed.has(member.id??'')?{introduce:false,ongoing:false}:curriculumSourceEligibility(member,enrollments.get(String(member.provenance.curriculumEnrollmentId)),!!target.startedAt)]));
+      const item=learningManagementListItem(learningManagementListRecord(target),query.languageContext,query.clock,eligibility,titles,available,query.supportedPolicies);
+      return item?[item]:[];
+    });
+    return {...summary,items};
+  }
   async learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return learningHistoryPageFromRecords(await this.learningHistoryProjection(),query);}
 
   async learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]> {
@@ -265,7 +320,7 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
     const targets=new Map((await this.entries('learningTargets')).map(row=>[row.key,decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget]));
     return (await this.entries('learningRuns')).flatMap(row=>{const run=decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningRun;if(!run.completedAt||run.completionKind==='wait_relearning')return [];
       return run.targetIds.map(targetId=>{const target=targets.get(targetId)!,participant=run.participants[targetId]!,material=localLastPresentedMaterial(participant),meaning=material?learningSupportMeaning(material.content.resources,participant.languageContext.supportLanguageTag):undefined;
-        return {recordId:`${run.id}:${targetId}`,targetId,expression:target.expression,languageTag:target.targetLanguageTag,...(typeof meaning==='string'?{meaning}:{}),occurredAt:run.targetCompletions?.[targetId]?.at??run.completedAt!,kind:run.purpose};});
+        return {recordId:`${run.id}:${targetId}`,targetId,expression:String(material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface??''),languageTag:target.targetLanguageTag,...(typeof meaning==='string'?{meaning}:{}),occurredAt:run.targetCompletions?.[targetId]?.at??run.completedAt!,kind:run.purpose};});
     }).sort((left,right)=>right.occurredAt.localeCompare(left.occurredAt)||left.recordId.localeCompare(right.recordId));
   }
 
@@ -321,8 +376,8 @@ export class MemoryRecordAdapter implements SqliteRecordAdapter {
   }
 
   async isMediaReferenced(mediaId: string): Promise<boolean> {
-    const meanings = await this.entries('semanticMeanings');
-    if (meanings.some(row=>meaningMediaReferences(decodeBackupValue(JSON.parse(row.encodedValue))).includes(mediaId))) return true;
+    const contexts = await this.entries('semanticContexts');
+    if (contexts.some(row=>contextMediaReferences(decodeBackupValue(JSON.parse(row.encodedValue))).includes(mediaId))) return true;
     const inbox = await this.entries('semanticInbox');
     return inbox.some((row) => (
       decodeBackupValue(JSON.parse(row.encodedValue)) as {

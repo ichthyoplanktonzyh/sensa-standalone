@@ -19,6 +19,81 @@ import {
   type LibraryReplicaEntry,
 } from '../../../apps/web/src/data/library/replication/libraryReplica.ts';
 
+test('a shared Run cannot be applied for one Target and history-only for another',()=>{
+ // A header-only domain gate. This does not manufacture an admitted cohort
+ // or claim that the current ordinary UI can start this structured protocol.
+ const id=(n:number)=>`20000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const target=(n:number)=>({id:id(n),retentionId:id(n+10),memory:null,memoryRevision:0});
+ const a=target(1),b=target(2),at=(minute:string)=>`2026-09-21T09:${minute}:00.000Z`;
+ const event=(n:number,run:number,targetId:string,minute:string)=>entry('learningEvents',id(n),{id:id(n),runId:id(run),targetId,at:at(minute)});
+ const run=(n:number,targetIds:string[],minute:string)=>entry('learningRuns',id(n),{id:id(n),targetIds,completedAt:at(minute)});
+ const base=[entry('learningTargets',a.id,a),entry('learningTargets',b.id,b)];
+ const local=[entry('learningTargets',a.id,{...a,memoryRevision:1}),entry('learningTargets',b.id,{...b,memoryRevision:1}),run(3,[a.id,b.id],'05'),event(6,3,a.id,'05'),event(7,3,b.id,'05')];
+ const remote=[entry('learningTargets',a.id,{...a,memoryRevision:1}),entry('learningTargets',b.id,{...b,memoryRevision:1}),run(4,[a.id],'00'),run(5,[b.id],'10'),event(8,4,a.id,'00'),event(9,5,b.id,'10')];
+ const merged=mergeLibraryReplicas({base,local,remote});
+ const rows=Object.fromEntries(sqliteLibraryTables.map(table=>[table,merged.entries.filter(row=>row.table===table).map(row=>({key:row.key,value:decodeBackupValue(row.value)}))])) as unknown as LibraryRecordRows;
+ assert.deepEqual(merged.conflicts.sort(),[a.id,b.id].map(key=>replicaEntryId({table:'learningTargets',key})).sort(),'a shared Run stops the entire automatic branch choice');
+ assert.equal([...rows.learningReconciliations].length,0);
+ assert.doesNotThrow(()=>validateLearningReconciliationRecords(libraryRowsReader(rows)));
+});
+
+for(const identicalProjection of [true,false])for(const tied of [true,false])for(const reverse of [true,false]){
+test(`completed learning facts reconcile with ${identicalProjection?'identical':'different'} projections, ${tied?'tied':'different'} completion times, ${reverse?'remote':'local'} first`,()=>{
+ const id=(n:number)=>`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const target={id:id(1),retentionId:id(2),expression:'raincoat',memory:null,memoryRevision:0};
+ const firstAt='2026-09-21T09:00:00.000Z',lastAt=tied?firstAt:'2026-09-21T09:05:00.000Z';
+ const projection={...target,memory:{dueAt:'2026-09-24T09:00:00.000Z'},memoryRevision:2};
+ const local=[entry('learningTargets',target.id,projection),
+  entry('learningRuns',id(3),{id:id(3),targetIds:[target.id],completedAt:firstAt}),
+  entry('learningEvents',id(5),{id:id(5),runId:id(3),targetId:target.id,at:firstAt})];
+ // Two serial Runs on this device belong to one branch. A parallel branch
+ // must not be inserted between them to manufacture a third scheduling step.
+ const remote=[entry('learningTargets',target.id,identicalProjection?projection:{...projection,memory:{dueAt:'2026-09-25T09:05:00.000Z'}}),
+  entry('learningRuns',id(4),{id:id(4),targetIds:[target.id],completedAt:firstAt}),
+  entry('learningRuns',id(8),{id:id(8),targetIds:[target.id],completedAt:lastAt}),
+  entry('learningEvents',id(6),{id:id(6),runId:id(4),targetId:target.id,at:firstAt}),
+  entry('learningEvents',id(7),{id:id(7),runId:id(8),targetId:target.id,at:lastAt})];
+ const base=[entry('learningTargets',target.id,target)];
+ const merged=mergeLibraryReplicas({base,local:reverse?remote:local,remote:reverse?local:remote});
+ assert.deepEqual(merged.conflicts,[]);
+ const decisions=merged.entries.filter(row=>row.table==='learningReconciliations');
+ assert.equal(decisions.length,1,'independent completed facts require a persisted branch decision even when Target rows are equal');
+ const decision=decodeBackupValue(decisions[0]!.value) as any;
+ assert.deepEqual(decision.appliedRunIds,[id(4),id(8)]);
+ assert.deepEqual(decision.historyOnlyRunIds,[id(3)]);
+ assert.deepEqual(decision.appliedEventIds,[id(6),id(7)]);
+ assert.deepEqual(decision.historyOnlyEventIds,[id(5)]);
+ assert.equal(decision.selectedRunId,id(8));
+ assert.deepEqual(decodeBackupValue(merged.entries.find(row=>row.table==='learningTargets')!.value),decodeBackupValue(remote[0]!.value));
+ assert.deepEqual(merged.entries.filter(row=>row.table==='learningEvents').map(row=>row.key).sort(),[id(5),id(6),id(7)]);
+ assert.deepEqual(mergeLibraryReplicas({base,local:reverse?remote:local,remote:reverse?local:remote}),merged,'repeating a lost-ack merge is deterministic');
+ const converged=mergeLibraryReplicas({base:merged.entries,local:merged.entries,remote:merged.entries});
+ assert.deepEqual(converged.conflicts,[]);
+ assert.deepEqual(converged.entries.map(({table,key,value})=>({table,key,value})),merged.entries.map(({table,key,value})=>({table,key,value})),'a converged checkpoint needs no second decision');
+});
+}
+
+for(const minute of ['02','04'])for(const reverse of [false,true])test(`a stale third branch at minute ${minute} inherits the previous decision, reverse=${reverse}`,()=>{
+ const id=(n:number)=>`30000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const target={id:id(1),retentionId:id(2),memory:null,memoryRevision:0},base=[entry('learningTargets',target.id,target)];
+ const branch=(n:number,minute:string)=>[entry('learningTargets',target.id,{...target,memory:{dueAt:`2026-10-02T00:${minute}:00Z`},memoryRevision:1}),entry('learningRuns',id(n),{id:id(n),targetIds:[target.id],completedAt:`2026-10-01T00:${minute}:00Z`}),entry('learningEvents',id(n+10),{id:id(n+10),runId:id(n),targetId:target.id,at:`2026-10-01T00:${minute}:00Z`})];
+ const a=branch(3,'01'),b=branch(4,'03'),c=branch(5,minute),first=mergeLibraryReplicas({base,local:a,remote:b});
+ const second=mergeLibraryReplicas({base,local:reverse?first.entries:c,remote:reverse?c:first.entries});
+ assert.deepEqual(second.conflicts,[]);const decisions=second.entries.filter(row=>row.table==='learningReconciliations').map(row=>decodeBackupValue(row.value));
+ assert.equal(decisions.length,2);const original=decodeBackupValue(first.entries.find(row=>row.table==='learningReconciliations')!.value),next=decisions.find(row=>row.id!==original.id)!;
+ assert.deepEqual(decisions.find(row=>row.id===original.id),original);assert.deepEqual(next.supersededDecisionIds,[original.id]);
+ assert.deepEqual(next.appliedRunIds,[minute==='02'?id(4):id(5)]);assert.deepEqual(next.historyOnlyRunIds,[id(3),minute==='02'?id(5):id(4)].sort());
+ const rows=Object.fromEntries(sqliteLibraryTables.map(table=>[table,second.entries.filter(row=>row.table===table).map(row=>({key:row.key,value:decodeBackupValue(row.value)}))])) as unknown as LibraryRecordRows;
+ const roles=validateLearningReconciliationRecords(libraryRowsReader(rows));assert.deepEqual([...roles.historyOnlyRunIds].sort(),next.historyOnlyRunIds);
+ assert.deepEqual(decodeBackupValue(second.entries.find(row=>row.table==='learningTargets')!.value),decodeBackupValue((minute==='02'?b:c)[0]!.value));
+ assert.deepEqual(mergeLibraryReplicas({base,local:reverse?c:first.entries,remote:reverse?first.entries:c}),second);
+ assert.deepEqual(mergeLibraryReplicas({base:second.entries,local:second.entries,remote:second.entries}).entries.map(({table,key,value})=>({table,key,value})),second.entries.map(({table,key,value})=>({table,key,value})));
+ const tampered=structuredClone(rows);[...tampered.learningReconciliations].find(row=>row.key===next.id)!.value.supersededDecisionIds=[id(999)];assert.throws(()=>validateLearningReconciliationRecords(libraryRowsReader(tampered)),/inconsistent/u);
+});
+
 test("learning-reconciliation", async () => {
 
 type Entry=LibraryReplicaEntry;
@@ -99,7 +174,7 @@ const restoredTask=normalizeLibraryReplicaEntry({table:'personalLearning',key:cr
 assert.deepEqual(restoredTask.value,{status:'failed',leaseUntil:0,notice:'localFlow.restoredPreparation'},'Content Supply owns interrupted preparation recovery');
 
 const dependencies={
- package:'package-fixture',task:crypto.randomUUID(),attempt:crypto.randomUUID(),meaning:crypto.randomUUID(),media:crypto.randomUUID(),
+ package:'package-fixture',task:crypto.randomUUID(),attempt:crypto.randomUUID(),meaning:crypto.randomUUID(),media:crypto.randomUUID(),context:crypto.randomUUID(),contextRevision:crypto.randomUUID(),
  registrySenseVersion:crypto.randomUUID(),unrelatedRegistrySenseVersion:crypto.randomUUID(),annotation:'learning-scene:fixture',draft:crypto.randomUUID(),reconciliation:crypto.randomUUID(),
 };
 const continuationParent=crypto.randomUUID(),selectionParent=crypto.randomUUID();
@@ -117,14 +192,16 @@ const dependencyRows=[
  entry('learningTargets',ids.target,{id:ids.target,curriculumMemberships:[{packageKey:dependencies.package,provenance:{}}]}),
  entry('personalLearning',dependencies.task,{id:dependencies.task,targetId:ids.target,attemptId:dependencies.attempt,source:{personalMeaningId:dependencies.meaning}}),
  entry('contentAttempts',dependencies.attempt,{id:dependencies.attempt,taskId:dependencies.task,resumedFrom:null}),
- entry('semanticMeanings',dependencies.meaning,{personalMeaning:{personalMeaningId:dependencies.meaning},alignments:[{senseVersionId:dependencies.registrySenseVersion}],personalSemanticAnchorRevisions:[{personalMediaObjectId:dependencies.media,structuredPayload:{senseVersionId:dependencies.unrelatedRegistrySenseVersion}}]}),
+ entry('semanticMeanings',dependencies.meaning,{contextStorageVersion:1,personalMeaning:{personalMeaningId:dependencies.meaning},alignments:[{senseVersionId:dependencies.registrySenseVersion}],personalSemanticAnchors:[{personalSemanticAnchorId:dependencies.context,selectedRevisionId:dependencies.contextRevision}],personalSemanticAnchorRevisions:[{personalSemanticAnchorId:dependencies.context,personalSemanticAnchorRevisionId:dependencies.contextRevision}]}),
+ entry('semanticContexts',`anchors:${dependencies.context}`,{kind:'anchors',value:{currentRevisionId:dependencies.contextRevision}}),
+ entry('semanticContexts',`anchorRevisions:${dependencies.contextRevision}`,{kind:'anchorRevisions',parentRevisionId:null,value:{personalSemanticAnchorId:dependencies.context,personalMediaObjectId:dependencies.media,structuredPayload:{senseVersionId:dependencies.unrelatedRegistrySenseVersion}}}),
  entry('semanticRegistry',`senseVersions:${dependencies.registrySenseVersion}`,{kind:'senseVersions',value:{senseVersionId:dependencies.registrySenseVersion}}),
  entry('semanticRegistry',`senseVersions:${dependencies.unrelatedRegistrySenseVersion}`,{kind:'senseVersions',value:{senseVersionId:dependencies.unrelatedRegistrySenseVersion}}),
  entry('media',dependencies.media,{mediaId:dependencies.media}),
  entry('learningRuns',ids.localRun,{id:ids.localRun,targetId:ids.target,targetIds:[ids.target],participants:{[ids.target]:{presentedMaterials:{}}}}),
  entry('learningEvents',ids.localEvent,{id:ids.localEvent,runId:ids.localRun,targetId:ids.target}),
  entry('learningReconciliations',dependencies.reconciliation,{id:dependencies.reconciliation,targetId:ids.target,candidateEventIds:[ids.localEvent],appliedEventIds:[ids.localEvent],historyOnlyEventIds:[],appliedRunIds:[ids.localRun],historyOnlyRunIds:[],selectedRunId:ids.localRun,selectedEventId:ids.localEvent}),
- entry('annotations',dependencies.annotation,{id:dependencies.annotation,kind:'learning_scene',learningTargetId:ids.target}),
+ entry('annotations',dependencies.annotation,{id:dependencies.annotation,kind:'learning_scene',learningTargetId:ids.target,conflictHistory:{version:1,head:null,branches:[],decisions:[]}}),
  entry('drafts',dependencies.draft,{id:dependencies.draft,text:JSON.stringify({targetId:ids.target})}),
 ];
 const targetConflict=replicaEntryId({table:'learningTargets',key:ids.target} as any);
@@ -156,4 +233,54 @@ assert.throws(()=>validateLearningReconciliationRecords(reader({...rows,learning
 
 console.log('PASS: domain Replica Modules own normalization, deletion and explicit conflict dependencies; learner prose stays opaque while concurrent Learning histories reconcile deterministically.');
 
+});
+
+test('independent source additions join causal progress and completed forks retain both sources',()=>{
+ // This header-level merge test isolates source union; actual material admission
+ // and historical source pins are exercised by personal-learning.
+ const id=(n:number)=>`30000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const member=(n:number)=>({id:id(n),revision:1,sourcePin:{senseId:id(2),senseVersionId:id(n+10),expressionId:id(3),expressionVersionId:id(n+20),bindingId:id(n+30),bindingVersionId:id(n+40)},createdAt:`2026-10-11T09:0${n-4}:00.000Z`});
+ const original={id:id(1),retentionId:id(9),identity:{senseId:id(2),expressionId:id(3)},memory:null,memoryRevision:0,curriculumMemberships:[member(4)]};
+ const base=[entry('learningTargets',original.id,original)];
+ const ours={...original,curriculumMemberships:[...original.curriculumMemberships,member(5)]},theirs={...original,memoryRevision:1,curriculumMemberships:[...original.curriculumMemberships,member(6)]};
+ const merge=(left:typeof ours,right:typeof theirs)=>mergeLibraryReplicas({base,local:[entry('learningTargets',original.id,left)],remote:[entry('learningTargets',original.id,right)]});
+ for(const reversed of [false,true]){
+  const result=reversed?merge(theirs,ours):merge(ours,theirs);
+  assert.equal(result.conflicts.length,0);const target=decodeBackupValue(result.entries.find(row=>row.table==='learningTargets')!.value) as typeof theirs;
+  assert.equal(target.memoryRevision,1);assert.deepEqual(target.curriculumMemberships.map(row=>row.id),[id(4),id(5),id(6)]);
+ }
+ const changed=structuredClone(theirs);changed.curriculumMemberships[0]!.sourcePin.expressionVersionId=id(99);
+ assert.throws(()=>merge(ours,changed),/library_sync_history/u,'one membership cannot silently acquire another source version');
+ const at='2026-10-11T10:00:00.000Z';
+ const branch=(target:typeof theirs,run:number)=>[entry('learningTargets',original.id,target),entry('learningRuns',id(run),{id:id(run),targetIds:[original.id],completedAt:at}),entry('learningEvents',id(run+1),{id:id(run+1),runId:id(run),targetId:original.id,at})];
+ const fork=mergeLibraryReplicas({base,local:branch({...ours,memoryRevision:1},70),remote:branch(theirs,80)});
+ assert.equal(fork.conflicts.length,0);assert.equal(fork.entries.filter(row=>row.table==='learningReconciliations').length,1,'equal progress projections still need a real fork decision');
+ const joined=decodeBackupValue(fork.entries.find(row=>row.table==='learningTargets')!.value) as typeof theirs;
+ assert.deepEqual(joined.curriculumMemberships.map(row=>row.id),[id(4),id(5),id(6)]);
+});
+
+for(const sharedOutsideBase of [false,true])test(`causal successor beats a future-dated predecessor, shared outside base=${sharedOutsideBase}`,()=>{
+ const id=(n:number)=>`50000000-0000-4000-8000-${String(n).padStart(12,'0')}`,entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ // Header-level ordering only, not an admitted historical scheduling result.
+ const state={memory:null,memoryRevision:7,startedAt:null,completedAt:null,relearnAt:'2026-10-02T00:00:00Z',relearningState:{step:1}},target={id:id(1),retentionId:id(2),committedPolicy:null,...state};
+ const successor={...target,relearnAt:'2026-10-03T00:00:00Z',relearningState:{step:2}};
+ const run=(n:number,at:string,baseline:typeof state)=>entry('learningRuns',id(n),{id:id(n),targetIds:[target.id],completedAt:at,participants:{[target.id]:{memoryRevision:7,retentionBaseline:baseline,policyCommitment:null}}});
+ const old=run(3,'2099-01-01T00:00:00Z',state),next=run(4,'2026-10-02T01:00:00Z',state);
+ const event=(n:number,r:number,at:string)=>entry('learningEvents',id(n),{id:id(n),runId:id(r),targetId:target.id,at});
+ const prior=[entry('learningTargets',target.id,target),old,event(5,3,'2099-01-01T00:00:00Z')],advanced=[entry('learningTargets',target.id,successor),old,prior[2]!,next,event(6,4,'2026-10-02T01:00:00Z')];
+ const base=sharedOutsideBase?[entry('learningTargets',target.id,{...target,relearnAt:'2026-10-01T00:00:00Z',relearningState:{step:0}})]:prior;
+ for(const reversed of [false,true]){const result=mergeLibraryReplicas({base,local:reversed?advanced:prior,remote:reversed?prior:advanced});assert.deepEqual(result.conflicts,[]);assert.deepEqual(decodeBackupValue(result.entries.find(row=>row.table==='learningTargets')!.value),successor);assert.equal(result.entries.filter(row=>row.table==='learningEvents').length,2);assert.equal(result.entries.filter(row=>row.table==='learningReconciliations').length,0);}
+});
+
+test('late logs append without changing the advanced saved state',()=>{
+ const id=(n:number)=>`60000000-0000-4000-8000-${String(n).padStart(12,'0')}`,entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)});
+ const target={id:id(1),retentionId:id(2),memoryRevision:1},advanced={...target,memoryRevision:2},base=[entry('learningTargets',target.id,target)];
+ const local=[entry('learningTargets',target.id,advanced)],remote=[...base,entry('learningRuns',id(3),{id:id(3),targetIds:[target.id],completedAt:'2099-01-01T00:00:00Z'}),entry('learningEvents',id(4),{id:id(4),runId:id(3),targetId:target.id,at:'2099-01-01T00:00:00Z'})];
+ const result=mergeLibraryReplicas({base,local,remote});assert.deepEqual(result.conflicts,[]);assert.deepEqual(decodeBackupValue(result.entries.find(row=>row.table==='learningTargets')!.value),advanced);assert.equal(result.entries.filter(row=>row.table==='learningEvents').length,1);assert.equal(result.entries.filter(row=>row.table==='learningReconciliations').length,0);
+});
+for(const completedAt of ['invalid','2026-99-99T00:00:00Z'])test(`concurrent selection rejects invalid completion time ${completedAt}`,()=>{
+ const id=(n:number)=>`70000000-0000-4000-8000-${String(n).padStart(12,'0')}`,entry=(table:LibraryReplicaEntry['table'],key:string,value:unknown):LibraryReplicaEntry=>({table,key,value:encodeBackupValue(value)}),target={id:id(1),retentionId:id(2),memoryRevision:0};
+ const branch=(n:number,at:string)=>[entry('learningTargets',target.id,{...target,memoryRevision:1}),entry('learningRuns',id(n),{id:id(n),targetIds:[target.id],completedAt:at}),entry('learningEvents',id(n+10),{id:id(n+10),runId:id(n),targetId:target.id,at})];
+ assert.throws(()=>mergeLibraryReplicas({base:[entry('learningTargets',target.id,target)],local:branch(3,completedAt),remote:branch(4,'2026-10-02T00:00:00Z')}),/libraryBackup.errors.inconsistent/u);
 });

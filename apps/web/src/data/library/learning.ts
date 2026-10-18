@@ -1,3 +1,4 @@
+import {stableLearningTargetId,materialSourcePin} from '../../learning/runtime/learningIdentity';
 import {materialForNextStep} from '../../contentSupply/provisioning/hybridMaterialization';
 import {assertMaterialAvailableAt} from '../../contentSupply/provisioning/materialReadiness';
 import {
@@ -18,6 +19,7 @@ import {learningRunReceipt,readVerifiedLearningRunReceipt,sameLearningSessionDir
 import {publishedCurriculumSourceKey,publishedCurriculumMembershipId} from './publishedCurriculumSources';
 import {runBaselineMaterial,runStepMaterial,runMaterialDigest,pinRunStepMaterial} from '../../learning/runtime/runMaterialPins';
 import {learningOwner} from './libraryOwnership';
+import {retentionBaseline} from '../../learning/runtime/retentionBaseline';
 import type {InstalledPackage,InstalledPackageSummary,PackageInstallation} from './packageRecords';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../contentSupply/provisioning/lightweightInitialContent';
 import {
@@ -88,7 +90,7 @@ const curriculumMembership=(input:{
  revision:(input.previous?.revision??0)+1,
  status:'active',
  languageContext:sensaFormalPinnedLanguageContextSchema.parse(input.languageContext),sourceKind:input.sourceKind,
- provenance:structuredClone(input.provenance),packageKey:input.packageKey,
+ sourcePin:materialSourcePin(input.material),provenance:structuredClone(input.provenance),packageKey:input.packageKey,
  ...(input.assurancePackageKey?{assurancePackageKey:input.assurancePackageKey}:{}),material:structuredClone(input.material),
  createdByOperationId:input.previous?.createdByOperationId??input.operationId,createdAt:input.previous?.createdAt??input.at,updatedAt:input.at,
 });
@@ -190,7 +192,7 @@ type PublishedEnrollmentMember=Readonly<{
 /** Book and direct selection share the same validated publication → Target handoff. */
 async function admitPublishedTarget(tx:LibraryTransaction,input:{operationId:string;owner:LibraryIdentity;context:SensaFormalPinnedLanguageContext;enrollment:LocalCurriculumEnrollment;member:PublishedEnrollmentMember;pack:InstalledPackage;entry:InstalledPackage['content']['entries'][number];existing:LocalLearningTarget|undefined;at:string}):Promise<LocalLearningTarget>{
  const {operationId,owner,context,enrollment,member,pack,entry,existing,at}=input;
- const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`);
+ const targetId=stableLearningTargetId(owner.learnerId,entry.senseId,entry.expressionId);
  const source={kind:enrollment.source.kind==='stable_sense'?'stable_sense':'sense_learning_package',curriculumEnrollmentId:enrollment.id,
   bookId:member.bookId,bookVersionId:member.bookVersionId,contentReleaseId:member.contentReleaseId,packageVersion:member.packageVersion,packageDigest:pack.digest,
   ...(member.publication?{publicationArchiveSha256:member.publication.bookArchiveSha256}:{})};
@@ -200,11 +202,11 @@ async function admitPublishedTarget(tx:LibraryTransaction,input:{operationId:str
  const material=priorMembership?.material??materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:targetId,curriculumMembershipId:membershipId,materializationOperationId:operationId,curriculumSource:source,packageKey:member.key,installedPackage:pack,entry,createdAt:at});
  const membership=curriculumMembership({operationId,targetId,sourceKey,languageContext:context,sourceKind,provenance:source,packageKey:member.key,assurancePackageKey:entry.assurancePackageKey,material,at,previous:priorMembership});
  if(existing){
-  if(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseId!==entry.senseId||existing.identity.senseVersionId!==entry.senseVersionId||existing.identity.senseExpressionBindingId!==entry.bindingId||existing.identity.bindingVersionId!==entry.bindingVersionId||existing.targetLanguageTag!==pack.content.targetLanguage||existing.expression!==entry.expression)throw new Error('localFlow.invalidTarget');
+  if(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseId!==entry.senseId||existing.identity.expressionId!==entry.expressionId||existing.targetLanguageTag!==pack.content.targetLanguage)throw new Error('localFlow.invalidTarget');
   const updated=upsertLocalCurriculumMembership(existing,membership);tx.put('learningTargets',targetId,updated);return updated;
  }
  const profileId=entry.assurancePackageKey?'high_assurance':'lightweight';
- const target:LocalLearningTarget={id:targetId,retentionId:stableUuid(`sensa-retention:${targetId}`),identity:{learnerUserId:owner.learnerId,senseId:entry.senseId,senseVersionId:entry.senseVersionId,senseExpressionBindingId:entry.bindingId,bindingVersionId:entry.bindingVersionId,targetLanguageTag:pack.content.targetLanguage},curriculumMemberships:[membership],expression:entry.expression,policyAssignment:createPolicyAssignment({operationId,targetId,profileId,scope:'curriculum_source',at,provenance:{curriculumEnrollmentId:enrollment.id,bookId:member.bookId,bookVersionId:member.bookVersionId,contentReleaseId:member.contentReleaseId,packageVersion:member.packageVersion}}),committedPolicy:null,planningOverrides:[],targetLanguageTag:pack.content.targetLanguage,introducedLanguageRouteId:null,createdAt:at,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
+ const target:LocalLearningTarget={id:targetId,retentionId:stableUuid(`sensa-retention:${targetId}`),identity:{learnerUserId:owner.learnerId,senseId:entry.senseId,expressionId:entry.expressionId,targetLanguageTag:pack.content.targetLanguage},curriculumMemberships:[membership],expression:entry.expression,policyAssignment:createPolicyAssignment({operationId,targetId,profileId,scope:'curriculum_source',at,provenance:{curriculumEnrollmentId:enrollment.id,bookId:member.bookId,bookVersionId:member.bookVersionId,contentReleaseId:member.contentReleaseId,packageVersion:member.packageVersion}}),committedPolicy:null,planningOverrides:[],targetLanguageTag:pack.content.targetLanguage,introducedLanguageRouteId:null,createdAt:at,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
  tx.put('learningTargets',targetId,target);return target;
 }
 
@@ -301,7 +303,7 @@ async function materializeCurriculumWindow(
   if(!members.length)return [];
   function* candidates(){
    for(const member of members)for(const entry of member.pack.content.entries){
-    const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`);
+    const targetId=stableLearningTargetId(owner.learnerId,entry.senseId,entry.expressionId);
     const existing=byId.get(targetId);
     if(existing&&existing.curriculumMemberships.some(source=>source.languageContext.languageRouteId===context.languageRouteId&&source.languageContext.targetLanguageTag===context.targetLanguageTag&&source.languageContext.supportLanguageTag===context.supportLanguageTag&&source.provenance.curriculumEnrollmentId===enrollment.id&&source.packageKey===member.key&&(enrollment.source.kind!=='published_book'||source.provenance.publicationArchiveSha256===enrollment.source.publicationArchiveSha256)&&source.status!=='superseded'))continue;
     yield {enrollment,member,entry,targetId,existing};
@@ -345,10 +347,10 @@ async function refreshMaterializedEnrollmentMembers(
  const hydratedPackages=new Map<string,InstalledPackage>();
  const refreshed:string[]=[];
  for(const member of members)for(const entry of member.pack.content.entries){
-  const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`),existing=byId.get(targetId);
+  const targetId=stableLearningTargetId(owner.learnerId,entry.senseId,entry.expressionId),existing=byId.get(targetId);
   if(!existing)continue;
   const hadEnrollment=existing.curriculumMemberships.some(candidate=>candidate.provenance.curriculumEnrollmentId===enrollmentId);
-  if(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseVersionId!==entry.senseVersionId||existing.identity.bindingVersionId!==entry.bindingVersionId||existing.targetLanguageTag!==member.pack.content.targetLanguage||existing.expression!==entry.expression)throw new Error('localFlow.invalidTarget');
+  if(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseId!==entry.senseId||existing.identity.expressionId!==entry.expressionId||existing.targetLanguageTag!==member.pack.content.targetLanguage)throw new Error('localFlow.invalidTarget');
    const hydrated=await hydratedPackage(tx,member.key,hydratedPackages);
    const hydratedEntry=hydrated.content.entries.find(candidate=>candidate.senseVersionId===entry.senseVersionId&&candidate.bindingVersionId===entry.bindingVersionId);
    if(!hydratedEntry)throw new Error('localFlow.resourceInvalid');
@@ -440,11 +442,11 @@ async function enrollInstalledPackages(
   const enrollment=curriculumEnrollmentSchema.parse({format:'sensa-curriculum-enrollment-v1',id,revision:(previous?.revision??0)+1,learnerUserId:owner.learnerId,languageContext:context,source,status:'active',...(bookPlan?{bookPlan}:{}),createdByOperationId:previous?.createdByOperationId??operationId,createdAt:previous?.createdAt??now,updatedAt:now});
   tx.put('curriculumEnrollments',id,enrollment);
   if(previous&&source.kind==='published_book'){
-   const nextTargetIds=new Set(selected.flatMap(item=>item.pack.content.entries.map(entry=>stableUuid(`sensa-learning-target:${owner.learnerId}:${entry.senseVersionId}:${entry.bindingVersionId}`))));
+   const nextTargetIds=new Set(selected.flatMap(item=>item.pack.content.entries.map(entry=>stableLearningTargetId(owner.learnerId,entry.senseId,entry.expressionId))));
    for(const target of await tx.all<LocalLearningTarget>('learningTargets')){
     let revised=false;
     const curriculumMemberships=target.curriculumMemberships.map(membership=>{
-     if(membership.status==='superseded'||membership.provenance.curriculumEnrollmentId!==id||nextTargetIds.has(target.id))return membership;
+     if(membership.status==='superseded'||membership.provenance.curriculumEnrollmentId!==id||nextTargetIds.has(target.id)&&membership.provenance.publicationArchiveSha256===source.publicationArchiveSha256)return membership;
      revised=true;
      return {...membership,status:'superseded' as const,revision:membership.revision+1,updatedAt:now};
     });
@@ -466,7 +468,7 @@ export function prepareDirectPublishedLearning(operationId:string,enrollmentId:s
   if(enrollment.source.kind!=='stable_sense'||enrollment.status!=='active'||enrollment.learnerUserId!==owner.learnerId)throw new Error('localFlow.enrollFirst');
   const context=enrollment.languageContext;await requireLanguageRouteContext(tx,context);
   await assertSupplementalMembershipActive(tx,supplementalSourceDescriptor({kind:'stable_sense',id:enrollmentId},enrollment,owner.learnerId).id);
-  const {selection}=enrollment.source,targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${selection.reference.senseVersionId}:${selection.reference.bindingVersionId}`);
+  const {selection}=enrollment.source,targetId=stableLearningTargetId(owner.learnerId,selection.reference.senseId,selection.reference.expressionId);
   const existing=await tx.get<LocalLearningTarget>('learningTargets',targetId);
   if(existing)assertDirectTargetIdentity(existing,selection,owner.learnerId);
   if(existing&&await directSourceAlreadyCovered(tx,targetId,context,selection,owner.learnerId))return {targetId,status:'already_in_scope' as const};
@@ -647,7 +649,7 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
   const resolvedPlan=resolveRunPlan(participant,policyCommitment,purpose,material,at);
   participant.committedPolicy=policyCommitment;
   const materialReference=runMaterialDigest(material);
-  return [participant.id,{protocolRunId,curriculumMembershipId:membership.id,languageContext:context,startReason:{kind:purpose==='initial_learning'?'initial_learning_ready':purpose==='retention_review'?'due_review':'relearning_ready',selectionReason:participant.id===targetId?'requested_target':'cohort_candidate',triggerAt:at,triggerMemoryRevision:participant.memoryRevision},outcomePermissions:localProtocolOutcomePermissions(purpose,binding),material:materialReference,materializations:{[materialReference]:material},presentedMaterials:{},presentationOrder:[],policyCommitment,resolvedPlan,progress:createLocalProtocolProgress(protocolRunId,binding),memoryRevision:participant.memoryRevision,dueAt:participant.memory?.dueAt.toISOString()??null,evidenceIds:[]}];
+  return [participant.id,{retentionBaseline:retentionBaseline(participant),protocolRunId,curriculumMembershipId:membership.id,languageContext:context,startReason:{kind:purpose==='initial_learning'?'initial_learning_ready':purpose==='retention_review'?'due_review':'relearning_ready',selectionReason:participant.id===targetId?'requested_target':'cohort_candidate',triggerAt:at,triggerMemoryRevision:participant.memoryRevision},outcomePermissions:localProtocolOutcomePermissions(purpose,binding),material:materialReference,materializations:{[materialReference]:material},presentedMaterials:{},presentationOrder:[],policyCommitment,resolvedPlan,progress:createLocalProtocolProgress(protocolRunId,binding),memoryRevision:participant.memoryRevision,dueAt:participant.memory?.dueAt.toISOString()??null,evidenceIds:[]}];
  }));
  const run:LocalLearningRun={
   id:sessionId,startedByOperationId:operationId,...(continuedFromRunId?{continuedFromRunId}:{}),learningSessionId:reuse?activity!.id:stableUuid(`local-learning-session:${operationId}`),studyScopeRevisionId:scope.id,targetId,targetIds:participants.map(v=>v.id),
@@ -737,7 +739,7 @@ export async function continueLearning(operationId:string,runId:string,targetId:
 
 /** The same runtime target is committed only after independent material validation. */
 export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,source:ContentProvisioningSource,languageContext:SensaFormalPinnedLanguageContext,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null,replace=false,now=new Date().toISOString()){
- const {reference}=source,id=stableUuid(`sensa-learning-target:${owner.learnerId}:${reference.senseVersionId}:${reference.bindingVersionId}`);
+ const {reference}=source,id=stableLearningTargetId(owner.learnerId,reference.senseId,reference.expressionId);
  const existing=await tx.get<LocalLearningTarget>('learningTargets',id);
  const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext),targetLanguageTag=source.targetLanguageTag;
  if(targetLanguageTag!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
@@ -750,7 +752,7 @@ export async function commitPersonalMaterial(tx:LibraryTransaction,owner:Library
    :{kind:'personal_meaning_alignment',personalMeaningId:source.reference.personalMeaningId,personalMeaningRevisionId:source.reference.personalMeaningRevisionId,alignmentBasisReferenceId:source.reference.alignmentBasisReferenceId,alignmentId:source.reference.personalMeaningAlignmentId};
  const membership=curriculumMembership({operationId:attemptId,targetId:id,sourceKey:source.sourceKind==='stable_sense'?source.reference.enrollmentId:source.reference.personalMeaningAlignmentId,languageContext:context,sourceKind:source.sourceKind,provenance,packageKey:null,material,at:now,previous});
  if(existing){const next=upsertLocalCurriculumMembership(existing,membership);tx.put('learningTargets',id,next);if(replace)await refreshCurrentStepsForMaterial(tx,id,now,attemptId);return next;}
- const target:LocalLearningTarget={id,retentionId:stableUuid(`sensa-retention:${id}`),identity:{learnerUserId:owner.learnerId,senseId:reference.senseId,senseVersionId:reference.senseVersionId,senseExpressionBindingId:reference.bindingId,bindingVersionId:reference.bindingVersionId,targetLanguageTag},curriculumMemberships:[membership],expression:source.expression.surfaceForm,policyAssignment:createPolicyAssignment({operationId:attemptId,targetId:id,profileId:'lightweight',scope:'system_default',at:now,provenance:{kind:source.sourceKind}}),committedPolicy:null,planningOverrides:[],targetLanguageTag,introducedLanguageRouteId:null,createdAt:now,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
+ const target:LocalLearningTarget={id,retentionId:stableUuid(`sensa-retention:${id}`),identity:{learnerUserId:owner.learnerId,senseId:reference.senseId,expressionId:reference.expressionId,targetLanguageTag},curriculumMemberships:[membership],expression:source.expression.surfaceForm,policyAssignment:createPolicyAssignment({operationId:attemptId,targetId:id,profileId:'lightweight',scope:'system_default',at:now,provenance:{kind:source.sourceKind}}),committedPolicy:null,planningOverrides:[],targetLanguageTag,introducedLanguageRouteId:null,createdAt:now,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
  tx.put('learningTargets',id,target);return target;
 }
 

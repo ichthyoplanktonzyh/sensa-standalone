@@ -15,7 +15,7 @@ const sections = [
 export function WebShell({ children, current, focused, onNavigate, availableSections }: {
   children: ReactNode; current: string; focused: boolean; onNavigate: (id: string) => void; availableSections?: readonly string[];
 }) {
-  const { t } = useTranslation();
+  const { t,i18n } = useTranslation();
   const visibleSections = sections.filter(section => !availableSections || availableSections.includes(section.id));
   const selectedSection = current.startsWith('s-learning') || current === 's-stats'
     || ['s-catalog','s-catalog-book','s-library','s-publisher'].includes(current) ? 's-study'
@@ -40,9 +40,11 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
           key={id}
           onClick={() => onNavigate(id)}
           aria-current={selectedSection === id ? 'page' : undefined}
+          aria-label={t(label)}
         >
           <span data-sensa-shell-item-icon><SensaSkinIcon role={iconRole} aria-hidden="true" size={18}/></span>
           <span data-sensa-shell-item-label>{t(label)}</span>
+          <span data-sensa-shell-item-short-label lang={i18n.resolvedLanguage??i18n.language}>{t(id==='s-content'?'nav.world':label)}</span>
         </button>
       ))}
     </nav>

@@ -10,6 +10,7 @@ import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
 import './PersonalMeaningDetailScreen.css';
 import {PersonalMeaningGovernance} from './PersonalMeaningGovernance';
+import {MeaningDraftEditor} from './MeaningDraftEditor';
 /**
  * The AI clarification workspace.
  *
@@ -118,13 +119,13 @@ const expressionTypeLabels: Record<SensaExpressionType, string> = {
   get utterance_strategy() { return uiText('expressionStrategy'); },
 };
 
-const relationLabels: Record<SensaExpressionBindingRelation, string> = {
+const relationLabels: Record<NonNullable<SensaExpressionBindingRelation>, string> = {
   get realizes() { return uiText('expressesThisMeaning'); },
   get approximates() { return uiText('approximatesThisMeaning'); },
   get evokes() { return uiText('evokesThisMeaning'); },
 };
 
-const coverageLabels: Record<SensaSemanticCoverage, string> = {
+const coverageLabels: Record<NonNullable<SensaSemanticCoverage>, string> = {
   get exact() { return uiText('matchingScope'); },
   get broader() { return uiText('broaderScope'); },
   get narrower() { return uiText('narrowerScope'); },
@@ -389,6 +390,7 @@ export const PersonalMeaningDetailScreen=(props:PersonalMeaningDetailScreenProps
   </div>
  </MeaningWorkspaceFrame>;
  const governed={...props,governanceControls:controls};
+ if(detail&&!props.conversation&&(detail.editableDraft||detail.directAlignments.some(row=>!row.confirmedBindings.length)))return <MeaningDraftEditor detail={detail} onBack={props.onBack} onSaved={snapshot.reload} governanceControls={controls}/>;
  return props.conversation
   ? <ConnectedMeaningConversation {...governed} conversation={props.conversation}/>
   : !props.personalMeaningId && props.onConversationCreated
@@ -463,8 +465,7 @@ const ConfirmedExpressionDetail = ({
           <p className="text-sm text-fg-secondary">{uiText('expression')}</p>
           <h2 className="mt-2 text-3xl font-semibold">{expression.surfaceForm}</h2>
           <p className="mt-2 text-sm text-fg-tertiary">
-            {expressionTypeLabels[expression.expressionType]} · {relationLabels[expression.relation]} ·{' '}
-            {coverageLabels[expression.semanticCoverage]}
+            {expressionTypeLabels[expression.expressionType]}{expression.relation&&<> · {relationLabels[expression.relation]}</>}{expression.semanticCoverage&&<> · {coverageLabels[expression.semanticCoverage]}</>}
           </p>
         </div>
         {focus && (

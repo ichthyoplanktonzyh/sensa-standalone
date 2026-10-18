@@ -204,7 +204,7 @@
     "feedback": "Comentários e correções",
     "feedbackText": "Entre em contato com o suporte para enviar comentários sobre o produto, corrigir conteúdo, recuperar sua conta ou tirar dúvidas sobre exclusão. Anexe o arquivo de diagnóstico apenas se for útil; ele contém o estado de execução e contagens, não conteúdo de aprendizagem, endereços de e-mail, identificadores de registros, URLs, tokens ou pilhas de erro.",
     "contact": "Falar com o suporte",
-    "unavailable": "O contato com o suporte não está configurado nesta versão. Não disponibilize esta versão aos usuários.",
+    "unavailable": "Os dados de contato do suporte estão indisponíveis.",
     "diagnostics": "Diagnóstico sem dados pessoais",
     "diagnosticsText": "Baixe um relatório JSON local com informações sobre a versão, os recursos do navegador, o armazenamento e o estado da sincronização. Revise-o antes de anexá-lo a uma solicitação de suporte.",
     "diagnosticsDownload": "Baixar diagnóstico",
@@ -224,7 +224,7 @@
     "storageBudget": "Estimativa do navegador para este site: {{used}} MiB de {{quota}} MiB usados. O valor também pode incluir arquivos do aplicativo.",
     "storageBudgetWarning": "Este site já usou mais de 80% do espaço estimado pelo navegador: {{used}} MiB de {{quota}} MiB. Exporte um backup e libere espaço no dispositivo em breve.",
     "clearTitle": "Apagar conteúdo local",
-    "clearIntro": "Apague apenas deste navegador o conteúdo, o progresso de aprendizagem e as configurações dos modelos. Sua conta não será excluída. Exporte um backup acima se quiser manter este conteúdo.",
+    "clearIntro": "Apague apenas deste navegador o conteúdo, o progresso de aprendizagem e as configurações dos modelos. Sua conta não será excluída. Exporte um backup antes se quiser manter este conteúdo.",
     "clearInspect": "Revisar conteúdo local",
     "clearSummary": "Isto removerá {{drafts}} fontes, {{meanings}} sentidos, {{packages}} pacotes, {{targets}} itens de aprendizagem e {{events}} eventos.",
     "clearPending": "Há {{count}} preparações inacabadas. Elas não poderão continuar após a exclusão.",
@@ -232,5 +232,24 @@
     "clearConfirm": "Salvei os backups necessários e confirmo a exclusão deste conteúdo local.",
     "clearAction": "Excluir conteúdo local",
     "clearDone": "Conteúdo local apagado. Abra o aplicativo novamente para usar a biblioteca vazia."
+  },
+  "syncRecovery": {
+    "blocked": "A sincronização precisa ser verificada antes de continuar. Seus dados locais estão salvos. Exporte um backup, baixe o diagnóstico e entre em contato com o suporte.",
+    "hint": "O backup salva apenas os dados deste dispositivo. Ele não resolve o problema de sincronização nem inclui alterações da nuvem que ainda não foram baixadas.",
+    "backup": "Fazer backup deste dispositivo",
+    "hideBackup": "Ocultar backup"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Preparar dados para outro dispositivo",
+    "preparing": "Preparando dados da conta para outros dispositivos…",
+    "preparingUpload": "Enviando os dados necessários para o novo dispositivo…",
+    "receiving": "Recebendo dados da conta…",
+    "prepared": "Os dados da conta estão prontos para outro dispositivo.",
+    "preparationFailed": "Não foi possível concluir a preparação. Tente novamente mais tarde. Os dados sincronizados foram mantidos.",
+    "preparationCancelled": "Preparação interrompida. Os dados sincronizados foram mantidos.",
+    "stop": "Parar esta sincronização",
+    "stopping": "Parando…",
+    "cancelled": "Sincronização interrompida. Você pode tentar novamente.",
+    "processed": "Dados processados: {{amount}} MiB"
   }
 }

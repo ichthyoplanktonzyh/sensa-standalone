@@ -20,6 +20,7 @@ import {
   sqliteLibraryFile,
   type SqliteWorkerRequest,
   type SqliteWorkerResult,
+  type SqliteWorkerProgress,
 } from "./sqliteProtocol";
 
 const worker = self as unknown as DedicatedWorkerGlobalScope;
@@ -28,6 +29,7 @@ type WorkerStore={
   database:SqliteRecordDatabase;
   initialized:boolean;
   startupTimingsMs:Record<string,number>;
+  snapshotReport?:unknown;
 };
 
 let store:Promise<WorkerStore>|undefined;
@@ -41,8 +43,16 @@ let closed=false;
 let cleanupUnconfirmed=false;
 let failedConnection=false;
 let requestQueue:Promise<void>=Promise.resolve();
+let replicaWorkInFlight=0;
 let namespace:LocalLibraryNamespace=null;
 let namespaceBound=false;
+let snapshotInitialization:import('./sqlitePortableSnapshot').LocalPortableSnapshot|undefined;
+let nativeSnapshotInitialization:{source:File;binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot;owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'];reconnectDeviceId?:string;onImportedBytes:(completed:number)=>void}|undefined;
+let ownSnapshotBinding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding|undefined;
+let ownSnapshotOwner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner']|undefined;
+let ownSnapshotReconnectDeviceId:string|undefined;
+let requireExisting=false;
+let privateFreshRestore=false;
 
 const verifyPoolHandles=()=>assertSahPoolAccessHandlesFree(navigator.storage,localLibraryPoolDirectory(namespace));
 const releaseLease=async()=>{
@@ -79,10 +89,24 @@ async function database():Promise<WorkerStore>{
         });
         const poolReady=performance.now();
         activePool=pool;
-        const database=activeRawDatabase=new pool.OpfsSAHPoolDb(sqliteLibraryFile);
-        activeDatabase=new SqliteRecordDatabase(sqlite3,database,'opfs');
+        let snapshotReport:unknown;
+        if(nativeSnapshotInitialization){
+          const input=nativeSnapshotInitialization,{importNativeCloudSnapshot}=await import('./sqliteNativeSnapshotImport');
+          const {library,...report}=await importNativeCloudSnapshot(sqlite3,pool,sqliteLibraryFile,input.source,input.binding,input.owner,input.onImportedBytes,input.reconnectDeviceId);
+          activeDatabase=library;snapshotReport=report;nativeSnapshotInitialization=undefined;
+        }else if(snapshotInitialization){
+          const {importLocalPortableSnapshot,importOwnCloudPortableSnapshot}=await import('./sqlitePortableSnapshot');
+          const {library,...report}=await (ownSnapshotBinding&&ownSnapshotOwner?importOwnCloudPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization,ownSnapshotBinding,ownSnapshotOwner.accountId,ownSnapshotReconnectDeviceId):importLocalPortableSnapshot(sqlite3,pool,sqliteLibraryFile,snapshotInitialization));
+          if(ownSnapshotBinding&&ownSnapshotOwner)library.bindOwnCloudSnapshot(ownSnapshotBinding,ownSnapshotOwner);
+          activeDatabase=library;snapshotReport=report;snapshotInitialization=undefined;
+        }else{
+          if(privateFreshRestore&&(namespace===null||pool.getFileNames().includes(sqliteLibraryFile)))throw Error('sqlite_private_restore_boundary');
+          if(requireExisting&&!pool.getFileNames().includes(sqliteLibraryFile))throw Error('sqlite_snapshot_generation_missing');
+          const database=activeRawDatabase=new pool.OpfsSAHPoolDb(sqliteLibraryFile);
+          activeDatabase=new SqliteRecordDatabase(sqlite3,database,'opfs',undefined,privateFreshRestore);
+        }
         activeRawDatabase=undefined; // The wrapper now owns the native handle.
-        return {pool,database:activeDatabase,initialized:false,startupTimingsMs:{lease:Math.round(leased-started),nativeProbe:Math.round(probed-leased),wasm:Math.round(wasmReady-probed),pool:Math.round(poolReady-wasmReady),databaseOpen:Math.round(performance.now()-poolReady),total:Math.round(performance.now()-started)}};
+        return {pool,database:activeDatabase,initialized:!!snapshotReport,snapshotReport,startupTimingsMs:{lease:Math.round(leased-started),nativeProbe:Math.round(probed-leased),wasm:Math.round(wasmReady-probed),pool:Math.round(poolReady-wasmReady),databaseOpen:Math.round(performance.now()-poolReady),total:Math.round(performance.now()-started)}};
       }catch(cause){
         try{
           if(!installerStarted&&!(cause instanceof SahPoolProbeCloseError)){
@@ -118,6 +142,7 @@ async function closeStorage():Promise<void>{
     const databaseValue=initializedStore?.database??activeDatabase;
     const rawDatabase=activeRawDatabase;
     const pool=initializedStore?.pool??activePool;
+    databaseValue?.beforeSnapshotRequest('close');
     await databaseValue?.settleReplicaCandidates();
     if((databaseValue||rawDatabase)&&pool){
       await closeSqliteSahPoolSafely({
@@ -162,10 +187,24 @@ async function closeStorage():Promise<void>{
 }
 
 const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
-  if(request.kind==='initialize'){
+  if(request.kind==='initialize'||request.kind==='initializeSnapshot'||request.kind==='initializeOwnCloudSnapshot'||request.kind==='initializeNativeCloudSnapshot'){
     const next=validateLocalLibraryNamespace(request.namespace??null);
     if((namespaceBound||store)&&next!==namespace)throw new Error('localFlow.libraryReplaced');
     namespace=next;namespaceBound=true;
+    if(request.kind==='initializeNativeCloudSnapshot'){
+      if(next===null||store)throw Error('sqlite_snapshot_requires_fresh_namespace');
+      nativeSnapshotInitialization={source:request.source,binding:request.binding,owner:request.owner,reconnectDeviceId:request.reconnectDeviceId,onImportedBytes:completed=>worker.postMessage({id:request.id,kind:'replicaCandidateProgress',progress:{phase:'restore-installation',completed}} satisfies SqliteWorkerProgress)};
+    }
+    if(request.kind==='initialize'){
+      if(request.requireExisting&&next===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
+      if(request.privateFreshRestore&&(next===null||store||request.requireExisting))throw Error('sqlite_private_restore_boundary');
+      privateFreshRestore=!!request.privateFreshRestore;requireExisting=!!request.requireExisting;
+    }
+    if(request.kind==='initializeSnapshot'||request.kind==='initializeOwnCloudSnapshot'){
+      if(next===null||store)throw Error('sqlite_snapshot_requires_fresh_namespace');
+      snapshotInitialization=request.snapshot;
+      if(request.kind==='initializeOwnCloudSnapshot'){ownSnapshotBinding=request.binding;ownSnapshotOwner=request.owner;ownSnapshotReconnectDeviceId=request.reconnectDeviceId;}
+    }
   }
   if(request.kind==='close'){
     await closeStorage();
@@ -174,7 +213,18 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
   if(closed||closing||cleanupUnconfirmed)throw new Error('sqlite_worker_closing');
   if(failedConnection)throw new Error('sqlite_storage_connection_failed');
   const current=await database();
+  current.database.beforeSnapshotRequest(request.kind);
   switch(request.kind){
+    case 'snapshotSource':{
+      // Candidate page jobs release requestQueue while awaiting work. Reject
+      // a copy before opening its read transaction if any such job can resume.
+      if(request.request.action==='begin'&&replicaWorkInFlight)throw Error('sqlite_snapshot_source_busy');
+      return current.database.snapshotSourceRequest(request.request);
+    }
+    case 'exportLocalSnapshot':return current.database.exportLocalSnapshot(current.pool,request.expectedRevision);
+    case 'exportOwnCloudSnapshot':return current.database.exportOwnCloudSnapshot(current.pool,request.fence);
+    case 'ownCloudBaselinePage':return current.database.ownCloudBaselinePage(request.page);
+    case 'initializeSnapshot':case 'initializeOwnCloudSnapshot':case 'initializeNativeCloudSnapshot':return {report:current.snapshotReport,diagnostics:current.database.diagnostics()};
     case 'initialize':{
       try{
         const diagnostics=current.database.initialize();
@@ -192,14 +242,17 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'existingRecordKeys':return current.database.existingRecordKeys(request.table,request.keys);
     case 'packageCacheProjection':return current.database.packageCacheProjection(request.query);
     case 'meaningLookup':return current.database.lookupMeanings(request.query);
+    case 'contextBrowse':return current.database.contextBrowse(request.query);
+    case 'worldGraph':return current.database.worldGraph(request.query);
     case 'worldBrowse':return current.database.worldBrowse(request.query);
     case 'worldSceneMeaning':return current.database.worldSceneMeaning(request.sceneId);
     case 'registrySelection':return current.database.registrySelection(request.query);
+    case 'personalEnrollmentIndex':return current.database.personalEnrollmentIndex();
     case 'learningSemanticMemory':return current.database.learningSemanticMemory(request.targetId);
     case 'worldLearningChoices':return current.database.worldLearningChoices(request.query);
     case 'practiceExpressions':return current.database.practiceExpressions(request.query);
     case 'existingJourneyIdentities':return current.database.existingJourneyIdentities(request.ids);
-    case 'changesSince': return current.database.changesSince(request.contentRevision,request.tables);
+    case 'changesSince': return current.database.changesSince(request.contentRevision,request.tables,request.page);
     case 'hasChangesSince':return current.database.hasChangesSince(request.contentRevision,request.tables);
     case 'syncBaseEntries': return current.database.syncBaseEntries(request.keys);
     case 'syncBaseReferences':return current.database.syncBaseReferences();
@@ -209,6 +262,7 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'runtimeLearningCandidates':return current.database.runtimeLearningCandidates(request.query);
     case 'studyScopeMember':return current.database.studyScopeMember(request.scopeRevisionId,request.targetId);
     case 'latestLearningActionAt':return current.database.latestLearningActionAt(request.runId);
+    case 'learningSchedulePage':return current.database.learningSchedulePage(request.query);
     case 'learningHistoryPage':return current.database.learningHistoryPage(request.query);
     case 'learningManagementSummary':return current.database.learningManagementSummary(request.query);
     case 'countIntroducedLearningTargets': return current.database.countIntroducedLearningTargets(
@@ -229,14 +283,18 @@ const message=async(request:SqliteWorkerRequest):Promise<unknown>=>{
     case 'isMediaReferenced': return current.database.isMediaReferenced(request.mediaId);
     case 'portableMedia': return current.database.portableMedia(request.sha256);
     case 'portableMediaDiagnostics': return current.database.portableMediaDiagnostics();
+    case 'installPrivateRestore':return current.database.installPrivateRestore(request.mutation,progress=>worker.postMessage({id:request.id,kind:'replicaCandidateProgress',progress} satisfies SqliteWorkerProgress));
     case 'commit': current.database.commit(request.mutation); return null;
-    case 'replicaCandidate':return current.database.replicaCandidate(request.request);
+    case 'replicaCandidate':return current.database.replicaCandidate(request.request,request.reportProgress?progress=>worker.postMessage({id:request.id,kind:'replicaCandidateProgress',progress} satisfies SqliteWorkerProgress):undefined);
     case 'diagnostics': return {...current.database.diagnostics({verifyIntegrity:request.verifyIntegrity}),workerStartupTimingsMs:current.startupTimingsMs};
   }
 };
 
 worker.addEventListener('message',(event:MessageEvent<SqliteWorkerRequest>)=>{
+  if(event.data.kind==='close')activeDatabase?.cancelPrivateRestore();
+  if(event.data.kind==='replicaCandidate')replicaWorkInFlight++;
   const response=requestQueue.then(()=>message(event.data)).finally(()=>{
+    if(event.data.kind==='replicaCandidate')replicaWorkInFlight--;
     // Post-COMMIT maintenance retains a successful receipt. Quarantine before
     // the queue advances, even though that request did not reject.
     if(activeDatabase?.connectionFailed){failedConnection=true;activeDatabase.quarantineConnection(Error('sqlite_storage_connection_failed'));}
@@ -249,7 +307,7 @@ worker.addEventListener('message',(event:MessageEvent<SqliteWorkerRequest>)=>{
   });
   // Private candidate validation/merge may yield while normal requests run.
   // Merge also rechecks its live baseline fence; never hold the owner queue.
-  if(event.data.kind!=='replicaCandidate'||!['validate','prepareUpdate'].includes(event.data.request.kind))requestQueue=response.then(()=>undefined,()=>undefined);
+  if(event.data.kind!=='replicaCandidate'||!['validate','prepareUpdate','prepareRebase','validatePublication','admitOwnPublication','preparePublication','retirePublication'].includes(event.data.request.kind))requestQueue=response.then(()=>undefined,()=>undefined);
   void response.then(
     value=>worker.postMessage({id:event.data.id,ok:true,value} satisfies SqliteWorkerResult),
     cause=>worker.postMessage({

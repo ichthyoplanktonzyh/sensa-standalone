@@ -1,3 +1,5 @@
+import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
+import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {
   HomeLearningStorageProjection,
   PortableMediaBlob,
@@ -18,6 +20,8 @@ import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} fr
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import type {StoredLearningHistoryPage} from './learningHistoryProjection';
 
+import {isReplicaCandidateProgress,replicaCandidateProgressPhase,type ReplicaCandidateProgressObserver,type ReplicaCandidateProgress} from './replicaCandidateProtocol';
+
 // Keep the original ownership name so a page from the previous release cannot
 // open a second OPFS connection while a newly deployed page is active.
 const ownerLock = 'sensa-sqlite-owner-v1';
@@ -26,18 +30,22 @@ const remoteTimeoutMs = 15_000;
 const leaderWaitMs = 10_000;
 const retryableOwnerReads=new Set<SqliteWorkerInput['kind']>([
   'initialize','get','entries','entriesPage','recordKeysPage','changesSince','diagnostics',
-  'meaningLookup','registrySelection','worldBrowse','worldSceneMeaning','worldLearningChoices','practiceExpressions',
+  'meaningLookup','registrySelection','contextBrowse','worldGraph','worldBrowse','worldSceneMeaning','worldLearningChoices','practiceExpressions',
   'existingRecordKeys','existingJourneyIdentities','packageCacheProjection',
-  'learningSemanticMemory','hasChangesSince','syncBaseEntries','syncBaseReferences','count','estimateRecordBytes',
-  'homeLearningProjection','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates',
+  'learningSemanticMemory','personalEnrollmentIndex','hasChangesSince','syncBaseEntries','syncBaseReferences','count','estimateRecordBytes',
+  'homeLearningProjection','learningSchedulePage','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates',
   'studyScopeMember','latestLearningActionAt','countIntroducedLearningTargets','learningRunIdsForTarget',
   'openLearningRunTargets','countContentAttemptsSince','learningTargetIdsForBookUpgrade',
   'isMediaReferenced','portableMedia','portableMediaDiagnostics',
 ]);
 
 export interface CoordinatedSqliteBackend {
-  replicaCandidate?(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;
+  snapshotSource?(request:import('./sqliteSnapshotSource').SnapshotSourceRequest):Promise<import('./sqliteSnapshotSource').SnapshotSourceResult>;
+  exportLocalSnapshot?(expectedRevision:number):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
+  exportOwnCloudSnapshot?(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
+  replicaCandidate?(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
+  personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
   initialize(): Promise<SqliteStorageDiagnostics>;
@@ -46,19 +54,22 @@ export interface CoordinatedSqliteBackend {
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
   recordKeysPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<string[]>;
   lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>;
+  contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>;
+  worldGraph(query:import('./sqliteProtocol').WorldGraphQuery):Promise<import('./sqliteProtocol').WorldGraphRead>;
   worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>;
   worldSceneMeaning(sceneId:string):Promise<string|null>;
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
   worldLearningChoices(query:import('./sqliteProtocol').WorldLearningChoiceQuery):Promise<import('./sqliteProtocol').WorldLearningChoicePage>;
   practiceExpressions(query:import('./sqliteProtocol').PracticeExpressionQuery):Promise<import('./sqliteProtocol').PracticeExpressionPage>;
   existingJourneyIdentities(ids:readonly string[]):Promise<string[]>;
-  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]>;
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
   homeLearningProjection(languageRouteId: string,clock?:number): Promise<HomeLearningStorageProjection>;
+  learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>;
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>;
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>;
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>;
@@ -82,6 +93,7 @@ type CoordinatorPayload =
   | { kind: 'leader'; sender: string }
   | { kind: 'probe'; sender: string }
   | { kind: 'request'; sender: string; requestId: string; input: SqliteWorkerInput }
+  | { kind:'progress';sender:string;recipient:string;requestId:string;progress:ReplicaCandidateProgress }
   | { kind: 'response'; recipient: string; requestId: string; ok: true; value: unknown }
   | { kind: 'response'; recipient: string; requestId: string; ok: false; error: string };
 type CoordinatorMessage = CoordinatorEnvelope & CoordinatorPayload;
@@ -104,6 +116,10 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
+    onProgress?:ReplicaCandidateProgressObserver;
+    completed:Map<string,number>;
+    progressPhase?:ReplicaCandidateProgress['phase'];
+    owner:string|null;
   }>();
   private readonly leaderWaiters = new Set<{
     resolve: () => void;
@@ -140,7 +156,10 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.call({ kind: 'get', table, key }) as Promise<string | null>;
   }
 
-  replicaCandidate(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{return this.call({kind:'replicaCandidate',request}) as Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;}
+  replicaCandidate(request:import('./replicaCandidateProtocol').ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>{onProgress=replicaCandidateProgressPhase(request.kind)?onProgress:undefined;return this.call({kind:'replicaCandidate',request,...(onProgress?{reportProgress:true}:{})},onProgress) as Promise<import('./replicaCandidateProtocol').ReplicaCandidateResponse>;}
+  snapshotSource(request:import('./sqliteSnapshotSource').SnapshotSourceRequest){return this.call({kind:'snapshotSource',request}) as Promise<import('./sqliteSnapshotSource').SnapshotSourceResult>;}
+  exportLocalSnapshot(expectedRevision:number){return this.call({kind:'exportLocalSnapshot',expectedRevision}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
+  exportOwnCloudSnapshot(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){return this.call({kind:'exportOwnCloudSnapshot',fence}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
 
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>> {
     return this.call({ kind: 'entries', table }) as Promise<Array<{ key: string; encodedValue: string }>>;
@@ -150,11 +169,14 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.call({kind:'existingRecordKeys',table,keys:[...keys]}) as Promise<string[]>;
   }
 
-  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
-    return this.call({ kind: 'changesSince', contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]> {
+    return this.call({ kind: 'changesSince', contentRevision, tables: [...tables],page }) as Promise<SqliteRecordChange[]>;
   }
   lookupMeanings(query:string):Promise<import('./sqliteProtocol').MeaningLookupResult>{return this.call({kind:'meaningLookup',query}) as Promise<import('./sqliteProtocol').MeaningLookupResult>;}
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{return this.call({kind:'learningSemanticMemory',targetId}) as Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;}
+  personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>{return this.call({kind:'personalEnrollmentIndex'}) as Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;}
+  contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>{return this.call({kind:'contextBrowse',query}) as Promise<ContextBrowsePage>;}
+  worldGraph(query:import('./sqliteProtocol').WorldGraphQuery):Promise<import('./sqliteProtocol').WorldGraphRead>{return this.call({kind:'worldGraph',query}) as Promise<import('./sqliteProtocol').WorldGraphRead>;}
   worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{return this.call({kind:'worldBrowse',query}) as Promise<import('./sqliteProtocol').WorldBrowsePage>;}
   worldSceneMeaning(sceneId:string):Promise<string|null>{return this.call({kind:'worldSceneMeaning',sceneId}) as Promise<string|null>;}
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.call({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}
@@ -196,6 +218,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return this.call({kind:'runtimeLearningCandidates',query}) as Promise<RuntimeLearningCandidates>;}
   studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{return this.call({kind:'studyScopeMember',scopeRevisionId,targetId}) as Promise<import('./studyScopes').LocalStudyScopeMember|null>;}
   latestLearningActionAt(runId:string):Promise<string|null>{return this.call({kind:'latestLearningActionAt',runId}) as Promise<string|null>;}
+  learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>{return this.call({kind:'learningSchedulePage',query}) as Promise<LearningSchedulePage>;}
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return this.call({kind:'learningHistoryPage',query}) as Promise<StoredLearningHistoryPage>;}
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return this.call({kind:'learningManagementSummary',query}) as Promise<LearningManagementStorageSummary>;}
 
@@ -294,14 +317,14 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     return this.closeInFlight;
   }
 
-  private async call(input: SqliteWorkerInput): Promise<unknown> {
+  private async call(input: SqliteWorkerInput,onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     this.assertSelected();
-    const value=await this.callSelected(input);
+    const value=await this.callSelected(input,onProgress);
     this.assertSelected();
     return value;
   }
 
-  private async callSelected(input: SqliteWorkerInput): Promise<unknown> {
+  private async callSelected(input: SqliteWorkerInput,onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     if (this.incompatible) throw new Error('sqlite_owner_incompatible');
     if(this.closing||this.closeInFlight)throw new Error('sqlite_owner_closing');
     if(this.cleanupUnconfirmed)await this.close();
@@ -310,17 +333,17 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     await this.connect(generation);
     this.assertLifecycleGeneration(generation);
     if (this.incompatible) throw new Error('sqlite_owner_incompatible');
-    if (this.backend) return this.dispatch(this.backend, input);
+    if (this.backend) return this.dispatch(this.backend, input,onProgress);
 
     // A stale announcement is harmless: the lock decides whether this tab may
     // replace the old owner before the request is sent.
     if (await this.tryBecomeLeader()) {
       this.assertLifecycleGeneration(generation);
-      return this.dispatch(this.backend!, input);
+      return this.dispatch(this.backend!, input,onProgress);
     }
     this.assertLifecycleGeneration(generation);
     try {
-      return await this.remote(input);
+      return await this.remote(input,onProgress);
     } catch (cause) {
       const message=errorMessage(cause);
       if(!['sqlite_coordination_timeout','sqlite_owner_changed','sqlite_owner_closing'].includes(message))throw cause;
@@ -331,11 +354,11 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       this.lastLeaderAt = 0;
       if (await this.tryBecomeLeader()){
         this.assertLifecycleGeneration(generation);
-        return this.dispatch(this.backend!, input);
+        return this.dispatch(this.backend!, input,onProgress);
       }
       await this.waitForLeader(generation);
       this.assertLifecycleGeneration(generation);
-      return this.remote(input);
+      return this.remote(input,onProgress);
     }
   }
 
@@ -483,14 +506,14 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     }
   }
 
-  private remote(input: SqliteWorkerInput): Promise<unknown> {
+  private remote(input: SqliteWorkerInput,onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     const requestId = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
         reject(new Error('sqlite_coordination_timeout'));
       }, remoteTimeoutMs);
-      this.pending.set(requestId, { resolve, reject, timer });
+      this.pending.set(requestId, { resolve, reject, timer,onProgress,completed:new Map(),owner:this.leaderId,progressPhase:input.kind==='replicaCandidate'?replicaCandidateProgressPhase(input.request.kind):undefined });
       this.post({ kind: 'request', sender: this.id, requestId, input });
     });
   }
@@ -515,6 +538,13 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       if (this.backend&&!this.closing) this.markLeader();
       return;
     }
+    if(message.kind==='progress'){
+      if(message.recipient!==this.id)return;const waiting=this.pending.get(message.requestId),progress=message.progress;
+      if(!waiting?.onProgress||message.sender!==waiting.owner||message.sender!==this.leaderId||!isReplicaCandidateProgress(progress)||progress.phase!==waiting.progressPhase||progress.completed<=(waiting.completed.get(progress.phase)??0))return;
+      try{this.assertSelected();waiting.onProgress(progress);waiting.completed.set(progress.phase,progress.completed);clearTimeout(waiting.timer);
+       waiting.timer=setTimeout(()=>{this.pending.delete(message.requestId);waiting.reject(Error('sqlite_coordination_timeout'));},remoteTimeoutMs);
+      }catch(cause){clearTimeout(waiting.timer);this.pending.delete(message.requestId);waiting.reject(cause instanceof Error?cause:Error('sqlite_progress_failed'));}return;
+    }
     if (message.kind === 'response') {
       if (message.recipient !== this.id) return;
       const waiting = this.pending.get(message.requestId);
@@ -530,7 +560,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       this.post({kind:'response',recipient:message.sender,requestId:message.requestId,ok:false,error:'sqlite_owner_closing'});
       return;
     }
-    const request=this.dispatch(this.backend,message.input).then(
+    const request=this.dispatch(this.backend,message.input,message.input.kind==='replicaCandidate'&&message.input.reportProgress?progress=>this.post({kind:'progress',sender:this.id,recipient:message.sender,requestId:message.requestId,progress}):undefined).then(
       (value) => this.post({ kind: 'response', recipient: message.sender, requestId: message.requestId, ok: true, value }),
       (cause) => this.post({
         kind: 'response',
@@ -588,10 +618,16 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     } satisfies CoordinatorMessage);
   }
 
-  private dispatch(backend: CoordinatedSqliteBackend, input: SqliteWorkerInput): Promise<unknown> {
+  private dispatch(backend: CoordinatedSqliteBackend, input: SqliteWorkerInput,onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     try{this.assertSelected();}catch(cause){return Promise.reject(cause);}
     switch (input.kind) {
       case 'initialize': return backend.initialize();
+      case 'installPrivateRestore':throw Error('sqlite_private_restore_boundary');
+      case 'initializeSnapshot':throw Error('sqlite_snapshot_requires_isolated_worker');
+      case 'initializeOwnCloudSnapshot':case 'initializeNativeCloudSnapshot':case 'ownCloudBaselinePage':throw Error('sqlite_snapshot_requires_isolated_worker');
+      case 'exportLocalSnapshot':return backend.exportLocalSnapshot?.(input.expectedRevision)??Promise.reject(Error('sqlite_snapshot_unavailable'));
+      case 'snapshotSource':return backend.snapshotSource?.(input.request)??Promise.reject(Error('sqlite_snapshot_unavailable'));
+      case 'exportOwnCloudSnapshot':return backend.exportOwnCloudSnapshot?.(input.fence)??Promise.reject(Error('sqlite_snapshot_unavailable'));
       case 'get': return backend.get(input.table, input.key);
       case 'entries': return backend.entries(input.table);
       case 'entriesPage':return backend.entriesPage(input.table,input.afterKey,input.limit);
@@ -599,14 +635,17 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'existingRecordKeys':return backend.existingRecordKeys(input.table,input.keys);
       case 'packageCacheProjection':return backend.packageCacheProjection(input.query);
       case 'meaningLookup':return backend.lookupMeanings(input.query);
+      case 'contextBrowse':return backend.contextBrowse(input.query);
+      case 'worldGraph':return backend.worldGraph(input.query);
       case 'worldBrowse':return backend.worldBrowse(input.query);
       case 'worldSceneMeaning':return backend.worldSceneMeaning(input.sceneId);
       case 'registrySelection':return backend.registrySelection(input.query);
+      case 'personalEnrollmentIndex':return backend.personalEnrollmentIndex();
       case 'learningSemanticMemory':return backend.learningSemanticMemory(input.targetId);
       case 'worldLearningChoices':return backend.worldLearningChoices(input.query);
       case 'practiceExpressions':return backend.practiceExpressions(input.query);
       case 'existingJourneyIdentities':return backend.existingJourneyIdentities(input.ids);
-      case 'changesSince': return backend.changesSince(input.contentRevision, input.tables);
+      case 'changesSince': return backend.changesSince(input.contentRevision, input.tables,input.page);
       case 'hasChangesSince':return backend.hasChangesSince(input.contentRevision,input.tables);
       case 'syncBaseEntries': return backend.syncBaseEntries(input.keys);
       case 'syncBaseReferences':return backend.syncBaseReferences();
@@ -616,6 +655,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'runtimeLearningCandidates':return backend.runtimeLearningCandidates(input.query);
       case 'studyScopeMember':return backend.studyScopeMember(input.scopeRevisionId,input.targetId);
       case 'latestLearningActionAt':return backend.latestLearningActionAt(input.runId);
+      case 'learningSchedulePage':return backend.learningSchedulePage(input.query);
       case 'learningHistoryPage':return backend.learningHistoryPage(input.query);
       case 'learningManagementSummary':return backend.learningManagementSummary(input.query);
       case 'countIntroducedLearningTargets': return backend.countIntroducedLearningTargets(
@@ -637,7 +677,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'portableMedia': return backend.portableMedia(input.sha256);
       case 'portableMediaDiagnostics': return backend.portableMediaDiagnostics();
       case 'commit': return backend.commit(input.mutation);
-      case 'replicaCandidate':return backend.replicaCandidate?.(input.request)??Promise.reject(Error('sqlite_replica_candidate_unavailable'));
+      case 'replicaCandidate':return backend.replicaCandidate?.(input.request,onProgress)??Promise.reject(Error('sqlite_replica_candidate_unavailable'));
       case 'diagnostics': return backend.diagnostics({verifyIntegrity:input.verifyIntegrity});
     }
   }

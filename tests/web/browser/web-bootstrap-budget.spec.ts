@@ -22,6 +22,7 @@ import {librarySyncBlockFetchBytes,librarySyncBlockStoreChars} from '../../../pa
 import {decodeLibrarySyncBlock} from '../../../packages/contracts/src/sensa/librarySyncBlocks.ts';
 import {pageLayoutFamilyContract} from '../../../apps/web/src/experience/appearance/pageLayoutContract.ts';
 import type {} from '../../../apps/web/src/browserSmokeBridge.ts';
+import {IndexedSyncFixture} from '../support/indexedSyncFixture.mts';
 
 const root=process.cwd();
 const output=resolve(root,'.tmp/web-bootstrap-budget');
@@ -50,21 +51,25 @@ function jwt(expSeconds:number){const encode=(value:unknown)=>Buffer.from(JSON.s
 const delay=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
 
-type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;commits:Map<string,string>;published:number;publishedBytes:number};
+type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;index:IndexedSyncFixture;published:number;publishedBytes:number};
+type CloudRow={table:string;key:string;blocks:string[]};
 const clouds=new Map<string,Cloud>();
+let restoredSourceRows:CloudRow[]=[];
+let beforeRemoteDelivery:{revision:number;published:number;publishedBytes:number}|undefined;
+const restoreCommits:{operationId:string;patch:boolean;changedRows:number;originalKeys:string[];intakeOperations:string[]}[]=[];
 let intakeLibraryId:string|null=null;
 let remoteDeliveryAvailable=false,remoteIncompleteAvailable=false,remoteAcknowledgement:any=null,remoteIncompleteAcknowledgement:any=null;
 let holdRemoteAck=false,releaseRemoteAck:(()=>void)|undefined;
 let extensionAuthorization:any=null;
 const remoteSubmission={contractVersion:'sensa-intake-delivery-v1',client:{clientId:'19ba48d1-03af-489e-a352-a16f05a03d5c',kind:'agent',label:'Codex'},intake:{contractVersion:'sensa-intake-v3',operationId:REMOTE_OPERATION,capturedAt:REMOTE_QUEUED_AT,context:{modality:'text',textSegment:'I backed out.',mediaReferenceIds:[],languageTag:'en',source:{client:'codex',url:null,title:'GPT Live conversation',sourceReferenceId:'conversation-1',domSelector:null,paragraphContext:null}},expression:{surfaceForm:'back out',languageTag:'en',occurrence:{surfaceForm:'backed out',locator:{kind:'text_span',start:2,end:12}},expressionTypeHint:'phrase'},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'I backed out.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:['I backed out.'],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested',resolutionProvenance:{resolverKind:'language_model',provider:'codex',model:'fixture',policyVersion:'sensa-agent-intake-v1',sourceReferenceIds:['conversation-1']}},acceptance:{mode:'delegated_agent',actorId:'codex',basis:'explicit_user_request',authorizationReference:null}}};
 const remoteIncompleteSubmission={...remoteSubmission,intake:{...remoteSubmission.intake,operationId:REMOTE_INCOMPLETE_OPERATION,sense:null}};
-const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(existing)return existing;const created:Cloud={blocks:new Map(),revision:0,manifest:null,commits:new Map(),published:0,publishedBytes:0};clouds.set(account,created);return created;};
+const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(existing)return existing;const blocks=new Map<string,string>();const created:Cloud={blocks,revision:0,manifest:null,index:new IndexedSyncFixture(blocks),published:0,publishedBytes:0};clouds.set(account,created);return created;};
 /** Repack a published library into smaller blocks, the way the previous client stored it.
  *  Restoring it must still cost a byte-bounded number of round trips. */
 const repackCloud=(cloud:Cloud,chars:number)=>{
  if(!cloud.manifest)throw Error('nothing to repack');
  const manifest=JSON.parse(cloud.manifest.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {version:number;rows:{table:string;key:string;blocks:string[]}[]};
- if(manifest.version!==6||manifest.rows.some(row=>row.table==='operations'||row.table==='packageCache'))throw Error('current Checkpoint carried device-local state');
+ if(manifest.version!==8||manifest.rows.some(row=>row.table==='operations'||row.table==='packageCache'))throw Error('current Checkpoint carried device-local state');
  const added=new Map<string,string>(),rows:{table:string;key:string;blocks:string[]}[]=[];
  for(const [rowIndex,row] of manifest.rows.entries()){
   const text=row.blocks.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join(''),refs:string[]=[];
@@ -80,6 +85,7 @@ const repackCloud=(cloud:Cloud,chars:number)=>{
  // Model a genuinely old account: canonical 256K blocks are not already present
  // on the server and must be uploaded once during layout normalization.
  cloud.blocks=added;
+ cloud.index=new IndexedSyncFixture(cloud.blocks);
  cloud.revision+=1;cloud.manifest=[nextHash];
  const refs=[...new Set(rows.flatMap(row=>row.blocks))];
  cloud.published=refs.length;
@@ -123,7 +129,10 @@ const server=createServer(async(request,response)=>{
    const input=await body() as {libraryId:string};
    if(input.libraryId!==intakeLibraryId){json({code:'library_mismatch'},409);return;}
    const deliveries=[];
-   if(remoteDeliveryAvailable&&!remoteAcknowledgement)deliveries.push({deliveryId:REMOTE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteSubmission});
+   if(remoteDeliveryAvailable&&!remoteAcknowledgement){
+    const cloud=cloudFor(ACCOUNT);beforeRemoteDelivery??={revision:cloud.revision,published:cloud.published,publishedBytes:cloud.publishedBytes};
+    deliveries.push({deliveryId:REMOTE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteSubmission});
+   }
    if(remoteIncompleteAvailable&&!remoteIncompleteAcknowledgement)deliveries.push({deliveryId:REMOTE_INCOMPLETE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteIncompleteSubmission});
    json({deliveries});return;
   }
@@ -137,7 +146,10 @@ const server=createServer(async(request,response)=>{
   if(url.pathname==='/sensa/library-sync'||url.pathname.startsWith('/sensa/library-sync/')){
    await delay(SERVICE_LATENCY_MS);
    const cloud=cloudFor(ACCOUNT);
-   if(url.pathname==='/sensa/library-sync/head'){json({revision:cloud.revision,manifest:cloud.manifest});return;}
+   if(url.pathname==='/sensa/library-sync/head'){json(cloud.index.head(cloud.revision,cloud.manifest));return;}
+   if(url.pathname==='/sensa/library-sync/snapshot'||url.pathname==='/sensa/library-sync/pull'||url.pathname.startsWith('/sensa/library-sync/staging/')||url.pathname.startsWith('/sensa/library-sync/receipt/')){
+    json(cloud.index.page(url.pathname.replace('/sensa/library-sync',''),await body(),cloud.revision,cloud.manifest));return;
+   }
    if(url.pathname==='/sensa/library-sync/blocks/missing'){
     const input=await body() as {hashes:string[]};
     json({missing:input.hashes.filter(hash=>!cloud.blocks.has(hash))});return;
@@ -162,20 +174,21 @@ const server=createServer(async(request,response)=>{
     json({hash,data:cloud.blocks.get(hash)});return;
    }
    if(url.pathname==='/sensa/library-sync/commit'){
-    const input=await body() as {operationId:string;baseRevision:number;manifest:string[]};
-    const prior=cloud.commits.get(input.operationId);
-    if(prior){json({revision:Number(prior),manifest:input.manifest});return;}
-    if(cloud.revision!==input.baseRevision){json({code:'library_sync_conflict'},409);return;}
-   if(input.manifest.some(hash=>!cloud.blocks.has(hash))){json({code:'library_sync_missing_block'},409);return;}
-    const priorManifest=cloud.manifest?[...cloud.manifest]:[],priorRows=priorManifest.length?(JSON.parse(priorManifest.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {rows:{blocks:string[]}[]}).rows:[];
-    cloud.revision+=1;cloud.manifest=input.manifest;cloud.commits.set(input.operationId,String(cloud.revision));
+    const input=await body();
+    if(restoredSourceRows.length){
+     const changes:CloudRow[]=Array.isArray(input.patch)?JSON.parse(input.patch.map((hash:string)=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')).changes:[];
+     restoreCommits.push({operationId:input.operationId,patch:Array.isArray(input.patch),changedRows:changes.length,originalKeys:changes.filter(row=>restoredSourceRows.some(source=>source.table===row.table&&source.key===row.key)).map(row=>JSON.stringify([row.table,row.key])),intakeOperations:changes.filter(row=>row.table==='semanticReceipts').map(row=>row.key)});
+    }
+    let result:ReturnType<IndexedSyncFixture['commit']>;
+    try{result=cloud.index.commit(input,cloud.revision,cloud.manifest);}
+    catch(error){json({code:error instanceof Error?error.message:'library_sync_format'},409);return;}
+    cloud.revision=result.revision;cloud.manifest=result.manifest;
     // The committed manifest is the account baseline: it defines the restore cost.
-    const committed=JSON.parse(input.manifest.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {rows:{blocks:string[]}[]};
+    const committed=JSON.parse(cloud.manifest!.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')) as {rows:{blocks:string[]}[]};
     const publishedRefs=[...new Set(committed.rows.flatMap(row=>row.blocks))];
     cloud.published=publishedRefs.length;
     cloud.publishedBytes=publishedRefs.reduce((total,hash)=>total+Buffer.byteLength(cloud.blocks.get(hash)??''),0);
-    const keep=new Set([...input.manifest,...publishedRefs]);for(const hash of [...new Set([...priorManifest,...priorRows.flatMap(row=>row.blocks)])])if(!keep.has(hash))cloud.blocks.delete(hash);
-    json({revision:cloud.revision,manifest:cloud.manifest});return;
+    json(result.head);return;
    }
    json({code:'not_found'},404);return;
   }
@@ -254,7 +267,7 @@ const finishCheckpoint=async(page:import('@playwright/test').Page,message:string
 };
 
 test.setTimeout(300_000);
-test('production Web boot keeps the local shell responsive through cloud restore',async({browser:fixtureBrowser})=>{
+test('production Web boot keeps the local shell responsive through cloud restore',async({browser:fixtureBrowser},testInfo)=>{
 browser=fixtureBrowser;
 try{
  await rm(output,{recursive:true,force:true});
@@ -388,6 +401,7 @@ try{
  // The account may have been published by the previous client, whose blocks were 32K.
  // Restoring such a library must still be a byte-bounded number of requests.
  repackCloud(cloud,32768);
+ restoredSourceRows=JSON.parse(cloud.manifest!.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')).rows;
  const legacyPublished=cloud.published,legacyPublishedBytes=cloud.publishedBytes,legacyRevision=cloud.revision;
  assert(legacyPublishedBytes>=MINIMUM_LEGACY_BYTES,`legacy fixture is only ${legacyPublishedBytes} bytes`);
  log(`   legacy-shaped library: ${legacyPublished} blocks / ${Math.round(legacyPublishedBytes/1024)}KiB, revision ${legacyRevision}`);
@@ -409,16 +423,25 @@ try{
  await expect(b.page.getByText('正在恢复账号资料…')).toBeVisible();
  assert.equal(await b.page.locator('.sensa-today-counts').count(),0,'unconfirmed account data must not mount a local inventory, even with placeholder counts');
  await expect(b.page.locator('.sensa-today-empty')).toHaveCount(0);
- await expect(b.page.getByRole('heading',{name:'暂无可开始的学习',exact:true})).toHaveCount(0);
+ await expect(b.page.getByRole('heading',{name:'还没有加入学习内容',exact:true})).toHaveCount(0);
  await b.page.locator('#s-home').getByRole('button',{name:'账号与设置',exact:true}).click();
  await expect(b.page.locator('#s-profile')).toBeVisible({timeout:SHELL_BUDGET_MS});
  await b.page.locator('[data-sensa-shell-brand-action]').click();
  await expect(b.page.locator('#s-home').getByText('正在恢复账号资料…',{exact:true})).toBeVisible({timeout:SHELL_BUDGET_MS});
- try{await expect.poll(async()=>await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toBe(TOTAL_DRAFTS);}
+ // Activation fences reads queued against the old Library. Wait for the visible
+ // authority boundary before inspecting restored facts, within one total budget.
+ try{
+  await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0,{timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started))});
+  await expect(b.page.locator('#s-home .sensa-today-start')).toBeVisible({timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started))});
+  await expect(b.page.locator('#s-home .sensa-today-start')).toBeEnabled({timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started))});
+  await expect.poll(async()=>await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),{timeout:Math.max(1,RESTORE_BUDGET_MS-(Date.now()-started)),message:'account restore never finished'}).toBe(TOTAL_DRAFTS);
+ }
  catch(error){log('   restore calls before timeout: '+JSON.stringify(served));log('   restore rejected: '+JSON.stringify(rejected));log('   phase B console: '+JSON.stringify(b.errors.slice(0,12)));throw error;}
- await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0);
  const restoreMs=Date.now()-started;
- const confirmedRevision=cloud.revision,confirmedPublished=cloud.published,confirmedPublishedBytes=cloud.publishedBytes;
+ // Intake may already have published new facts when the restored UI becomes ready.
+ // Witness the unchanged source before delivering that queued material instead.
+ const confirmed=beforeRemoteDelivery??{revision:cloud.revision,published:cloud.published,publishedBytes:cloud.publishedBytes};
+ const confirmedRevision=confirmed.revision,confirmedPublished=confirmed.published,confirmedPublishedBytes=confirmed.publishedBytes;
  const restoreRequests=[...served].filter(entry=>entry.path.startsWith('/sensa/library-sync/'));
  await finishCheckpoint(b.page,'post-restore local facts never reached a Checkpoint');
  const restoreSettledRevision=cloud.revision;
@@ -509,6 +532,8 @@ try{
  );
  const violations=await b.page.evaluate(()=>(window as any).__cspViolations as string[]);
  await b.context.close();
+ const finalRows:CloudRow[]=JSON.parse(cloud.manifest!.map(hash=>decodeLibrarySyncBlock(cloud.blocks.get(hash)!)).join('')).rows;
+ await testInfo.attach('restore-and-intake-boundaries',{contentType:'application/json',body:JSON.stringify({legacyRevision,confirmed,originalRows:restoredSourceRows.length,restoreCommits,finalRevision:cloud.revision})});
 
  log(`   App Shell interactive ${shellMs}ms (budget ${SHELL_BUDGET_MS}ms)`);
  log(`   anonymous Landing interactive ${landingMs}ms (budget ${SHELL_BUDGET_MS}ms)`);
@@ -536,6 +561,9 @@ try{
   assert.equal(confirmedRevision,legacyRevision,'restore republished unchanged content');
   assert.equal(confirmedPublished,legacyPublished,'restore rewrote the confirmed block layout');
   assert.equal(confirmedPublishedBytes,legacyPublishedBytes,'restore changed confirmed published bytes');
+  for(const source of restoredSourceRows)assert.deepEqual(finalRows.find(row=>row.table===source.table&&row.key===source.key),source,'restore or Intake rewrote an original row or its block layout');
+  assert(restoreCommits.every(commit=>commit.patch&&commit.changedRows>0&&commit.originalKeys.length===0&&commit.intakeOperations.length>0),'restore republished original content instead of only new Intake facts');
+  assert.deepEqual([...new Set(restoreCommits.flatMap(commit=>commit.intakeOperations))].sort(),[REMOTE_OPERATION,REMOTE_INCOMPLETE_OPERATION].sort(),'unexpected or missing Intake publication');
   assert.equal(restored,TOTAL_DRAFTS,'account restore lost drafts');
  });
  await test.step('restored local OPFS and remote Intake retain actual learner facts',()=>{

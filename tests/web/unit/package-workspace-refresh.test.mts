@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'vitest';
 import {contentSupplySystem} from '../../../apps/web/src/contentSupply/system/index.ts';
+import {learningSystem} from '../../../apps/web/src/learning/system/learningSystem.ts';
 import {writeLibraryCache,readLibrary} from '../../../apps/web/src/data/library/store.ts';
 
 class FixtureChannel{
@@ -54,6 +55,36 @@ test('learning metadata does not invalidate content inventory; catalog writes, c
   stop();
   window.dispatchEvent(new Event('sensa-library-changed'));
   assert.equal(reads,5);
+ }finally{
+  stop();
+  if(previousWindow)Object.defineProperty(globalThis,'window',previousWindow);else Reflect.deleteProperty(globalThis,'window');
+  if(previousChannel)Object.defineProperty(globalThis,'BroadcastChannel',previousChannel);else Reflect.deleteProperty(globalThis,'BroadcastChannel');
+ }
+});
+
+test('Context revisions do not invalidate Learning; actual facts, identity, clear and incomplete hints do',()=>{
+ const previousWindow=Object.getOwnPropertyDescriptor(globalThis,'window');
+ const previousChannel=Object.getOwnPropertyDescriptor(globalThis,'BroadcastChannel');
+ Object.defineProperty(globalThis,'window',{configurable:true,value:new EventTarget()});
+ Object.defineProperty(globalThis,'BroadcastChannel',{configurable:true,value:FixtureChannel});
+ let reads=0;
+ const stop=learningSystem.subscribe({kind:'workspace',languageContext:{} as never},()=>reads++);
+ const change=(tables:string[],records:{table:string;key:string}[]=[],clears:string[]=[])=>window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables,records,clears}}));
+ try{
+  change(['semanticContexts','meta'],[{table:'semanticContexts',key:'context'},{table:'meta',key:'local-content-revision'}]);
+  assert.equal(reads,0);
+  for(const table of ['learningTargets','curriculumEnrollments','supplementalMembershipStates','learningRuns','learningEvents'])change([table],[{table,key:'actual-fact'}]);
+  assert.equal(reads,5);
+  for(const key of ['identity','local-incarnation','learning-active','learning-session-active'])change(['meta'],[{table:'meta',key}]);
+  assert.equal(reads,9);
+  change(['meta'],[],['meta']);assert.equal(reads,10);
+  window.dispatchEvent(new Event('sensa-library-changed'));assert.equal(reads,11);
+  const other=new FixtureChannel('sensa-local-library');
+  other.postMessage({sender:'another-document',tables:['meta'],clears:[],records:[{table:'meta',key:'local-content-revision'}]});assert.equal(reads,11);
+  other.postMessage({sender:'another-document',tables:['learningTargets'],clears:[],records:[]});assert.equal(reads,12);
+  const stopRuntime=learningSystem.subscribe({kind:'runtime',languageContext:{} as never},()=>reads++);
+  change(['learningSessions'],[{table:'learningSessions',key:'actual-session'}]);change(['studyScopes'],[{table:'studyScopes',key:'actual-scope'}]);assert.equal(reads,14);stopRuntime();
+  other.close();
  }finally{
   stop();
   if(previousWindow)Object.defineProperty(globalThis,'window',previousWindow);else Reflect.deleteProperty(globalThis,'window');

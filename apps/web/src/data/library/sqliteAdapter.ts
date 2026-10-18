@@ -1,7 +1,10 @@
+import {encodeBackupValue} from './backupCodec';
+import type {ContextBrowseQuery,ContextBrowsePage} from '../../experience/personalMeaningJourney/contextRead';
+import type {LearningScheduleQuery,LearningSchedulePage} from '../../learning/system/learningScheduleModel';
 import type {
   HomeLearningStorageProjection,
   MeaningLookupResult,
-  WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage,
+  WorldGraphQuery,WorldGraphRead,WorldBrowseQuery,WorldBrowsePage,WorldLearningChoiceQuery,WorldLearningChoicePage,
   PortableMediaBlob,
   PortableMediaStorageDiagnostics,
   SqliteLibraryTable,
@@ -11,7 +14,7 @@ import type {
   SqliteStorageDiagnostics,
   SqliteWorkerInput,
   SqliteWorkerRequest,
-  SqliteWorkerResult,
+  SqliteWorkerResponse,
 } from "./sqliteProtocol";
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import type {PracticeExpressionQuery,PracticeExpressionPage} from './practiceExpressionProjection';
@@ -19,13 +22,17 @@ import type {RuntimeLearningCandidateQuery,RuntimeLearningCandidates} from './ru
 import type {LearningManagementSummaryQuery,LearningManagementStorageSummary} from './runtimeLearningCandidates';
 import type {LearningHistoryRequest} from '../../learning/system/learningHistoryModel';
 import type {StoredLearningHistoryPage} from './learningHistoryProjection';
-import type {ReplicaCandidateRequest,ReplicaCandidateResponse} from './replicaCandidateProtocol';
+import {isReplicaCandidateProgress,replicaCandidateProgressPhase,type ReplicaCandidateProgressObserver,type ReplicaCandidateRequest,type ReplicaCandidateResponse} from './replicaCandidateProtocol';
 import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
-import {localLibraryNamespace,assertLocalLibrarySelected,observeLocalLibrarySelection,type LocalLibraryNamespace} from './localLibraryLocation';
+import {localLibraryNamespace,localLibraryPoolDirectory,assertLocalLibrarySelected,observeLocalLibrarySelection,assertIsolatedSnapshotNamespace,registerIsolatedSnapshotNamespace,unregisterIsolatedSnapshotNamespace,type LocalLibraryNamespace} from './localLibraryLocation';
 
 export interface SqliteRecordAdapter {
-  replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>;
+  snapshotSource?(request:import('./sqliteSnapshotSource').SnapshotSourceRequest):Promise<import('./sqliteSnapshotSource').SnapshotSourceResult>;
+  exportLocalSnapshot?(expectedRevision:number):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
+  exportOwnCloudSnapshot?(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence):Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;
+  replicaCandidate(request:ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<ReplicaCandidateResponse>;
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;
+  personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
   entriesPage(table:SqliteLibraryTable,afterKey:string|null,limit:number):Promise<Array<{key:string;encodedValue:string}>>;
@@ -33,19 +40,22 @@ export interface SqliteRecordAdapter {
   existingRecordKeys(table:SqliteLibraryTable,keys:readonly string[]):Promise<string[]>;
   packageCacheProjection<Query extends PackageCacheProjectionQuery>(query:Query):Promise<PackageCacheProjectionResult<Query>>;
   lookupMeanings(query:string):Promise<MeaningLookupResult>;
+  contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>;
+  worldGraph(query:WorldGraphQuery):Promise<WorldGraphRead>;
   worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>;
   worldSceneMeaning(sceneId:string):Promise<string|null>;
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>;
   worldLearningChoices(query:WorldLearningChoiceQuery):Promise<WorldLearningChoicePage>;
   practiceExpressions(query:PracticeExpressionQuery):Promise<PracticeExpressionPage>;
   existingJourneyIdentities(ids:readonly string[]):Promise<string[]>;
-  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]>;
   hasChangesSince(contentRevision:number,tables:readonly SqliteLibraryTable[]):Promise<boolean>;
   syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   syncBaseReferences():Promise<import('./sqliteProtocol').SqliteSyncBaseReference[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number>;
   homeLearningProjection(languageRouteId: string,clock?:number): Promise<HomeLearningStorageProjection>;
+  learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>;
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>;
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>;
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>;
@@ -71,15 +81,23 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   private readonly pending = new Map<number, {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
+    onProgress?:ReplicaCandidateProgressObserver;
+    completed:Map<string,number>;
+    progressPhase?:import('./replicaCandidateProtocol').ReplicaCandidateProgress['phase'];
   }>();
   private nextId = 1;
   private terminated=false;
   private workerError:Error|undefined;
+  private isolatedAdmitted=false;
 
-  constructor(private readonly namespace:LocalLibraryNamespace) {
-    this.worker.addEventListener("message", (event: MessageEvent<SqliteWorkerResult>) => {
+  constructor(private readonly namespace:LocalLibraryNamespace,private readonly isolatedExisting=false,private readonly isolatedGeneration=false,private readonly privateFreshRestore=false) {
+    this.worker.addEventListener("message", (event: MessageEvent<SqliteWorkerResponse>) => {
       const waiting = this.pending.get(event.data.id);
       if (!waiting) return;
+      if('kind' in event.data){
+        const progress=event.data.progress;if(!waiting.onProgress||!isReplicaCandidateProgress(progress)||progress.phase!==waiting.progressPhase||progress.completed<=(waiting.completed.get(progress.phase)??0))return;
+        try{if(this.isolatedExisting||this.isolatedAdmitted||this.isolatedGeneration)assertIsolatedSnapshotNamespace(this.namespace!,this.isolatedExisting||this.isolatedAdmitted);else assertLocalLibrarySelected(this.namespace);waiting.onProgress(progress);waiting.completed.set(progress.phase,progress.completed);}catch(cause){this.pending.delete(event.data.id);waiting.reject(cause instanceof Error?cause:new Error('sqlite_progress_failed'));}return;
+      }
       this.pending.delete(event.data.id);
       if (event.data.ok) waiting.resolve(event.data.value);
       else waiting.reject(new Error(event.data.error));
@@ -93,10 +111,28 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   }
 
   initialize(): Promise<SqliteStorageDiagnostics> {
-    return this.send({ kind: "initialize",namespace:this.namespace }) as Promise<SqliteStorageDiagnostics>;
+    return this.send({ kind: "initialize",namespace:this.namespace,...(this.privateFreshRestore?{privateFreshRestore:true}:{}),...(this.isolatedExisting?{requireExisting:true}:{}) }) as Promise<SqliteStorageDiagnostics>;
   }
 
-  replicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{return this.send({kind:'replicaCandidate',request}) as Promise<ReplicaCandidateResponse>;}
+  snapshotSource(request:import('./sqliteSnapshotSource').SnapshotSourceRequest){return this.send({kind:'snapshotSource',request}) as Promise<import('./sqliteSnapshotSource').SnapshotSourceResult>;}
+  exportLocalSnapshot(expectedRevision:number){return this.send({kind:'exportLocalSnapshot',expectedRevision}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
+  exportOwnCloudSnapshot(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){return this.send({kind:'exportOwnCloudSnapshot',fence}) as Promise<import('./sqlitePortableSnapshot').LocalPortableSnapshot>;}
+  initializeOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],reconnectDeviceId?:string){
+    if(this.namespace===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
+    return this.send({kind:'initializeOwnCloudSnapshot',namespace:this.namespace,snapshot,binding,owner,reconnectDeviceId}) as ReturnType<WorkerSqliteAdapter['initializeSnapshot']>;
+  }
+  initializeNativeCloudSnapshot(source:File,binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],onProgress?:ReplicaCandidateProgressObserver,reconnectDeviceId?:string){
+    if(this.namespace===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
+    return this.send({kind:'initializeNativeCloudSnapshot',namespace:this.namespace,source,binding,owner,reconnectDeviceId},onProgress) as Promise<{report:Omit<Awaited<ReturnType<typeof import('./sqliteNativeSnapshotImport').importNativeCloudSnapshot>>,'library'>;diagnostics:SqliteStorageDiagnostics}>;
+  }
+  ownCloudBaselinePage(page:import('@sensa/contracts/sensa').LibrarySyncSnapshotPageResult){return this.send({kind:'ownCloudBaselinePage',page}) as Promise<{done:boolean;records:number}>;}
+  initializeSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot){
+    if(this.namespace===null)throw Error('sqlite_snapshot_requires_fresh_namespace');
+    return this.send({kind:'initializeSnapshot',namespace:this.namespace,snapshot}) as Promise<{report:Omit<Awaited<ReturnType<typeof import('./sqlitePortableSnapshot').importLocalPortableSnapshot>>,'library'>;diagnostics:SqliteStorageDiagnostics}>;
+  }
+  markIsolatedAdmitted():void{this.isolatedAdmitted=true;}
+
+  replicaCandidate(request:ReplicaCandidateRequest,onProgress?:ReplicaCandidateProgressObserver):Promise<ReplicaCandidateResponse>{onProgress=replicaCandidateProgressPhase(request.kind)?onProgress:undefined;return this.send({kind:'replicaCandidate',request,...(onProgress?{reportProgress:true}:{})},onProgress) as Promise<ReplicaCandidateResponse>;}
 
   get(table: SqliteLibraryTable, key: string): Promise<string | null> {
     return this.send({ kind: "get", table, key }) as Promise<string | null>;
@@ -120,10 +156,12 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send({kind:'packageCacheProjection',query}) as Promise<PackageCacheProjectionResult<Query>>;
   }
 
-  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
-    return this.send({ kind: "changesSince", contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[],page?:import('./sqliteProtocol').SqliteChangePage): Promise<SqliteRecordChange[]> {
+    return this.send({ kind: "changesSince", contentRevision, tables: [...tables],page }) as Promise<SqliteRecordChange[]>;
   }
   lookupMeanings(query:string):Promise<MeaningLookupResult>{return this.send({kind:'meaningLookup',query}) as Promise<MeaningLookupResult>;}
+  contextBrowse(query:ContextBrowseQuery):Promise<ContextBrowsePage>{return this.send({kind:'contextBrowse',query}) as Promise<ContextBrowsePage>;}
+  worldGraph(query:WorldGraphQuery):Promise<WorldGraphRead>{return this.send({kind:'worldGraph',query}) as Promise<WorldGraphRead>;}
   worldBrowse(query:WorldBrowseQuery):Promise<WorldBrowsePage>{return this.send({kind:'worldBrowse',query}) as Promise<WorldBrowsePage>;}
   worldSceneMeaning(sceneId:string):Promise<string|null>{return this.send({kind:'worldSceneMeaning',sceneId}) as Promise<string|null>;}
   registrySelection(query:import('./sqliteProtocol').RegistrySelectionQuery):Promise<import('./sqliteProtocol').RegistrySelection>{return this.send({kind:'registrySelection',query}) as Promise<import('./sqliteProtocol').RegistrySelection>;}
@@ -150,6 +188,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   }
 
   learningSemanticMemory(targetId?:string):Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>{return this.send({kind:'learningSemanticMemory',targetId}) as Promise<import('../../learning/system/learningReadModels').LearningSemanticMemoryProjection>;}
+  personalEnrollmentIndex():Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>{return this.send({kind:'personalEnrollmentIndex'}) as Promise<import('../../learning/system/learningReadModels').LearningPersonalEnrollmentIndex>;}
 
   estimateRecordBytes(tables: readonly SqliteLibraryTable[]): Promise<number> {
     return this.send({kind:'estimateRecordBytes',tables:[...tables]}) as Promise<number>;
@@ -161,6 +200,7 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
   runtimeLearningCandidates(query:RuntimeLearningCandidateQuery):Promise<RuntimeLearningCandidates>{return this.send({kind:'runtimeLearningCandidates',query}) as Promise<RuntimeLearningCandidates>;}
   studyScopeMember(scopeRevisionId:string,targetId:string):Promise<import('./studyScopes').LocalStudyScopeMember|null>{return this.send({kind:'studyScopeMember',scopeRevisionId,targetId}) as Promise<import('./studyScopes').LocalStudyScopeMember|null>;}
   latestLearningActionAt(runId:string):Promise<string|null>{return this.send({kind:'latestLearningActionAt',runId}) as Promise<string|null>;}
+  learningSchedulePage(query:LearningScheduleQuery):Promise<LearningSchedulePage>{return this.send({kind:'learningSchedulePage',query}) as Promise<LearningSchedulePage>;}
   learningHistoryPage(query:LearningHistoryRequest):Promise<StoredLearningHistoryPage>{return this.send({kind:'learningHistoryPage',query}) as Promise<StoredLearningHistoryPage>;}
   learningManagementSummary(query:LearningManagementSummaryQuery):Promise<LearningManagementStorageSummary>{return this.send({kind:'learningManagementSummary',query}) as Promise<LearningManagementStorageSummary>;}
 
@@ -211,6 +251,12 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send({kind:'portableMediaDiagnostics'}) as Promise<PortableMediaStorageDiagnostics>;
   }
 
+  /** Installs a fully admitted refs candidate before this namespace can be sealed. */
+  installPrivateRestore(mutation:SqliteMutation,onProgress:ReplicaCandidateProgressObserver):Promise<void>{
+    if(!this.privateFreshRestore)throw Error('sqlite_private_restore_boundary');
+    assertIsolatedSnapshotNamespace(this.namespace!,false);return this.send({kind:'installPrivateRestore',mutation},onProgress) as Promise<void>;
+  }
+
   async commit(mutation: SqliteMutation): Promise<void> {
     await this.send({ kind: "commit", mutation });
   }
@@ -227,11 +273,14 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     this.terminated=true;
   }
 
-  private send(input: SqliteWorkerInput|{kind:'close'}): Promise<unknown> {
+  private send(input: SqliteWorkerInput|{kind:'close'},onProgress?:ReplicaCandidateProgressObserver): Promise<unknown> {
     if(this.terminated)return Promise.reject(new Error('sqlite_worker_terminated'));
+    if((this.isolatedExisting||this.isolatedAdmitted)&&input.kind!=='close'){
+      try{assertIsolatedSnapshotNamespace(this.namespace!);}catch(error){return Promise.reject(error);}
+    }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, { resolve, reject,onProgress,completed:new Map(),progressPhase:input.kind==='installPrivateRestore'||input.kind==='initializeNativeCloudSnapshot'?'restore-installation':input.kind==='replicaCandidate'?replicaCandidateProgressPhase(input.request.kind):undefined });
       this.worker.postMessage({ id, ...input } as SqliteWorkerRequest);
     });
   }
@@ -255,13 +304,68 @@ function assertBrowserSqliteAvailable(): void {
 
 let adapter: Promise<SqliteRecordAdapter> | undefined;
 let activeBrowserAdapter:CoordinatedSqliteAdapter|undefined;
+let stopBrowserSelection:undefined|(()=>void);
+/** Explicit isolated local generation; never changes the active pointer. */
+export async function openIsolatedLocalSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot){
+ const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace,false,true);
+ try{assertIsolatedSnapshotNamespace(namespace,false);const result=await isolated.initializeSnapshot(snapshot);registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();return {...result,namespace,adapter:isolated};}
+ catch(error){await isolated.close().catch(()=>{});throw error;}
+}
+/** Authenticated same-account replication has its own admission entry. */
+export async function openIsolatedOwnCloudSnapshot(snapshot:import('./sqlitePortableSnapshot').LocalPortableSnapshot,binding:import('./sqlitePortableSnapshot').OwnCloudSnapshotBinding,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],reconnectDeviceId?:string){
+ const namespace=crypto.randomUUID(),isolated=new WorkerSqliteAdapter(namespace,false,true);
+ // This closure owns only this attempt's fresh namespace. Never discover or
+ // delete another generation, an active pointer or retained recovery file.
+ const discard=async()=>{
+  await isolated.close();
+  await navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},async()=>{
+   try{assertIsolatedSnapshotNamespace(namespace,false);}catch{return;}
+   const root=await navigator.storage.getDirectory();try{await root.removeEntry(localLibraryPoolDirectory(namespace).replace(/^\//u,''),{recursive:true});}catch(error){if(!(error instanceof DOMException)||error.name!=='NotFoundError')throw error;}unregisterIsolatedSnapshotNamespace(namespace);
+  });
+ };
+ try{assertIsolatedSnapshotNamespace(namespace,false);const result=await isolated.initializeOwnCloudSnapshot(snapshot,binding,owner,reconnectDeviceId);return {...result,namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},discard};}
+ catch(error){try{await discard();}catch(cleanupError){throw new AggregateError([error,cleanupError],'sqlite_snapshot_cleanup_unconfirmed');}throw error;}
+}
+/** Empty private generation for refs restoration; never selects or imports facts. */
+export async function createOwnCloudRestoreGeneration(fence:import('./replicaCandidateProtocol').ReplicaCandidateFence){
+ const namespace=crypto.randomUUID(),{beginPrivateRestoreAttempt}=await import('./sqlitePrivateRestoreAttempt'),attempt=await beginPrivateRestoreAttempt(namespace);let isolated!:WorkerSqliteAdapter;
+ const discard=async()=>{try{await isolated?.close();await navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},async()=>{
+  try{assertIsolatedSnapshotNamespace(namespace,false);}catch{return;}
+  const root=await navigator.storage.getDirectory();try{await root.removeEntry(localLibraryPoolDirectory(namespace).replace(/^\//u,''),{recursive:true});}catch(error){if(!(error instanceof DOMException)||error.name!=='NotFoundError')throw error;}unregisterIsolatedSnapshotNamespace(namespace);attempt.complete();
+ });}finally{await attempt.release();}};
+ try{
+  isolated=new WorkerSqliteAdapter(namespace,false,true,true);
+  assertIsolatedSnapshotNamespace(namespace,false);await isolated.initialize();
+  const values={'identity':fence.identity,'service-owner':fence.owner,'local-incarnation':fence.incarnation,'local-content-revision':fence.localRevision};
+  await isolated.commit({clears:[],deletes:[],puts:Object.entries(values).map(([key,value])=>({table:'meta' as const,key,encodedValue:JSON.stringify(encodeBackupValue(value))}))});
+  return {namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},activated:()=>attempt.complete(),discard};
+ }catch(error){try{await discard();}catch(cleanupError){throw new AggregateError([error,cleanupError],'sqlite_snapshot_cleanup_unconfirmed');}throw error;}
+}
+/** One journaled, unselected native-file attempt. The selected pool is never opened. */
+export async function openIsolatedNativeCloudSnapshot(source:File,binding:import('@sensa/contracts/sensa').LibrarySyncNativeSnapshot,owner:import('./replicaCandidateProtocol').ReplicaCandidateFence['owner'],onProgress?:ReplicaCandidateProgressObserver,reconnectDeviceId?:string){
+ const namespace=crypto.randomUUID(),{beginPrivateRestoreAttempt}=await import('./sqlitePrivateRestoreAttempt'),attempt=await beginPrivateRestoreAttempt(namespace),isolated=new WorkerSqliteAdapter(namespace,false,true);
+ const discard=async()=>{try{await isolated.close();await navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},async()=>{
+  try{assertIsolatedSnapshotNamespace(namespace,false);}catch{return;}
+  const root=await navigator.storage.getDirectory();try{await root.removeEntry(localLibraryPoolDirectory(namespace).replace(/^\//u,''),{recursive:true});}catch(error){if(!(error instanceof DOMException)||error.name!=='NotFoundError')throw error;}
+  unregisterIsolatedSnapshotNamespace(namespace);attempt.complete();
+ });}finally{await attempt.release();}};
+ try{const result=await isolated.initializeNativeCloudSnapshot(source,binding,owner,onProgress,reconnectDeviceId);return {...result,namespace,adapter:isolated,seal:()=>{registerIsolatedSnapshotNamespace(namespace);isolated.markIsolatedAdmitted();},activated:()=>attempt.complete(),discard};}
+ catch(error){try{await discard();}catch(cleanup){throw new AggregateError([error,cleanup],'sqlite_snapshot_cleanup_unconfirmed');}throw error;}
+}
+/** Reopen an already imported isolated generation without selecting it. */
+export async function openIsolatedLocalGeneration(namespace:string){
+ assertIsolatedSnapshotNamespace(namespace);
+ const isolated=new WorkerSqliteAdapter(namespace,true);try{await isolated.initialize();return isolated;}catch(error){await isolated.close().catch(()=>{});throw error;}
+}
 export async function closeLocalLibraryStorage():Promise<void>{await activeBrowserAdapter?.close();}
+/** Pointer activation closes old handles before opening the newly selected pool. */
+export async function prepareOwnCloudActivation():Promise<void>{await activeBrowserAdapter?.close();stopBrowserSelection?.();stopBrowserSelection=undefined;adapter=undefined;activeBrowserAdapter=undefined;}
 
 async function browserAdapter(): Promise<SqliteRecordAdapter> {
   assertBrowserSqliteAvailable();
   const namespace=localLibraryNamespace();
   const coordinated = activeBrowserAdapter = new CoordinatedSqliteAdapter(()=>new WorkerSqliteAdapter(namespace),namespace,()=>assertLocalLibrarySelected(namespace));
-  observeLocalLibrarySelection(namespace,()=>{void coordinated.close().catch(()=>{});});
+  stopBrowserSelection=observeLocalLibrarySelection(namespace,()=>{void coordinated.close().catch(()=>{});});
   try {
     await coordinated.initialize();
     // Capability checks alone cannot prove that this origin can durably write.

@@ -89,6 +89,7 @@ export interface LearningTargetProjection {
   readonly curriculumMembershipId: string;
   /** Future-source governance, distinct from material readiness and open work. */
   readonly planningActive?:boolean;
+  readonly planningPaused?:boolean;
   readonly languageContext: SensaFormalPinnedLanguageContext;
   readonly packageKey: string | null;
   readonly publicationArchiveSha256: string | null;
@@ -96,6 +97,8 @@ export interface LearningTargetProjection {
   readonly material: LightweightInitialLearningMaterialization;
   readonly studyContent: RuntimeLearningContent | null;
   readonly identity: Readonly<{
+    expressionId: string;
+    expressionVersionId: string;
     senseId: string;
     senseVersionId: string;
     bindingId: string;
@@ -127,7 +130,12 @@ export interface LearningQueueProjection {
 }
 
 export interface LearningHomeProjection {
+  readonly currentTask?:Readonly<{expression:string;targetLanguageTag:string;purpose:LearningPurpose}>|null;
   readonly activeRunId: string | null;
+  readonly activeLanguageContext: SensaFormalPinnedLanguageContext | null;
+  readonly hasLibraryContent: boolean;
+  readonly routeTargetCount: number;
+  readonly nextReviewAt: string | null;
   readonly dailyLimit: number | null;
   readonly readyInitialCount: number;
   readonly reviewDueCount: number;
@@ -139,7 +147,14 @@ export interface LearningHomeProjection {
   readonly policyOptions: readonly LearningPolicyOption[];
 }
 
+export interface LearningManagementListItem{
+ readonly targetId:string;readonly expression:string;readonly meaning:string;readonly targetLanguageTag:string;readonly supportLanguageTag:string;
+ readonly sourceKind:string;readonly sourceTitle:string|null;readonly started:boolean;readonly state:string;readonly group:'new'|'due'|'paused'|'active'|'complete'|'other';readonly nextReviewAt:string|null;
+}
 export interface LearningManagementProjection{
+ readonly items?:readonly LearningManagementListItem[];
+ readonly pendingDirect?:readonly Readonly<{enrollmentId:string;expression:string;meaning:string;active:boolean}>[];
+ readonly content?:readonly Readonly<{id:string;title:string;state:'active'|'maintenance'|'paused';kind:'book'|'direct'|'personal_semantic_world'}>[];
  readonly targetIds:readonly string[];readonly pendingDirectCount:number;readonly policies:readonly LearningPolicy[];readonly dailyLimit:number|null;
  readonly readyInitialCount:number;readonly reviewDueCount:number;
  readonly policyOptions:readonly LearningPolicyOption[];
@@ -154,7 +169,8 @@ export interface LearningHistoryProjection extends LearningHistorySummary{readon
 export interface LearningPersonalEnrollmentIndex {
   readonly targets: readonly Readonly<{
     targetId: string;
-    curriculumMembershipIds: readonly string[];
+    identity: Readonly<{senseId:string;expressionId:string}>;
+    memberships: readonly Readonly<{id:string;status:'active'|'superseded';bindingVersionId:string;languageContext:SensaFormalPinnedLanguageContext}>[];
   }>[];
 }
 
@@ -220,6 +236,7 @@ export interface LearningLightweightRuntimeProjection extends LearningRuntimePro
   readonly kind: 'lightweight';
   /** The Run ended, but its recorded repair progress is not a Completion. */
   readonly needsRelearning: boolean;
+  readonly repeatCount: number;
   readonly target: LearningTargetProjection;
   readonly phase: 'experience' | 'reveal';
   readonly step: LearningLightweightStepProjection | null;
@@ -321,7 +338,7 @@ export type LearningCurriculumEnrollmentProjection=Readonly<{
   packageVersion:number;
   packageKey:string;
  }>|Readonly<{
-  kind:'stable_sense';senseId:string;senseVersionId:string;bindingId:string;bindingVersionId:string;expression:string;meaning:string;
+  kind:'stable_sense';senseId:string;expressionId:string;senseVersionId:string;bindingId:string;bindingVersionId:string;expression:string;meaning:string;
  }>;
 }>;
 
@@ -336,10 +353,11 @@ export interface LearningWorkspaceProjection {
   readonly policyOptions: readonly LearningPolicyOption[];
 }
 
-/** Active execution plus compact continuation planning, without collection
- * material, completed Run history or study records. */
+/** Active execution and indexed counts, without collection material or
+ * completed Run payloads. */
 export interface LearningRuntimeWorkspaceProjection {
   readonly runtime: LearningRuntimeProjection | null;
+  readonly sessionSummary: LearningSessionSummary | null;
   readonly dailyLimit: number | null;
   /** Editable future preference, distinct from this activity's fixed quota. */
   readonly preferencesDailyLimit: number | null;
@@ -347,6 +365,18 @@ export interface LearningRuntimeWorkspaceProjection {
   readonly nextTargetId: string | null;
   readonly nextChangeAt: number | null;
   readonly policyOptions: readonly LearningPolicyOption[];
+}
+
+/** Settled facts from this Session's exact Runs and current qualified queue
+ * counts. Pending work is a live snapshot, never a frozen Session total. */
+export interface LearningSessionSummary {
+ readonly sessionId:string;
+ readonly completed:import('./learningHistoryModel').LearningHistoryCounts;
+ readonly completedCount:number;
+ readonly pendingCount:number;
+ readonly pendingInitialCount:number;
+ readonly pendingReviewCount:number;
+ readonly nextReviewAt:string|null;
 }
 
 /** One current Route's Target detail, without collection planning or history.

@@ -1,6 +1,7 @@
+import {contextFlowText} from '../../i18n/contextFlowText';
 import {ContentDrawer,ContentHeader} from './ContentWorkspace';
 import { MeaningGraphView } from "./MeaningGraphView";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -12,6 +13,7 @@ import {
   Network,
   Plus,
   Search,
+  SlidersHorizontal,
   StickyNote,
   X,
 } from "lucide-react";
@@ -20,20 +22,23 @@ import type { ContentSectionId, LearnerSemanticProjectionSnapshot } from "../../
 import {learnerSemanticProjectionSystem} from '../../learnerSemanticProjection/system';
 import { useLearnerSemanticProjection } from "../../learnerSemanticProjection/useLearnerSemanticProjection";
 import {
-  useJourneyGateway,
-  useJourneyWorld,
   type JourneyWorldItemView,
 } from "../personalMeaningJourney";
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
 import {ManualMeaningComposer} from './ManualMeaningComposer';
+import {ContextLibrary} from './ContextLibrary';
 import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
 import { SensaCollectionBrowserLayout } from "../ui/SensaPageLayouts";
 import { useScreenState } from "../ui/ScreenHost";
 import {SensaVirtualList,SensaPagedVirtualList} from '../ui/SensaVirtualList';
 import {localFlowText} from '../../i18n/localFlowText';
 import {normalizeMeaningQuery} from '../personalMeaningJourney/meaningLookupFacts';
-import {useWorldWindow,useWorldInbox} from '../personalMeaningJourney/useWorldRead';
-import type {WorldBrowseItem,WorldBrowseQuery} from '../personalMeaningJourney/worldRead';
+import {useWorldWindow,useWorldInbox,useWorldGraph} from '../personalMeaningJourney/useWorldRead';
+import {summarizeWorldItem,matchesWorldLanguages,type WorldBrowseItem,type WorldBrowseQuery} from '../personalMeaningJourney/worldRead';
+import type {ShellParams} from '../router/shellLocation';
+import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
+import {personalContentSystem} from '../../personalContent/system';
 
 export interface ContentScreenSource {
   items: JourneyWorldItemView[];
@@ -44,10 +49,13 @@ export interface ContentScreenSource {
   composer: import("./PersonalMeaningComposer").MaterialComposerPort;
 }
 interface ContentScreenProps {
-  bulkLearning?:(items:JourneyWorldItemView[],list:import('react').ReactNode,query?:Pick<WorldBrowseQuery,'query'|'filter'>)=>import('react').ReactNode;
+  bulkLearning?:(items:JourneyWorldItemView[],list:import('react').ReactNode,query?:Pick<WorldBrowseQuery,'query'|'filter'|'expressionLanguages'|'referenceFilter'>)=>import('react').ReactNode;
+  browse?:{params:ShellParams;change:(params:ShellParams)=>void};
+  graphLearningState?:(bindingVersionId:string)=>import('react').ReactNode;
   source?:ContentScreenSource;
   notice?:import("react").ReactNode;
   active: boolean;
+  retainGraph?:boolean;
   screenId?: string;
   initialAction?: "create" | "inbox" | "add";
   onInitialActionConsumed?:()=>void;
@@ -105,7 +113,7 @@ export function ContentScreen(props:ContentScreenProps){
  return <ContentScreenView {...props}/>;
 }
 function ContentScreenView({
-  active,
+  active,retainGraph=false,
   screenId = "s-content",
   initialAction,
   onInitialActionConsumed,
@@ -115,26 +123,51 @@ function ContentScreenView({
   onOpenSense,
   onOpenLearningContent,
   onOpenSection,
-  toast,source:providedSource,notice,bulkLearning,
+  toast,source:providedSource,notice,bulkLearning,browse,graphLearningState,
 }: ContentScreenProps) {
   const { t, i18n } = useTranslation();
+  const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
+  const [graphFiltersOpen,setGraphFiltersOpen]=useState(false);
+  const [filtersOpen,setFiltersOpen]=useState(()=>window.matchMedia('(min-width:48rem)').matches);
+  useEffect(()=>{const media=window.matchMedia('(min-width:48rem)'),update=()=>setFiltersOpen(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
   const [category, setCategory] = useScreenState<Category>(`${screenId}:category`, "personal");
-  const [view, setView] = useScreenState<"list" | "world">(`${screenId}:view`, "list");
-  const [filter, setFilter] = useScreenState<Filter>(`${screenId}:filter`, "all");
-  const [query, setQuery] = useScreenState(`${screenId}:query`, "");
+  const [rememberedView, rememberView] = useScreenState<"list" | "world">(`${screenId}:view`, "list");
+  const [rememberedFilter, rememberFilter] = useScreenState<Filter>(`${screenId}:filter`, "all");
+  const [rememberedQuery, rememberQuery] = useScreenState(`${screenId}:query`, "");
+  const [rememberedLanguages,rememberLanguages]=useScreenState<string[]>(`${screenId}:languages`,[]);
+  const view=browse?(browse.params.worldView==='world'?'world':'list'):rememberedView;
+  const filter=browse?(['all','continue','binding','complete','deleted'].includes(browse.params.worldFilter??'')?browse.params.worldFilter as Filter:'all'):rememberedFilter;
+  const query=browse?(browse.params.worldQuery??'').slice(0,200):rememberedQuery;
+  const languages=browse?(browse.params.worldLanguages??'').split(',').filter(tag=>tag.length>0&&tag.length<=100).slice(0,32):rememberedLanguages;
+  const setView=(value:typeof view)=>browse?browse.change({worldView:value}):rememberView(value);
+  const setFilter=(value:Filter)=>browse?browse.change({worldFilter:value}):rememberFilter(value);
+  const setQuery=(value:string)=>browse?browse.change({worldQuery:value||undefined}):rememberQuery(value);
+  const setLanguages=(value:string[])=>browse?browse.change({worldLanguages:value.sort().join(',')||undefined}):rememberLanguages(value);
+  const [rememberedReferences,rememberReferences]=useScreenState<'all'|'saved'|'notes'>(`${screenId}:references`,'all');
+  const referenceFilter=browse?(browse.params.worldReferences==='saved'||browse.params.worldReferences==='notes'?browse.params.worldReferences:'all'):rememberedReferences;
+  const setReferences=(value:typeof referenceFilter)=>browse?browse.change({worldReferences:value==='all'?undefined:value}):rememberReferences(value);
+  const filterSummary=[...languages.map(tag=>interfaceLanguageDisplayName(tag,locale)),...(referenceFilter==='all'?[]:[t(referenceFilter==='saved'?'content.savedSenses':'content.notes')]),...(filter==='all'?[]:[t(filter==='deleted'?'meaningGovernance.trash':`content.${filter}`)])].join(' · ');
+  const [rememberedExpression,rememberExpression]=useScreenState<string|null>(`${screenId}:expression`,null);
+  const selectedExpression=browse?browse.params.worldExpression??null:rememberedExpression;
+  const setExpression=(value:string|null)=>browse?browse.change({worldExpression:value??undefined}):rememberExpression(value);
   const [adding, setAdding] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [contextOnly,setContextOnly]=useState(false),[contextsOpen,setContextsOpen]=useState(false),[contextId,setContextId]=useState<string|null>(null);
   const [manualOpen,setManualOpen]=useState(false);
   const [manualIntake,setManualIntake]=useState<import('@sensa/contracts/sensa').SensaIntakeItem|null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const page=useWorldWindow({query,filter},!providedSource&&active);
-  const fullRead=!providedSource&&active&&category==='personal'&&view==='world'&&filter!=='deleted';
-  const world=useJourneyWorld(fullRead),gateway=useJourneyGateway();
+  const page=useWorldWindow({query,filter,expressionLanguages:languages,referenceFilter},!providedSource&&active&&category==='personal'&&(view==='list'||filter==='deleted'));
+  const graphReadEnabled=!providedSource&&(active||retainGraph)&&category==='personal'&&view==='world'&&filter!=='deleted';
+  const [references,setReferencesSnapshot]=useState(()=>personalContentSystem.read({kind:'snapshot'}));
+  const readingReferences=!!providedSource&&active&&category==='personal'&&view==='world'&&referenceFilter!=='all';
+  useEffect(()=>{if(!readingReferences)return;const read=()=>setReferencesSnapshot(personalContentSystem.read({kind:'snapshot'}));const stop=personalContentSystem.subscribe({kind:'snapshot'},read);read();return stop;},[readingReferences]);
+  const graphRead=useWorldGraph({query,filter,expressionLanguages:languages,referenceFilter},graphReadEnabled);
   const inboxRead=useWorldInbox(!providedSource&&active&&inboxOpen);
   const projectionRead=useLearnerSemanticProjection(!providedSource&&active&&category!=='personal');
-  const source=providedSource??{items:world.items,status:fullRead?world.status:page.status,inbox:inboxRead.value?.items??[],projection:projectionRead,reload:()=>{page.reload();if(fullRead)void gateway.reload();}};
-  const {items,status,inbox,projection}=source;
+  const source=providedSource??{items:[],status:graphReadEnabled?graphRead.status:page.status,inbox:inboxRead.value?.items??[],projection:projectionRead,reload:()=>{page.reload();if(graphReadEnabled)graphRead.reload();}};
+  const {items,inbox,projection}=source;
+  const status=readingReferences&&references.status!=='ready'?{ok:references.status!=='error',loading:references.status==='loading',error:null,errorKind:null}:source.status;
   const showExamples=projection.annotationStatus!=='ready'||projection.savedExampleCount>0;
   const paged=!providedSource&&category==='personal'&&(view==='list'||filter==='deleted');
   const fmt = (n: number) =>
@@ -169,7 +202,9 @@ function ContentScreenView({
         )
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     [items, searchable,normalizedQuery],
-  ).filter(matchesFilter);
+  ).filter(matchesFilter).filter(item=>matchesWorldLanguages(summarizeWorldItem(item),languages)).filter(item=>referenceFilter==='all'||summarizeWorldItem(item).senseIds?.some(id=>referenceFilter==='saved'?references.savedSenseIds.has(id):!!references.senseNotes[id]));
+  const availableLanguages=[...new Set([...(graphRead.value?.expressionLanguages??page.expressionLanguages??[]),...items.flatMap(item=>summarizeWorldItem(item).expressions?.map(expression=>expression.languageTag)??[]),...languages])].sort();
+  const expressionCount=graphReadEnabled?graphRead.value?.expressionCount:paged?page.expressionCount:new Set(visible.flatMap(item=>summarizeWorldItem(item).expressions?.filter(expression=>!languages.length||languages.includes(expression.languageTag)).map(expression=>expression.expressionId)??[])).size;
   const learning = projection.semanticSenses.filter((item) =>
     `${item.expression.formL2} ${item.ground.labelL1} ${item.ground.experienceL1}`
       .toLocaleLowerCase()
@@ -221,8 +256,11 @@ function ContentScreenView({
     </div>
   );
   const row=(item:JourneyWorldItemView|WorldBrowseItem)=>{
-   const label='label'in item?item.label:labelFor(item);
+   const summary='label'in item?item:summarizeWorldItem(item);
+   const matches=(summary.expressions??[]).filter(expression=>!languages.length||languages.includes(expression.languageTag)),others=(summary.expressions??[]).filter(expression=>languages.length&&!languages.includes(expression.languageTag));
+   const label=matches.length?matches.map(expression=>expression.surfaceForm).join(' / '):summary.label;
    return (
+     <div data-world-meaning={item.personalMeaningId}>
                 <button
                   key={item.personalMeaningId}
                   onClick={() => open(item.personalMeaningId)}
@@ -232,9 +270,10 @@ function ContentScreenView({
                     <MessageSquareText size={18} strokeWidth={1.5} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <strong className="block truncate text-sm font-medium">
-                      {label}
+                    <strong className="block break-words text-lg font-medium">
+                      {matches.length?matches.map((expression,index)=><span key={expression.expressionId}>{index>0?' / ':''}<bdi lang={expression.languageTag} dir="auto">{expression.surfaceForm}</bdi></span>):label}
                     </strong>
+                    {!!matches.length&&<span className="mt-1 block text-xs text-fg-secondary" data-matching-expressions>{[...new Set(matches.map(expression=>expression.languageTag))].map(tag=>interfaceLanguageDisplayName(tag,locale)).join(' · ')}</span>}
                     {item.primaryLabel !== label && <span className="sensa-world-context mt-2 block line-clamp-2 text-sm leading-6 text-fg-secondary">{item.primaryLabel}</span>}
                     <span className="mt-2 block text-xs text-fg-tertiary">
                       {('status'in item?item.status:item.detail.status)==='deleted'?t('meaningGovernance.deleted'):t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
@@ -243,19 +282,34 @@ function ContentScreenView({
                   </span>
                   <ArrowUpRight size={16} className="shrink-0 text-fg-tertiary" />
                 </button>
+      {!!others.length&&<details className="mb-4 px-3 text-sm"><summary className="min-h-11 cursor-pointer">{t('content.worldOther')}</summary>{others.map(expression=><p className="py-1" key={expression.expressionId}>{expression.surfaceForm} · {expression.languageTag}</p>)}</details>}
+     </div>
               );
   };
   const personalList=paged?<SensaPagedVirtualList count={page.total} itemAt={index=>page.items.get(index)} indexForKey={key=>{for(const [index,item] of page.items)if(item.personalMeaningId===key)return index;return -1;}} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row} request={page.request}/>
    :<SensaVirtualList items={visible} itemKey={item=>item.personalMeaningId} label={t('content.personal')} renderItem={row}/>;
-  const personalCollection=status.loading&&(paged?!page.total:!items.length)?<div role="status" aria-busy="true" className="py-20 text-center text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>:!status.ok?<div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger"><p>{t('content.loadError')}</p><button className={button} onClick={source.reload}>{t('content.retry')}</button></div>:!(paged?page.total:visible.length)?empty:view==='list'?personalList:<MeaningGraphView items={visible} selectedMeaningId={selected} onSelectMeaning={setSelected} onOpenMeaning={open} onOpenConfirmedSense={onOpenConfirmedSense}/>;
+  const graphItems=graphReadEnabled?graphRead.value?.items??[]:visible;
+  const retainedGraph=useRef<typeof graphRead.value>(null);
+  if(graphRead.value&&!graphRead.status.loading&&graphRead.status.ok)retainedGraph.current=graphRead.value;
+  if(!graphRead.status.ok||!graphReadEnabled)retainedGraph.current=null;
+  const graphFrame=graphRead.value??retainedGraph.current;
+  const graphVerified=graphReadEnabled&&graphRead.status.ok&&!graphRead.status.loading&&status.ok&&!status.loading;
+  const graphVisible=active&&graphVerified&&!!graphFrame?.items.length;
+  const collectionStatus=status.loading&&(graphReadEnabled||readingReferences||(paged?!page.total:!items.length))?<div role="status" aria-busy="true" className="py-20 text-center text-sm text-fg-secondary">{localFlowText('loadingSensa')}</div>:!status.ok?<div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger"><p>{t('content.loadError')}</p><button className={button} onClick={()=>{source.reload();if(readingReferences)void personalContentSystem.refresh().catch(()=>undefined);}}>{t('content.retry')}</button></div>:!(graphReadEnabled?graphItems.length:paged?page.total:visible.length)?empty:null;
+  const personalCollection=view==='world'&&graphReadEnabled?<div className="relative h-full">
+    {collectionStatus&&<div className="absolute inset-0 z-10 bg-surface-canvas">{collectionStatus}</div>}
+    {graphFrame&&graphFrame.items.length>0&&<div className="h-full" style={{visibility:graphVisible?'visible':'hidden'}} aria-hidden={!graphVisible} inert={!graphVisible}>
+      <MeaningGraphView key={graphFrame.scope} active={graphVisible} verified={graphVerified} cacheBase={JSON.stringify([normalizedQuery,filter,referenceFilter])} items={graphFrame.items} graphStamp={graphFrame} languages={languages} screenId={`${screenId}:${graphFrame.scope}`} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>
+    </div>}
+  </div>:collectionStatus??(view==='list'?personalList:<MeaningGraphView active={active} items={graphItems} languages={languages} screenId={screenId} selectedExpressionId={selectedExpression} onSelectExpression={setExpression} onOpenMeaning={open} learningState={graphLearningState} searching={!!normalizedQuery}/>);
   return (
     <>
       <SensaCollectionBrowserLayout
         id={screenId}
         measure="wide"
-        className={`screen sensa-world z-10 ${active ? "active" : "invisible pointer-events-none"}`}
+        className={`screen sensa-world z-10 ${view==='world'&&category==='personal'?'sensa-world-graph-mode':''} ${active ? "active" : "invisible pointer-events-none"}`}
         regions={{
-          header: <>{notice}<ContentHeader inboxCount={providedSource?inbox.length+drafts.length:page.inboxCount+page.pending} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/>{category==='personal'&&<button className={button+' mt-3 text-fg-secondary'} aria-pressed={filter==='deleted'} onClick={()=>{setFilter(filter==='deleted'?'all':'deleted');setView('list');}}>{t(filter==='deleted'?'meaningGovernance.all':'meaningGovernance.trash')}</button>}</>,
+          header: <>{notice}<ContentHeader inboxCount={providedSource?inbox.length+drafts.length:page.inboxCount+page.pending} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/></>,
           navigation: <div
           aria-label={t("content.categories")}
           className="grid grid-cols-3 gap-2 border-b border-border-subtle sm:flex sm:gap-6"
@@ -265,14 +319,14 @@ function ContentScreenView({
               key={id}
               aria-current={category === id ? "page" : undefined}
               onClick={() => setCategory(id)}
-              className={`min-h-12 min-w-0 border-b-2 px-1 py-2 text-balance text-sm break-words focus-visible:outline-2 focus-visible:outline-focus ${category === id ? "border-action-primary font-medium text-action-primary" : "border-transparent text-fg-secondary"}`}
+              className={`min-h-12 min-w-0 border-b-2 px-1 py-2 text-sm focus-visible:outline-2 focus-visible:outline-focus ${category === id ? "border-action-primary font-medium text-action-primary" : "border-transparent text-fg-secondary"}`}
             >
               {t(`content.${id}`)}
             </button>
           ))}
         </div>,
           controls: <>
-        {category === "personal" && filter!=='deleted'&&next && (
+        {category === "personal" && view==='list'&&filter!=='deleted'&&next && (
           <button
             onClick={() => open(next.personalMeaningId)}
             className="mb-6 flex w-full items-center gap-4 rounded-card bg-surface-subtle px-5 py-4 text-left text-sm focus-visible:outline-2 focus-visible:outline-focus"
@@ -285,7 +339,7 @@ function ContentScreenView({
           </button>
         )}
         {category !== "markers" && (
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="sensa-world-query-row flex flex-wrap items-center justify-between gap-4">
             <label className="flex min-h-11 w-full items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-3 focus-within:outline-2 focus-within:outline-focus sm:max-w-sm">
               <Search size={17} className="shrink-0 text-fg-tertiary" />
               <input
@@ -315,39 +369,37 @@ function ContentScreenView({
                 {(["list", "world"] as const).map((id) => (
                   <button
                     className={`${button} min-h-9 ${view === id ? "bg-surface-selected text-action-primary" : "text-fg-secondary"}`}
-                    aria-pressed={view === id}
+                    data-world-view aria-label={t(`content.${id}`)} aria-pressed={view === id}
                     key={id}
                     onClick={() => setView(id)}
                   >
                     {id === "list" ? <List size={16} /> : <Network size={16} />}{" "}
-                    {t(`content.${id}`)}
+                    <span data-world-view-text>{t(`content.${id}`)}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
         )}
-        {category === "personal" && filter!=='deleted'&& (
-          <div
-            className="mt-6 flex flex-wrap gap-2"
-            role="group"
-            aria-label={t("content.filter")}
-          >
-            {(["all", "continue", "binding", "complete"] as const).map((id) => (
-              <button
-                key={id}
-                aria-pressed={filter === id}
-                onClick={() => setFilter(id)}
-                className={`min-h-11 rounded-pill px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-focus ${filter === id ? "bg-surface-selected text-action-primary" : "text-fg-secondary hover:bg-surface-subtle"}`}
-              >
-                {t(`content.${id}`)}
-              </button>
-            ))}
-          </div>
-        )}
+        {category==='personal'&&<details className="sensa-world-filters" open={view==='world'?graphFiltersOpen:filtersOpen} onToggle={event=>view==='world'?setGraphFiltersOpen(event.currentTarget.open):setFiltersOpen(event.currentTarget.open)}><summary className="min-h-11 cursor-pointer py-3 text-sm text-fg-secondary"><SlidersHorizontal size={15} className="mr-2 inline-block" aria-hidden="true"/>{t('content.filters')}{filterSummary&&<span className="ml-2 text-xs">· {filterSummary}</span>}</summary><div className="space-y-3 pb-2">
+         {category==='personal'&&<div className="sensa-world-languages mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={t('content.worldLanguage')}>
+         <span className="mr-1 text-xs text-fg-secondary">{t('content.worldLanguage')}</span>
+         <button className={button+' border '+(!languages.length?'border-border-strong bg-surface-selected font-semibold':'border-border-subtle')} aria-pressed={!languages.length} onClick={()=>setLanguages([])}>{t('content.worldAllLanguages')}</button>
+         {availableLanguages.map(tag=><button className={button+' border '+(languages.includes(tag)?'border-border-strong bg-surface-selected font-semibold':'border-border-subtle')} key={tag} aria-pressed={languages.includes(tag)} onClick={()=>setLanguages(languages.includes(tag)?languages.filter(value=>value!==tag):[...languages,tag])}>{tag}</button>)}
+        </div>}
+        {category==='personal'&&<div className="sensa-world-secondary flex flex-wrap items-center gap-3">
+        {category==='personal'&&<label className="mt-2 inline-flex items-center gap-2 text-xs">{t('content.markers')}<select className="min-h-11 rounded-control border border-border-subtle bg-surface-panel px-3" value={referenceFilter} onChange={event=>setReferences(event.target.value as typeof referenceFilter)}>
+         {(['all','saved','notes'] as const).map(value=><option key={value} value={value}>{t(value==='all'?'content.all':value==='saved'?'content.savedSenses':'content.notes')}</option>)}
+        </select></label>}
+          <label className="inline-flex min-w-0 flex-wrap items-center gap-2 text-xs text-fg-secondary">{t('content.filter')}<select value={filter} onChange={event=>{setFilter(event.target.value as Filter);if(event.target.value==='deleted')setView('list');}} className="min-h-11 max-w-full rounded-control border border-border-subtle bg-surface-panel px-3 text-sm">
+            {(['all','continue','binding','complete','deleted'] as const).map(id=><option key={id} value={id}>{t(id==='deleted'?'meaningGovernance.trash':`content.${id}`)}</option>)}
+          </select></label>
+        </div>}
+        </div></details>}
+        {category==='personal'&&!status.loading&&status.ok&&expressionCount!==undefined&&<p role="status" className="mt-3 text-xs text-fg-secondary" data-world-counts>{t('content.worldCounts',{expressions:fmt(expressionCount),meanings:fmt(graphReadEnabled?graphItems.length:paged?page.total:visible.length)})}</p>}
           </>,
           collection: <>
-        {category === 'personal' && (view==='list'&&bulkLearning&&filter!=='deleted'?bulkLearning(visible,personalCollection,paged?{query,filter}:undefined):personalCollection)}
+        {category === 'personal' && (view==='list'&&bulkLearning&&filter!=='deleted'?bulkLearning(visible,personalCollection,paged?{query,filter,expressionLanguages:languages,referenceFilter}:undefined):personalCollection)}
         {category === "learning" &&
           (projection.learningStatus!=='ready'?<div role={projection.learningStatus==='error'?'alert':'status'} className="p-5">{localFlowText(projection.learningStatus==='error'?'progressReadFailed':'loadingSensa')}{projection.learningStatus==='error'&&<button className={button} onClick={()=>learnerSemanticProjectionSystem.retryReferences()}>{t('contentUi.retry')}</button>}</div>:learning.length ? (
             <SensaVirtualList items={learning} label={t('content.learning')} itemKey={item=>item.targetId??item.senseId} estimateSize={112} renderItem={item=>(
@@ -401,15 +453,15 @@ function ContentScreenView({
               <button
                 key={id}
                 onClick={() => onOpenSection(id)}
-                className="rounded-card border border-border-subtle bg-surface-panel p-6 text-left transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-focus"
+                className="flex min-h-20 items-center gap-3 border-b border-border-subtle py-4 text-left transition-colors hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
               >
                 <Icon
                   size={22}
                   strokeWidth={1.5}
-                  className="mb-6 text-fg-secondary"
+                  className="shrink-0 text-fg-secondary"
                 />
                 <span className="block text-sm">{t(`content.${label}`)}</span>
-                <strong className="mt-3 block text-3xl font-normal text-action-primary">
+                <strong className="ml-auto block text-lg font-medium tabular-nums text-fg-secondary">
                   {(id==='saved-examples'?projection.annotationStatus:projection.personalReferenceStatus)!=='ready'?'—':fmt(count)}
                 </strong>
               </button>
@@ -429,7 +481,7 @@ function ContentScreenView({
                 icon: MessageSquareText,
                 action: () => onStartConversation?onStartConversation():setComposerOpen(true),
               },
-              ...(onStartConversation?[{title:"record",hint:"recordHint",icon:StickyNote,action:()=>setComposerOpen(true)}]:[]),
+              ...(onStartConversation?[{title:"record",hint:"recordHint",icon:StickyNote,action:()=>{setContextOnly(false);setComposerOpen(true);}}]:[]),
               {
                 title: "existing",
                 hint: "existingHint",
@@ -461,18 +513,22 @@ function ContentScreenView({
                 <ArrowRight size={16} />
               </button>
             ))}
+            {!providedSource&&<div className="flex flex-wrap gap-3"><button className={button+' border border-border-subtle'} onClick={()=>{setAdding(false);setContextOnly(true);setComposerOpen(true);}}>{contextFlowText('saveContextOnly')}</button><button className={button+' border border-border-subtle'} onClick={()=>{setAdding(false);setContextId(null);setContextsOpen(true);}}>{contextFlowText('savedContexts')}</button></div>}
         </ContentDrawer>
       )}
       <PersonalMeaningComposer
+        key={contextOnly?'context':'material'}
+        contextOnly={contextOnly}
         persistence={providedSource?.composer}
         open={composerOpen}
-        onClose={() => setComposerOpen(false)}
+        onClose={() => {setComposerOpen(false);setContextOnly(false);}}
         onSaved={toast}
         onCreated={(id) => {
           setComposerOpen(false);
-          open(id);
+          if(contextOnly){setContextId(id);setContextsOpen(true);setContextOnly(false);}else open(id);
         }}
       />
+      {contextsOpen&&<ContextLibrary initialId={contextId} onClose={()=>setContextsOpen(false)} onCreated={id=>{setContextsOpen(false);source.reload();onOpenPersonalMeaning(id);}}/>}
       {manualOpen&&<ManualMeaningComposer onClose={()=>setManualOpen(false)} onCreated={id=>{setManualOpen(false);source.reload();onOpenPersonalMeaning(id);}}/>}
       {manualIntake&&<ManualMeaningComposer key={manualIntake.intakeId} original={manualIntake} onClose={()=>{setManualIntake(null);setInboxOpen(true);}} onCreated={id=>{setManualIntake(null);source.reload();onOpenPersonalMeaning(id);}}/>}
       <IntakeInboxDrawer

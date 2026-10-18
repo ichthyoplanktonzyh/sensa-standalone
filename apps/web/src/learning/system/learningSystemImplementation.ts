@@ -13,6 +13,7 @@ import {
   readLearningManagementProjection,
   readLearningPreferencesProjection,
   readLearningHistoryProjection,
+  readLearningScheduleProjection,
   readLearningTargetDetailProjection,
   removeRetryTarget,
 } from './learningProjection';
@@ -228,6 +229,7 @@ export const readLearningQuery = async (query: LearningQuery): Promise<unknown> 
       return readLearningBookPlans(query.languageContext);
     }
     case 'target':return readLearningTargetDetailProjection({targetId:query.targetId,languageContext:query.languageContext,clock:query.clock??Date.now()});
+    case 'schedule':return readLearningScheduleProjection(query);
     case 'history':return readLearningHistoryProjection({request:{...query.filter,activeLanguageTag:query.languageContext.targetLanguageTag,clock:query.cursor?.clock??query.clock??Date.now(),cursor:query.cursor??null,limit:query.limit??20}});
     case 'management':return readLearningManagementProjection({languageContext:query.languageContext,clock:query.clock??Date.now()});
     case 'preferences':return readLearningPreferencesProjection(query.languageContext);
@@ -260,7 +262,7 @@ export const readLearningQuery = async (query: LearningQuery): Promise<unknown> 
       });
     }
     case 'personal_enrollment_index': {
-      return readLearningPersonalEnrollmentIndex();
+      return readLearningPersonalEnrollmentIndex(query.languageContext);
     }
     case 'semantic_memory': {
       return readLearningSemanticMemoryProjection(query.targetId);

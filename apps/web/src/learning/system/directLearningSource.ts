@@ -13,17 +13,20 @@ const uuid=z.string().uuid();
 const digest=z.string().regex(/^[a-f0-9]{64}$/u);
 export const directLearningReferenceSchema=z.object({
   senseId:uuid,senseVersionId:uuid,bindingId:uuid,bindingVersionId:uuid,
+  expressionId:uuid.optional(),expressionVersionId:uuid.optional(),
   origin:z.discriminatedUnion('kind',[
     z.object({kind:z.literal('semantic_registry')}).strict(),
     z.object({kind:z.literal('published_package'),packageKey:z.string().min(1).max(2000),packageDigest:digest}).strict(),
   ]),
 }).strict();
 export type DirectLearningReference=z.infer<typeof directLearningReferenceSchema>;
+export const resolvedDirectLearningReferenceSchema=directLearningReferenceSchema.extend({expressionId:uuid,expressionVersionId:uuid});
+export type ResolvedDirectLearningReference=z.infer<typeof resolvedDirectLearningReferenceSchema>;
 
 /** No Personal Meaning, Context, or learner progress is part of this source. */
 export interface DirectLearningSource {
   sourceKind:'stable_sense';
-  reference:DirectLearningReference;
+  reference:ResolvedDirectLearningReference;
   senseKey:string;
   targetLanguageTag:string;
   expression:{surfaceForm:string;expressionType:SensaExpressionType;languageTag:string;spokenForm?:string;acceptedForms?:string[];formParts?:Array<{kind:'fixed'|'slot';text:string;constraint?:string}>};
@@ -73,13 +76,14 @@ function* directSourceSteps(input:DirectLearningReference,expectedDigest?:string
       ||binding.senseExpressionBindingId!==reference.bindingId||binding.senseId!==sense.senseId
       ||bindingVersion.bindingVersionId!==reference.bindingVersionId||bindingVersion.senseExpressionBindingId!==binding.senseExpressionBindingId
       ||bindingVersion.senseVersionId!==version.senseVersionId)return unavailable('changed');
-    if(version.reviewStatus==='rejected'||bindingVersion.reviewStatus==='rejected'||binding.relation!=='realizes'||bindingVersion.semanticCoverage!=='exact')return unavailable('not_learnable');
+    if(version.reviewStatus==='rejected'||bindingVersion.reviewStatus==='rejected'||(binding.relation!==null&&binding.relation!=='realizes')||(bindingVersion.semanticCoverage!==null&&bindingVersion.semanticCoverage!=='exact'))return unavailable('not_learnable');
     const expression=yield* registryRow('expressions',binding.expressionId,sensaExpressionSnapshotSchema);
     const expressionVersion=yield* registryRow('expressionVersions',bindingVersion.expressionVersionId,sensaExpressionVersionSnapshotSchema);
     if(expression.expressionId!==binding.expressionId||expressionVersion.expressionVersionId!==bindingVersion.expressionVersionId||expressionVersion.expressionId!==expression.expressionId)return unavailable('changed');
     const structure=structureSchema.safeParse(expressionVersion.structure),language=sensaLanguageTagSchema.safeParse(expression.languageTag);
     if(!structure.success||!language.success)return unavailable('not_learnable');
-    source={sourceKind:'stable_sense',reference,senseKey:sense.senseKey,targetLanguageTag:language.data,
+    if(reference.expressionId&&reference.expressionId!==expression.expressionId||reference.expressionVersionId&&reference.expressionVersionId!==expressionVersion.expressionVersionId)return unavailable('changed');
+    source={sourceKind:'stable_sense',reference:{...reference,expressionId:expression.expressionId,expressionVersionId:expressionVersion.expressionVersionId},senseKey:sense.senseKey,targetLanguageTag:language.data,
       expression:{surfaceForm:expressionVersion.surfaceForm,expressionType:expression.expressionType,languageTag:language.data,...structure.data},
       semanticSpec:version.semanticSpec,binding:{registerLabel:bindingVersion.registerLabel,usageConstraints:bindingVersion.usageConstraints},
       reviewStatus:version.reviewStatus==='reviewed'&&bindingVersion.reviewStatus==='reviewed'?'reviewed':'learner_confirmed',publishedContent:null};
@@ -99,6 +103,7 @@ function* directSourceSteps(input:DirectLearningReference,expectedDigest?:string
     const semantic=publishedLearningSemanticFactsSchema.safeParse(entry.semantic);
     const manifest=pack.portableOrigin.manifest,declaration=sensaPortableLightweightSemanticDeclarationSchema.safeParse(manifest?.semanticDeclaration);
     if(!semantic.success||!declaration.success||semantic.data.relation!=='realizes'||semantic.data.semanticCoverage!=='exact')return unavailable('not_learnable');
+    if(entry.expressionId!==semantic.data.expressionId||entry.expressionVersionId!==semantic.data.expressionVersionId)return unavailable('changed');
     const declared=declaration.data;
     if(manifest.metadata.packageId!==installation.data.artifact.packageId||manifest.metadata.version!==installation.data.artifact.version
       ||declared.sense.senseId!==reference.senseId||declared.sense.senseVersionId!==reference.senseVersionId
@@ -118,7 +123,8 @@ function* directSourceSteps(input:DirectLearningReference,expectedDigest?:string
     const target=sensaLanguageTagSchema.safeParse(pack.content.targetLanguage),support=sensaLanguageTagSchema.safeParse(pack.content.supportLanguage);
     if(!structure.success||!spokenForm.success||!acceptedForms.success||!target.success||!support.success||target.data!==installation.data.artifact.targetLanguage||support.data!==installation.data.artifact.supportLanguage
       ||target.data!==manifest.route.targetLanguage||support.data!==manifest.route.supportLanguage)return unavailable('changed');
-    source={sourceKind:'stable_sense',reference,senseKey:semantic.data.senseKey,targetLanguageTag:target.data,
+    if(reference.expressionId&&reference.expressionId!==semantic.data.expressionId||reference.expressionVersionId&&reference.expressionVersionId!==semantic.data.expressionVersionId)return unavailable('changed');
+    source={sourceKind:'stable_sense',reference:{...reference,expressionId:semantic.data.expressionId,expressionVersionId:semantic.data.expressionVersionId},senseKey:semantic.data.senseKey,targetLanguageTag:target.data,
       expression:{surfaceForm:entry.expression,expressionType:semantic.data.expressionType,languageTag:target.data,
         ...(structure.data.formParts?{formParts:structure.data.formParts}:{}),...(spokenForm.data?{spokenForm:spokenForm.data}:{}),...(acceptedForms.data?{acceptedForms:acceptedForms.data}:{})},
       semanticSpec:semantic.data.semanticSpec,binding:{registerLabel:semantic.data.registerLabel,usageConstraints:semantic.data.usageConstraints},
@@ -143,7 +149,7 @@ export function resolveDirectLearningSourceSnapshot(read:(table:SourceRead['tabl
 }
 
 export const directLearningSourceSchema=z.object({
-  sourceKind:z.literal('stable_sense'),reference:directLearningReferenceSchema,senseKey:z.string().min(1),targetLanguageTag:sensaLanguageTagSchema,
+  sourceKind:z.literal('stable_sense'),reference:resolvedDirectLearningReferenceSchema,senseKey:z.string().min(1),targetLanguageTag:sensaLanguageTagSchema,
   expression:structureSchema.extend({surfaceForm:z.string().min(1),expressionType:sensaExpressionTypeSchema,languageTag:sensaLanguageTagSchema}).strict(),
   semanticSpec:sensaSenseSemanticSpecSchema,binding:z.object({registerLabel:z.string().nullable(),usageConstraints:z.array(z.string())}).strict(),
   reviewStatus:z.enum(['learner_confirmed','reviewed']),

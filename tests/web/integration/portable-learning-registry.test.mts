@@ -7,17 +7,19 @@ import {spawnSync} from "node:child_process";
 
 import {test} from "vitest";
 
-import {readSensaPortableBook} from "@sensa/content-validator/portable-book";
+import {createPortableBookPreview,readPortableBookPreview,readSensaPortableBook} from "@sensa/content-validator/portable-book";
 import {stableUuid} from "@sensa/learning-kernel";
 import {
   canonicalConsumerJson,
   maxPortableBookArchiveBytes,
   maxPortableBookMembers,
+  maxLegacyBookPreviewArchiveBytes,
   sensaPortableBookDescriptorSchema,
   sensaPortableBookManifestSchema,
   sensaPortableLearningContentRegistrySchema,
 } from "@sensa/contracts/sensa";
 
+import {portableBookDeliveryFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {createAuthoredMediaPackager} from "../../../scripts/release/authoredMedia.mts";
 import {syntheticSound} from "../../../scripts/support/lightweightMaterialFixture.mts";
 import {contentSupplySystem} from "../../../apps/web/src/contentSupply/system/index.ts";
@@ -182,7 +184,23 @@ test("official Registry delivers one atomic Book while preserving independent Se
     assert.equal(manifest.semanticAttestation.publisherNamespace, descriptor.publisher.namespace);
     assert.equal(manifest.members.length, 3);
 
-    const delivered = new Map<string, Uint8Array>([[descriptor.url, bookBytes]]);
+    assert(descriptor.preview);
+    const previewRelative=['books',descriptor.book.bookId,descriptor.book.bookVersionId,`${descriptor.preview.sha256}.preview.json`].join('/');
+    const previewBytes=await readFile(join(releases,previewRelative));
+    const preview=readPortableBookPreview(previewBytes,descriptor);
+    assert.deepEqual(preview,createPortableBookPreview(bookArchive));
+    assert.equal(descriptor.preview.url,new URL(previewRelative,base).href);
+    assert.equal(preview.samples.length,3);
+    assert.equal(preview.entries.length,3);
+    for(const [index,sample] of preview.samples.entries()){
+      const original=bookArchive.members[index]!.archive.package;
+      assert.equal(sample.scene,original.resources.experienceRecallCue.text);
+      assert.equal(sample.meaning,original.resources.senseConfirmation.text);
+      assert.equal(sample.example,original.resources.sceneRealization.example);
+    }
+    assert.throws(()=>readPortableBookPreview(previewBytes,{...descriptor,sha256:'0'.repeat(64)}),/catalogMismatch/);
+    assert.throws(()=>readPortableBookPreview(previewBytes,{...descriptor,preview:{...descriptor.preview,sha256:'0'.repeat(64)}}),/catalogMismatch/);
+    const delivered = new Map<string, Uint8Array>([[descriptor.url, bookBytes],[descriptor.preview.url,previewBytes]]);
 
     for (const {member,archive} of bookArchive.members) {
       assert.equal(archive.package.metadata.packageId, member.packageId);
@@ -214,7 +232,7 @@ test("official Registry delivers one atomic Book while preserving independent Se
     globalThis.fetch=async input=>{
       const bytes=delivered.get(String(input));
       return bytes
-        ?new Response(bytes)
+        ?new Response(bytes,{headers:String(input)===descriptor.preview!.url?{'content-length':'1','content-encoding':'gzip'}:{}})
         :new Response(null,{status:404});
     };
     await openLibrary();
@@ -224,6 +242,12 @@ test("official Registry delivers one atomic Book while preserving independent Se
         accountId:crypto.randomUUID(),
       });
     });
+    const inspected=await contentSupplySystem.read({kind:'book_preview',descriptor,signal:new AbortController().signal});
+    assert.deepEqual(inspected,preview);
+    assert.equal(await readLibrary(tx=>tx.count('packageInstallations')),0);
+    assert.equal(await readLibrary(tx=>tx.count('learningTargets')),0);
+    const {preview:previewRef,...legacyDescriptor}=descriptor;
+    assert.deepEqual(await contentSupplySystem.read({kind:'book_preview',descriptor:legacyDescriptor,signal:new AbortController().signal}),preview);
     const conflictingMember=bookArchive.members.at(-1)!;
     const conflictingInstallation=portablePackageInstallationFor(
       conflictingMember.archive.package,
@@ -374,4 +398,20 @@ test("official Registry delivers one atomic Book while preserving independent Se
     globalThis.fetch=realFetch;
     await rm(root, {recursive: true, force: true});
   }
+});
+
+
+test('public preview rejects oversized legacy archives before fetch and binds exact bytes without installing',async()=>{
+ const originalFetch=globalThis.fetch,delivery=portableBookDeliveryFixture({memberExpressions:['borrow','lend','return']});
+ let fetches=0;
+ try{
+  globalThis.fetch=async(_input,init)=>{fetches++;assert.equal(init?.credentials,'omit');assert.equal(init?.redirect,'error');return new Response(delivery.bookBytes);};
+  await assert.rejects(contentSupplySystem.read({kind:'book_preview',descriptor:{...delivery.descriptor,byteLength:maxLegacyBookPreviewArchiveBytes+1},signal:new AbortController().signal}),/packagePreviewUnavailable/);
+  assert.equal(fetches,0);
+  const cancelled=new AbortController();cancelled.abort();
+  await assert.rejects(contentSupplySystem.read({kind:'book_preview',descriptor:delivery.descriptor,signal:cancelled.signal}),/downloadCancelled/);
+  assert.equal(fetches,0);
+  await assert.rejects(contentSupplySystem.read({kind:'book_preview',descriptor:{...delivery.descriptor,sha256:'0'.repeat(64)},signal:new AbortController().signal}),/catalogMismatch/);
+  await assert.rejects(contentSupplySystem.read({kind:'book_preview',descriptor:{...delivery.descriptor,byteLength:delivery.descriptor.byteLength-1},signal:new AbortController().signal}),/downloadSizeMismatch/);
+ }finally{globalThis.fetch=originalFetch;}
 });

@@ -158,7 +158,8 @@
     "reviewOnlyHint": "Ricollegati oggi a questi significati.",
     "reviewOnly": "Solo ripasso",
     "noReview": "Nessun ripasso in programma",
-    "reviewCount": "Ripassa solo {{count}} significati",
+    "reviewCount": "Ripassa solo {{formattedCount}} significati",
+    "reviewCount_many": "Ripassa solo {{formattedCount}} significati",
     "manage": "Il mio apprendimento",
     "add": "Aggiungi qualcosa da imparare",
     "existing": "Esplora i contenuti esistenti",
@@ -168,6 +169,10 @@
     "open": "Apri",
     "emptyAction": "Aggiungi contenuto",
     "resume": "Continua a imparare",
-    "resumeHint": "Hai una sessione incompleta da continuare."
+    "resumeHint": "Hai una sessione incompleta da continuare.",
+    "newCount": "Nuovi {{formattedCount}}",
+    "dueCount": "Da ripassare {{formattedCount}}",
+    "reviewCount_one": "Ripassa solo {{formattedCount}} significato",
+    "reviewCount_other": "Ripassa solo {{formattedCount}} significati"
   }
 }

@@ -1,12 +1,13 @@
+import {contextMediaReferences} from '../../experience/personalMeaningJourney/contextRecords';
 /** Production local-library storage: SQLite WASM in an OPFS Worker. */
 import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
 import {meaningMediaReferences} from '../../experience/personalMeaningJourney/meaningHistoryRead';
 import {hasLocalLibraryHint,markLocalLibraryPresent} from './localLibraryHint';
-import {assertLocalLibrarySelected,localLibraryScopedName} from './localLibraryLocation';
+import {assertLocalLibrarySelected,localLibraryScopedName,localLibraryNamespace,activateOwnCloudNamespace} from './localLibraryLocation';
 
-import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
+import { decodeBackupValue, encodeBackupValue,backupEqual } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
-import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateValidation,ReplicaCandidateUpdate} from './replicaCandidateProtocol';
+import type {ReplicaCandidateRequest,ReplicaCandidateResponse,ReplicaCandidateValidation,ReplicaCandidateUpdate,ReplicaCandidateFence} from './replicaCandidateProtocol';
 import type {PackageCacheProjectionQuery,PackageCacheProjectionResult} from './packageCacheProjection';
 import type {InstalledPackageSummary} from './packageRecords';
 import type {
@@ -94,8 +95,16 @@ export class LibraryTransaction {
     onCommitStart?:()=>void;
   }> = [];
   private syncBaseReplacement: Array<{ table: Table; key: string; valueJson: string; blockRefs: string[] }> | undefined;
+  private syncBaseValidated: true | undefined;
   private syncBasePatch:SqliteMutation['syncBasePatch'];
   private replicaCandidateRestore:SqliteMutation['replicaCandidateRestore'];
+  private initialPublication:string|undefined;
+
+  confirmInitialPublication(id:string):void{
+    this.assertWritable();
+    if(this.replicaCandidateRestore||this.syncBaseReplacement!==undefined||this.syncBasePatch)throw Error('library_sync_base_mutation_conflict');
+    this.initialPublication=id;this.wrote=true;
+  }
 
   constructor(
     private readonly mode: "readonly" | "readwrite",
@@ -108,7 +117,7 @@ export class LibraryTransaction {
     this.replicaCandidateRestore={id:candidate.id,tables:candidate.tables};this.wrote=true;
   }
 
-  updateReplicaCandidate(update:ReplicaCandidateUpdate):void{
+  updateReplicaCandidate(update:ReplicaCandidateUpdate|import('./replicaCandidateProtocol').ReplicaCandidateRebase):void{
     this.assertWritable();
     if(this.replicaCandidateRestore||this.syncBaseReplacement!==undefined||this.syncBasePatch)throw Error('library_sync_base_mutation_conflict');
     this.replicaCandidateRestore={id:update.id,tables:update.tables,update};this.wrote=true;
@@ -177,6 +186,8 @@ export class LibraryTransaction {
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
     return storageCall(()=>this.adapter.lookupMeanings(query));
   }
+  async contextBrowse(query:import('../../experience/personalMeaningJourney/contextRead').ContextBrowseQuery):Promise<import('../../experience/personalMeaningJourney/contextRead').ContextBrowsePage>{if(this.wrote)throw new Error('library_projection_requires_snapshot');return storageCall(()=>this.adapter.contextBrowse(query));}
+  async worldGraph(query:import('./sqliteProtocol').WorldGraphQuery):Promise<import('./sqliteProtocol').WorldGraphRead>{if(this.wrote)throw new Error('library_projection_requires_snapshot');return storageCall(()=>this.adapter.worldGraph(query));}
   async worldBrowse(query:import('./sqliteProtocol').WorldBrowseQuery):Promise<import('./sqliteProtocol').WorldBrowsePage>{
     if(this.wrote)throw new Error('library_projection_requires_snapshot');
     return storageCall(()=>this.adapter.worldBrowse(query));
@@ -253,24 +264,20 @@ export class LibraryTransaction {
     return storageCall(()=>this.adapter.hasChangesSince(contentRevision,tables));
   }
 
-  async changesSince<Tables extends readonly Table[]>(contentRevision: number, tables: Tables): Promise<Array<{
-    table: Tables[number];
-    key: string;
-    value: unknown | null;
-    contentRevision: number;
-  }>> {
-    if (this.wrote) throw new Error('library_changes_require_snapshot');
-    const changes: SqliteRecordChange[] = await storageCall(
-      () => this.adapter.changesSince(contentRevision, tables),
-    );
-    return Promise.all(changes.map(async(change) => ({
-      table: change.table as Tables[number],
-      key: change.key,
-      value: change.encodedValue === null
-        ?null
-        :clone(await this.decodeStored(change.table,change.encodedValue)),
-      contentRevision: change.contentRevision,
-    })));
+  async *changeBatchesSince<Tables extends readonly Table[]>(contentRevision:number,tables:Tables){
+    if(this.wrote)throw Error('library_changes_require_snapshot');
+    let after:import('./sqliteProtocol').SqliteChangePage['after'];
+    for(;;){
+      const changes=await storageCall(()=>this.adapter.changesSince(contentRevision,tables,{after,limit:128}));
+      yield await Promise.all(changes.map(async change=>({table:change.table as Tables[number],key:change.key,value:change.encodedValue===null?null:clone(await this.decodeStored(change.table,change.encodedValue)),contentRevision:change.contentRevision})));
+      if(changes.length<128)return;const last=changes.at(-1)!;after={contentRevision:last.contentRevision,table:last.table,key:last.key};
+    }
+  }
+
+  async changesSince<Tables extends readonly Table[]>(contentRevision:number,tables:Tables){
+    const changes:Array<{table:Tables[number];key:string;value:unknown|null;contentRevision:number}>=[];
+    for await(const page of this.changeBatchesSince(contentRevision,tables))changes.push(...page);
+    return changes;
   }
 
   async syncBaseEntries<Tables extends readonly Table[]>(keys?: readonly {
@@ -292,7 +299,7 @@ export class LibraryTransaction {
     if(this.wrote)throw new Error('library_sync_base_requires_snapshot');
     return storageCall(()=>this.adapter.syncBaseReferences());
   }
-  patchSyncBase(input:{puts:readonly {table:Table;key:string;value:unknown;blocks:readonly string[]}[];deletes:readonly {table:Table;key:string}[]}):void{
+  patchSyncBase(input:{puts:readonly {table:Table;key:string;value:unknown;blocks:readonly string[]}[];deletes:readonly {table:Table;key:string}[]}, admission?:{validated:true}):void{
     this.assertWritable();
     if(this.syncBaseReplacement!==undefined||this.syncBasePatch)throw new Error('library_sync_base_mutation_conflict');
     const puts=input.puts.map(row=>{
@@ -300,9 +307,10 @@ export class LibraryTransaction {
       if(!blockRefs.length||blockRefs.some(ref=>!/^[a-f0-9]{64}$/u.test(ref)))throw new Error('library_sync_format');
       return {table:row.table,key:recordKey(row.key),valueJson:JSON.stringify(row.value),blockRefs};
     });
+    this.syncBaseValidated=admission?.validated;
     this.syncBasePatch={puts,deletes:input.deletes.map(({table,key})=>({table,key:recordKey(key)}))};this.wrote=true;
   }
-  replaceSyncBase(entries: readonly { table: Table; key: string; value: unknown; blocks?: readonly string[] }[]): void {
+  replaceSyncBase(entries: readonly { table: Table; key: string; value: unknown; blocks?: readonly string[] }[], admission?:{validated:true}): void {
     this.assertWritable();
     if(this.syncBasePatch)throw new Error('library_sync_base_mutation_conflict');
     const unique = new Map<string, { table: Table; key: string; valueJson: string; blockRefs: string[] }>();
@@ -317,6 +325,7 @@ export class LibraryTransaction {
         blockRefs,
       });
     }
+    this.syncBaseValidated=admission?.validated;
     this.syncBaseReplacement = [...unique.values()]
       .sort((left, right) => left.table.localeCompare(right.table) || left.key.localeCompare(right.key));
     this.wrote = true;
@@ -450,13 +459,11 @@ export class LibraryTransaction {
 
   async isMediaReferenced(inputMediaId: string): Promise<boolean> {
     const mediaId = recordKey(inputMediaId);
-    if (!this.hasPendingChanges('semanticMeanings') && !this.hasPendingChanges('semanticInbox')) {
+    if (!this.hasPendingChanges('semanticContexts') && !this.hasPendingChanges('semanticInbox')) {
       return storageCall(() => this.adapter.isMediaReferenced(mediaId));
     }
-    const meanings = await this.all<{
-      personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
-    }>('semanticMeanings');
-    if (meanings.some(meaning=>meaningMediaReferences(meaning).includes(mediaId))) return true;
+    const contexts=await this.all('semanticContexts');
+    if(contexts.some(row=>contextMediaReferences(row).includes(mediaId)))return true;
     const inbox = await this.all<{
       payload?: { context?: { mediaReferenceIds?: string[] } | null };
     }>('semanticInbox');
@@ -568,10 +575,12 @@ export class LibraryTransaction {
       deletes: [...this.deletes].flatMap(([table, keys]) =>
         [...keys].map((key) => ({ table, key }))),
       puts,
+      ...(this.initialPublication?{initialPublication:this.initialPublication}:{}),
       ...(portablePackages.length?{portablePackages}:{}),
       ...(this.syncBaseReplacement === undefined
         ? {}
         : { syncBaseReplacement: this.syncBaseReplacement }),
+      ...(this.syncBaseValidated?{syncBaseValidated:this.syncBaseValidated}:{}),
       ...(this.syncBasePatch===undefined?{}:{syncBasePatch:this.syncBasePatch}),
       ...(this.replicaCandidateRestore===undefined?{}:{replicaCandidateRestore:this.replicaCandidateRestore}),
     };
@@ -648,8 +657,9 @@ async function transaction<T>(
   work: (tx: LibraryTransaction) => Promise<T>,
   kind: "content" | "state" | "cache" = "content",
 ): Promise<T> {
+  const namespace=localLibraryNamespace();
   const execute = async () => {
-    assertLocalLibrarySelected();
+    assertLocalLibrarySelected(namespace);
     const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
     const library = new LibraryTransaction(mode, adapter);
     const value = await work(library);
@@ -663,7 +673,7 @@ async function transaction<T>(
       const mutation = await library.mutation();
       mutation.contentRevision = contentRevision;
       library.beginCommit();
-      assertLocalLibrarySelected();
+      assertLocalLibrarySelected(namespace);
       const storageStarted=performance.now();
       try{await storageCall(() => adapter.commit(mutation));}
       catch(cause){
@@ -671,17 +681,24 @@ async function transaction<T>(
         // committed, then replay a now-consumed candidate ID. Only its durable
         // transaction receipt permits treating that uncertain outcome as success.
         let confirmed=false;
-        if(mutation.replicaCandidateRestore){
+        if(mutation.replicaCandidateRestore||mutation.initialPublication){
           try{
             const encoded=await storageCall(()=>adapter.get('meta','cloud-sync'));
-            const state=encoded===null?undefined:decode(encoded) as {restoreOperationId?:string;syncedLocalRevision?:number};
-            confirmed=state?.restoreOperationId===mutation.replicaCandidateRestore.id&&state.syncedLocalRevision===(mutation.contentRevision??mutation.replicaCandidateRestore.update?.localRevision);
+            const state=encoded===null?undefined:decode(encoded) as {restoreOperationId?:string;publicationOperationId?:string;dirtyRebaseOperationId?:string;syncedLocalRevision?:number};
+            confirmed=mutation.initialPublication?state?.publicationOperationId===mutation.initialPublication:('kind' in (mutation.replicaCandidateRestore!.update??{})?state?.dirtyRebaseOperationId===mutation.replicaCandidateRestore!.id:state?.restoreOperationId===mutation.replicaCandidateRestore!.id&&state.syncedLocalRevision===(mutation.contentRevision??mutation.replicaCandidateRestore!.update?.localRevision));
           }catch{/* Keep the original failure when the outcome cannot be read. */}
         }
         if(!confirmed)throw cause;
       }
       if(import.meta.env?.VITE_SENSA_BROWSER_SMOKE==='true')performance.measure('sensa.library.sqlite-commit',{start:storageStarted,end:performance.now()});
-      if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
+      if (kind === "state") {
+        window.dispatchEvent(new Event("sensa-sync-state-changed"));
+        if (typeof BroadcastChannel !== "undefined") {
+          const channel = new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
+          channel.postMessage({sender:libraryNotificationSender,kind:'state'});
+          channel.close();
+        }
+      }
       else {
         const tables = [...new Set([
           ...mutation.clears,
@@ -700,7 +717,7 @@ async function transaction<T>(
         }
       }
     }
-    assertLocalLibrarySelected();
+    assertLocalLibrarySelected(namespace);
     return value;
   };
   // Web Locks already coordinate this entire logical transaction within and
@@ -717,9 +734,9 @@ export const restoreLibraryTransaction = <T>(work: (tx: LibraryTransaction) => P
   transaction("readwrite", work);
 /** A sealed private candidate is coherent without holding the live Library's
  * Web Lock. Its Worker fence aborts if concurrent user/owner writes occur. */
-export async function requestReplicaCandidate(request:ReplicaCandidateRequest):Promise<ReplicaCandidateResponse>{
-  assertLocalLibrarySelected();const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
-  const result=await adapter.replicaCandidate(request);assertLocalLibrarySelected();return result;
+export async function requestReplicaCandidate(request:ReplicaCandidateRequest,onProgress?:import('./replicaCandidateProtocol').ReplicaCandidateProgressObserver):Promise<ReplicaCandidateResponse>{
+  const namespace=localLibraryNamespace();assertLocalLibrarySelected(namespace);const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
+  const result=await adapter.replicaCandidate(request,onProgress?progress=>{assertLocalLibrarySelected(namespace);onProgress(progress);}:undefined);assertLocalLibrarySelected(namespace);return result;
 }
 /** Sync progress and baselines do not announce learner-content changes. */
 export const writeLibraryState = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
@@ -751,12 +768,15 @@ export const readHomeLearningRecords = async (
   return storageCall(() => adapter.homeLearningProjection(languageRouteId,clock));
 };
 export const readLearningHistoryPage=async(query:import('../../learning/system/learningHistoryModel').LearningHistoryRequest)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningHistoryPage(query));};
+export const readPersonalEnrollmentIndex=async()=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.personalEnrollmentIndex());};
 export const readLearningSemanticMemoryRecords=async(targetId?:string)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningSemanticMemory(targetId));};
 export const readLearningManagementSummary=async(query:import('./runtimeLearningCandidates').LearningManagementSummaryQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningManagementSummary(query));};
 export const readRuntimeLearningCandidates=async(query:import('./runtimeLearningCandidates').RuntimeLearningCandidateQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.runtimeLearningCandidates(query));};
 
 export const readLocalLibraryRevision = (tx: LibraryTransaction): Promise<number> =>
   tx.get<number>("meta", localLibraryRevisionKey).then((value) => value ?? 0);
+export const readLocalArtifactRevision = (tx: LibraryTransaction): Promise<number> =>
+  tx.get<number>('meta','local-artifact-revision').then(value=>value??0);
 
 /** A meaningful product milestone asks the account adapter for an early Checkpoint. */
 export function requestCloudCheckpoint(): void {
@@ -769,6 +789,32 @@ export async function assertCurrentLibrary(tx: LibraryTransaction): Promise<stri
   sessionIncarnation ??= current;
   if (sessionIncarnation !== current) throw new Error("localFlow.libraryReplaced");
   return current;
+}
+/** The coordinator changes the physical selection only under the old exclusive
+ * lock. Existing pages and command captures retain their earlier incarnation. */
+export function adoptOwnCloudIncarnation(incarnation:string):void{sessionIncarnation=incarnation;}
+/** Only a genuinely empty source can adopt its authenticated cloud generation.
+ * Old owner files remain retained; the pointer is the final durable mutation. */
+export async function activateOwnCloudLibrary(expected:ReplicaCandidateFence&{signoutEpoch:unknown},namespace:string,incarnation:string,seal:(devicePuts:SqliteMutation['puts'])=>Promise<void>,signal?:AbortSignal,onCommitStart?:()=>void){
+ const source=localLibraryNamespace();
+ return navigator.locks.request('sensa-library-selection-v1',{mode:'exclusive',signal:AbortSignal.timeout(15000)},()=>runAcrossPages('readwrite',async()=>{
+  assertLocalLibrarySelected(source);const adapter=await sqliteRecordAdapter(),tx=new LibraryTransaction('readonly',adapter);
+  const owner=await tx.get<{subject:string;accountId:string}>('meta','service-owner');
+  if(!owner||owner.subject!==expected.owner.subject||owner.accountId!==expected.owner.accountId||await tx.get('meta','signed-out')||await assertCurrentLibrary(tx)!==expected.incarnation||!backupEqual(await tx.get('meta','identity'),expected.identity)||!backupEqual(await tx.get('meta','service-signout-epoch'),expected.signoutEpoch))throw Error('account_changed');
+  if(await readLocalLibraryRevision(tx)!==expected.localRevision||(await tx.syncBaseReferences()).length)throw Error('library_sync_local_changed');
+  const {librarySyncTables}=await import('@sensa/contracts/sensa'),{isReplicatedLibraryEntry}=await import('./replication/libraryReplica');
+  for(const table of librarySyncTables)for await(const keys of tx.recordKeyBatches(table))for(const key of keys)if(isReplicatedLibraryEntry(table,key)&&!(table==='meta'&&key==='identity'))throw Error('library_sync_local_changed');
+  const puts:SqliteMutation['puts']=[{table:'meta',key:'service-owner',encodedValue:encode(owner)}];
+  for(const key of ['service-signout-epoch','service-installation']){const value=await tx.get('meta',key);if(value!==undefined)puts.push({table:'meta',key,encodedValue:encode(value)});}
+  for(const row of await tx.entries('providers'))if(typeof row.key==='string')puts.push({table:'providers',key:row.key,encodedValue:encode(row.value)});
+  const providerSettings=await tx.get('settings','providers');if(providerSettings!==undefined)puts.push({table:'settings',key:'providers',encodedValue:encode(providerSettings)});
+  await seal(puts);
+  const {prepareOwnCloudActivation}=await import('./sqliteAdapter');await prepareOwnCloudActivation();
+  signal?.throwIfAborted();onCommitStart?.();activateOwnCloudNamespace(namespace,source);adoptOwnCloudIncarnation(incarnation);markLocalLibraryPresent();
+  window.dispatchEvent(new Event('sensa-own-cloud-generation-activated'));window.dispatchEvent(new Event('sensa-sync-state-changed'));
+  window.dispatchEvent(new CustomEvent('sensa-library-changed',{detail:{tables:libraryTables,clears:libraryTables,records:[]}}));
+  return {fromIncarnation:expected.incarnation,incarnation,namespace};
+ }));
 }
 
 export type Operation = { id: string; kind: string; input: unknown };
@@ -838,7 +884,7 @@ export async function openLibrary(): Promise<LibraryIdentity> {
     if(prior||hasLocalLibraryHint()||await tx.get('meta','service-owner'))throw new Error('localFlow.libraryMissing');
     const meta=await tx.entries('meta');
     const intentionalReset=meta.some(row=>row.key==='local-reset'&&row.value==='account-deletion')&&meta.some(row=>row.key==='signed-out'&&row.value===true);
-    const permittedMeta=intentionalReset?['package-catalog','local-reset','signed-out','local-incarnation','local-content-revision']:['package-catalog'];
+    const permittedMeta=intentionalReset?['package-catalog','local-artifact-revision','local-reset','signed-out','local-incarnation','local-content-revision']:['package-catalog','local-artifact-revision'];
     if(meta.some(row=>!permittedMeta.includes(String(row.key))))throw new Error('localFlow.libraryMissing');
     const operations=await tx.entries('operations');
     if(operations.some(row=>JSON.parse(row.value.input).kind!=='package.catalog'))throw new Error('localFlow.libraryMissing');
@@ -882,31 +928,32 @@ export function observeLibrary(listener: () => void, tables?: readonly Table[], 
     if (relevant((event as CustomEvent).detail)) listener();
   };
   window.addEventListener("sensa-library-changed", local);
-  const channel = typeof BroadcastChannel === "undefined"
-    ? null
-    : new BroadcastChannel(localLibraryScopedName('sensa-local-library'));
-  if (channel) channel.onmessage = (event) => {
+  let channel:BroadcastChannel|null=null;
+  const bind=()=>{channel?.close();channel=typeof BroadcastChannel==='undefined'?null:new BroadcastChannel(localLibraryScopedName('sensa-local-library'));if(channel)channel.onmessage=(event)=>{
     if(event.data?.sender===libraryNotificationSender)return;
+    if(event.data?.kind==='state')return;
     if (relevant(event.data)) listener();
-  };
+  };};bind();window.addEventListener('sensa-own-cloud-generation-activated',bind);
   return () => {
     window.removeEventListener("sensa-library-changed", local);
     channel?.close();
+    window.removeEventListener('sensa-own-cloud-generation-activated',bind);
   };
 }
 
 export function observeCloudSync(listener: () => void): () => void {
-  window.addEventListener("sensa-sync-state-changed", listener);
+  const stopState=observeCloudSyncState(listener);
   const stop = observeLibrary(listener);
   return () => {
-    window.removeEventListener("sensa-sync-state-changed", listener);
+    stopState();
     stop();
   };
 }
 
 export function observeCloudSyncState(listener: () => void): () => void {
   window.addEventListener("sensa-sync-state-changed", listener);
-  return () => window.removeEventListener("sensa-sync-state-changed", listener);
+  let channel:BroadcastChannel|null=null;const bind=()=>{channel?.close();channel=typeof BroadcastChannel==='undefined'?null:new BroadcastChannel(localLibraryScopedName('sensa-local-library'));if(channel)channel.onmessage=event=>{if(event.data?.sender!==libraryNotificationSender&&event.data?.kind==='state')listener();};};bind();window.addEventListener('sensa-own-cloud-generation-activated',bind);
+  return () => {window.removeEventListener("sensa-sync-state-changed", listener);window.removeEventListener('sensa-own-cloud-generation-activated',bind);channel?.close();};
 }
 
 export async function readLibraryStorageDiagnostics(options?:Readonly<{verifyIntegrity?:boolean}>): Promise<SqliteStorageDiagnostics> {
@@ -918,3 +965,5 @@ export async function readPortableMediaStorageDiagnostics():Promise<PortableMedi
   const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');
   return storageCall(()=>adapter.portableMediaDiagnostics());
 }
+
+export const readLearningSchedulePage=async(query:import('../../learning/system/learningScheduleModel').LearningScheduleQuery)=>{const adapter=await storageCall(sqliteRecordAdapter,'localFlow.storageOpen');return storageCall(()=>adapter.learningSchedulePage(query));};

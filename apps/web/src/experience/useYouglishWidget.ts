@@ -87,6 +87,7 @@ interface UseYouglishWidgetOptions {
   accent?: string;
   components?: number;
   active: boolean;
+  onPlaybackConfirmed?:()=>void;
 }
 
 /**
@@ -94,7 +95,7 @@ interface UseYouglishWidgetOptions {
  * provider script is fetched lazily and is never part of application startup.
  * YouGlish searches a surface string and does not establish Sense identity.
  */
-export const useYouglishWidget = ({mountRef,query,lang,accent,components=8,active}:UseYouglishWidgetOptions):YouglishWidgetHandle => {
+export const useYouglishWidget = ({mountRef,query,lang,accent,components=8,active,onPlaybackConfirmed}:UseYouglishWidgetOptions):YouglishWidgetHandle => {
   const [status,setStatus]=useState<YouglishStatus>('idle');
   const [totalResults,setTotalResults]=useState(0);
   const [caption,setCaption]=useState<string|null>(null);
@@ -134,6 +135,7 @@ export const useYouglishWidget = ({mountRef,query,lang,accent,components=8,activ
       controlsReadyRef.current=true;setControlsReady(true);
       if(!mediaReady)return;
       window.clearTimeout(timer);timer=undefined;setStatus('ready');
+      if(isPlayingRef.current)onPlaybackConfirmed?.();
     };
     const waitForMedia=()=>{
       if(disposed||!mountedRef.current)return;
@@ -179,7 +181,7 @@ export const useYouglishWidget = ({mountRef,query,lang,accent,components=8,activ
       widget.fetch(query,lang,accent);
     }).catch(fail);
     return()=>{disposed=true;window.clearTimeout(timer);if(failureRef.current===fail)failureRef.current=null;if(waitForMediaRef.current===waitForMedia)waitForMediaRef.current=null;retire();};
-  },[active,query,lang,accent,components,mountRef]);
+  },[active,query,lang,accent,components,mountRef,onPlaybackConfirmed]);
 
   const perform=useCallback((action:(widget:YouglishWidget)=>void,awaitMedia=false)=>{
     if(!controlsReadyRef.current||!widgetRef.current)return;

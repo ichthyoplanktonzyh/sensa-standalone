@@ -36,6 +36,12 @@ const moduleFor=(table:string,key:string)=>{
 
 export const isReplicatedLibraryEntry=(table:string,key:string)=>moduleFor(table,key)!==undefined;
 
+/** Existing owner dependencies used by a bounded remote-only change merge. */
+export function libraryReplicaDependencies(entry:ReplicaEntry,value:unknown){
+ const module=moduleFor(entry.table,entry.key);if(!module)throw Error('library_sync_format');
+ return module.conflictDependencies?.(entry,value)??[];
+}
+
 export function normalizeLibraryReplicaEntry(entry:ReplicaEntry,identity:LibraryIdentity):ReplicaEntry{
  const module=moduleFor(entry.table,entry.key);
  if(!module)throw new Error('library_sync_format');
@@ -52,6 +58,13 @@ export function restoreLibraryReplicaValue(entry:ReplicaEntry,value:unknown,iden
  * transform. Future domain transforms automatically retain the value path. */
 export function canCopyLibraryReplicaValue(entry:Pick<ReplicaEntry,'table'|'key'>):boolean{
  const module=moduleFor(entry.table,entry.key);if(!module)throw Error('library_sync_format');return module.restore===undefined;
+}
+
+/** Producer normalization and receiver restoration are different contracts.
+ * New normalization defaults to the value path unless its domain opts in. */
+export function canCopyNormalizedLibraryReplicaValue(entry:Pick<ReplicaEntry,'table'|'key'>):boolean{
+ const module=moduleFor(entry.table,entry.key);if(!module)throw Error('library_sync_format');
+ return module.normalize===undefined||module.canCopyNormalizedValue?.(entry)===true;
 }
 
 function* ordinaryMerge(input:ReplicaMergeInput):ReplicaMergeSteps{
@@ -154,11 +167,15 @@ export function assertLibraryReplicaDelete(entry:ReplicaEntry){
 }
 
 /** Produce the atomic local mutation set; delete semantics stay domain-owned. */
-export function planLibraryReplicaApply(current:ReplicaEntry[],desired:ReplicaEntry[]){
- const next=new Map(desired.map(entry=>[replicaEntryId(entry),entry]));
- const before=new Map(current.map(entry=>[replicaEntryId(entry),entry]));
- const deletes=current.filter(entry=>!next.has(replicaEntryId(entry)));
- for(const entry of deletes)assertLibraryReplicaDelete(entry);
- const puts=desired.filter(entry=>!replicaEntryEqual(before.get(replicaEntryId(entry)),entry));
+function* planLibraryReplicaApplySteps(current:ReplicaEntry[],desired:ReplicaEntry[],alive:()=>void=()=>{}){
+ const next=new Map<string,ReplicaEntry>(),before=new Map<string,ReplicaEntry>();
+ for(const entry of desired){alive();yield;next.set(replicaEntryId(entry),entry);}
+ for(const entry of current){alive();yield;before.set(replicaEntryId(entry),entry);}
+ const deletes:ReplicaEntry[]=[],puts:ReplicaEntry[]=[];
+ for(const entry of current){alive();yield;if(!next.has(replicaEntryId(entry))){assertLibraryReplicaDelete(entry);deletes.push(entry);}}
+ for(const entry of desired){alive();yield;if(!replicaEntryEqual(before.get(replicaEntryId(entry)),entry))puts.push(entry);}
+ alive();
  return {deletes,puts};
 }
+export const planLibraryReplicaApply=(current:ReplicaEntry[],desired:ReplicaEntry[])=>runSynchronously(planLibraryReplicaApplySteps(current,desired));
+export const planLibraryReplicaApplyCooperatively=(current:ReplicaEntry[],desired:ReplicaEntry[],alive:()=>void)=>runCooperatively(planLibraryReplicaApplySteps(current,desired,alive));

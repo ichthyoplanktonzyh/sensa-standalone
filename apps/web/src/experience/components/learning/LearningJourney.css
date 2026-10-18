@@ -1,0 +1,39 @@
+.sensa-study-page > [data-sensa-page-region="header"] { padding-top: 1.5rem; margin-bottom: 1.25rem; }
+.sensa-study-page > [data-sensa-page-region="primary"] { margin-top: 0; }
+.sensa-study-content { padding-block: .5rem 1rem; }
+.sensa-study-counts { display: flex; flex-wrap: wrap; gap: .75rem 2rem; margin-top: 1.25rem; font-size: .875rem; }
+.sensa-study-counts > div { display: flex; align-items: baseline; gap: .5rem; }
+.sensa-study-counts dt { color: var(--sensa-fg-secondary); }
+.sensa-study-counts dd { font-variant-numeric: tabular-nums; }
+.sensa-study-disclosure { border-top: 1px solid var(--sensa-border-subtle); }
+.sensa-study-disclosure > summary { display: flex; align-items: center; min-height: 2.75rem; cursor: pointer; gap: .75rem; }
+.sensa-study-disclosure > summary::after { margin-inline-start: auto; content: "+"; }
+.sensa-study-disclosure[open] > summary::after { content: "−"; }
+.sensa-study-disclosure > summary:focus-visible { outline: 2px solid var(--sensa-focus); outline-offset: 2px; }
+.sensa-learning-list > [data-sensa-page-region="header"] { padding-block: 1rem; }
+.sensa-learning-list > [data-sensa-page-region="controls"] { padding-block: .75rem; }
+.sensa-learning-options { align-self: start; min-width: 9rem; max-width: 100%; }
+.sensa-learning-options > summary { cursor: pointer; min-height: 2.75rem; padding: .75rem; font-size: .875rem; }
+.sensa-learning-options > summary:focus-visible { outline: 2px solid var(--sensa-focus); outline-offset: 2px; }
+.sensa-learning-row-meta { display: contents; }
+.sensa-session-status { max-width: 43rem; margin-inline: auto; padding-top: 1rem; border-top: 1px solid var(--sensa-border-subtle); font-size: .8125rem; }
+.sensa-runtime-stage, .sensa-runtime-mobile-stage { color: var(--sensa-fg-secondary); }
+.sensa-runtime-summary { overflow-wrap: anywhere; }
+@media (max-width: 47.99rem) {
+ .sensa-learning-row-meta { grid-column: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; }
+ .sensa-learning-list li strong { font-size: 1.25rem; }
+ .sensa-learning-list li > button { padding-inline: .5rem; }
+ .sensa-learning-list [data-sensa-page-region="controls"] > div > label { flex-basis: 100%; }
+ .sensa-completion-counts { gap: .5rem; }
+}
+@media (max-width: 30rem) {
+ .sensa-study-page > [data-sensa-page-region="header"] h1, .sensa-learning-list > [data-sensa-page-region="header"] h1 { font-size: 1.5rem; }
+ .sensa-study-page > [data-sensa-page-region="header"] { padding-top: 1rem; }
+}
+.sensa-completion-counts dt { min-height: 2.5rem; display: flex; align-items: center; justify-content: center; }
+
+.sensa-learning-options-compact { min-width:2.75rem; }
+.sensa-learning-options-compact > summary { display:grid; place-items:center; list-style:none; border-radius:var(--sensa-radius-control); }
+.sensa-learning-options-compact > summary::-webkit-details-marker { display:none; }
+.sensa-learning-options-compact[open] { flex-basis:100%; }
+.sensa-learning-options-compact[open] > summary { width:2.75rem; }

@@ -48,6 +48,7 @@ export function localExecutableTarget(
   if(!target.curriculumMemberships.some(candidate=>candidate.id===membership.id))throw new Error('localFlow.routeMembershipMissing');
   return {
     ...structuredClone(target),
+    expression:String(membership.material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')?.contentPayload.surface??''),
     curriculumMembership:structuredClone(membership),
     packageKey:membership.packageKey,
     ...(membership.assurancePackageKey?{assurancePackageKey:membership.assurancePackageKey}:{}),

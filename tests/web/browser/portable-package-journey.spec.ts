@@ -8,12 +8,19 @@ import {mkdir,mkdtemp,open,readFile,rm} from 'node:fs/promises';
 import {extname,join,resolve} from 'node:path';
 import {expect,test,type Page,type Locator} from '@playwright/test';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {stableUuid} from '@sensa/learning-kernel';
 import {createSensaPortableLightweightPackage,readSensaPortableLightweightPackage} from '@sensa/content-validator/portable-lightweight';
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 
 let server:Server,origin:string,output:string;
 const first=portablePackageFixture({title:'借物与归还'});
-const next=portablePackageFixture({title:'借物与归还 · 新版',version:2,scene:'向邻居借一把梯子，用完后归还。'});
+const nextScene='向邻居借一把梯子，用完后归还。';
+const declaration=first.package.semanticDeclaration!;
+const next=portablePackageFixture({title:'借物与归还 · 新版',version:2,scene:nextScene,semanticDeclaration:{
+ ...declaration,
+ sense:{...declaration.sense,senseVersionId:stableUuid('sensa:test-portable-sense-version:borrow:v2'),versionNumber:2,semanticSpec:{...declaration.sense.semanticSpec,prototypeScenes:[{...declaration.sense.semanticSpec.prototypeScenes[0]!,summary:nextScene}]}},
+ binding:{...declaration.binding,bindingVersionId:stableUuid('sensa:test-portable-binding-version:borrow:v2'),versionNumber:2},
+}});
 const conflict=portablePackageFixture({title:'同版本冲突',meaning:'试图用不同的内容替换原版本。'});
 const otherRoute=portablePackageFixture({title:'西班牙语分享包',packageId:'08d199f5-e798-48a5-a036-90bc5c4b1c67',targetLanguage:'es',expression:'prestar'});
 const snapshot={format:'sensa-learning-content-registry-v3',publishedAt:'2026-10-01T00:00:00Z',items:[]};
@@ -62,7 +69,7 @@ async function enterLibrary(page:Page){
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);
  await page.getByRole('button',{name:'进入 Sensa',exact:true}).first().click();
- await expect(page.locator('#s-home').getByRole('heading',{name:'暂无可开始的学习',exact:true})).toBeVisible();
+ await expect(page.locator('#s-home').getByRole('heading',{name:'还没有加入学习内容',exact:true})).toBeVisible();
  await page.locator('#s-home').getByRole('button',{name:'学习包目录',exact:true}).click();
  await page.locator('#s-catalog').last().getByRole('button',{name:'我的学习包',exact:true}).click();
  await expect(page.locator('#s-library').last().getByRole('heading',{name:'我的学习包',exact:true})).toBeVisible();
@@ -72,12 +79,18 @@ async function preview(page:Page,bytes:Uint8Array=first.bytes){
 }
 const facts=(page:Page)=>page.evaluate(async()=>({supply:await window.__sensaBrowserSmoke!.supplyCheckpoint(),learning:await window.__sensaBrowserSmoke!.learningCheckpoint()}));
 const detail=(page:Page)=>page.locator('#s-library-package').last();
+async function publication(scope:Locator,timeout=5_000){
+ const disclosure=scope.locator('details.sensa-package-disclosure');
+ await expect(disclosure).toBeVisible({timeout});if(await disclosure.getAttribute('open')===null)await disclosure.locator('summary').click();
+}
 async function install(page:Page,bytes:Uint8Array=first.bytes){
  await preview(page,bytes);
  await page.locator('#s-library').last().getByRole('button',{name:'确认安装',exact:true}).click();
+ await publication(detail(page));
  await expect(detail(page).getByRole('button',{name:'导出 .sensa',exact:true})).toBeEnabled();
 }
 async function exportBytes(page:Page,scope:Locator=detail(page)){
+ if(await scope.locator('details.sensa-package-disclosure').count())await publication(scope);
  const download=page.waitForEvent('download');
  await scope.getByRole('button',{name:'导出 .sensa',exact:true}).click();
  const file=await download;
@@ -113,8 +126,7 @@ test('a guest previews without writes, confirms installation, and shares an exac
  assert.deepEqual(bytes,Buffer.from(first.bytes),'export remains the exact admitted public content after learner enrollment');
  readSensaPortableLightweightPackage(bytes);
  await page.getByRole('navigation',{name:'主要导航',exact:true}).getByRole('button',{name:'我的学习',exact:true}).click();
- await page.locator('#s-study').getByRole('button',{name:'查看内容',exact:true}).click();
- await page.locator('#s-learning-library').getByRole('button').filter({has:page.getByText('borrow',{exact:true})}).first().click();
+ await page.locator('#s-study').locator('[data-learning-target]').filter({has:page.getByText('borrow',{exact:true})}).click();
  assert.deepEqual(await exportBytes(page,page.locator('#s-learning-target')),bytes,'the learning-target export action must remain reachable and export the same admitted snapshot');
  const receiver=await browser.newContext({locale:'zh-CN'});
  try{
@@ -141,6 +153,7 @@ test('reimport is idempotent and corrupt or identity-conflicting input cannot re
  await preview(page);
  await expect(page.getByText('已安装此版本',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'确认安装',exact:true}).click();
+ await publication(detail(page));
  await expect(detail(page).getByRole('button',{name:'导出 .sensa',exact:true})).toBeEnabled();
  expect(await facts(page)).toEqual(saved);
  await detail(page).getByRole('button',{name:'返回',exact:true}).click();
@@ -252,6 +265,7 @@ test('large media preview and admission execute in owned workers without detachi
  const installWorker=page.waitForEvent('worker',{predicate:worker=>worker.url().includes('portablePreparationWorker')});
  await panel.getByRole('button',{name:'确认安装',exact:true}).click();
  await installWorker;
+ await publication(detail(page),30_000);
  await expect(detail(page).getByRole('button',{name:'导出 .sensa',exact:true})).toBeEnabled({timeout:30_000});
  const after=await facts(page);
  expect(after.learning).toEqual(before.learning);

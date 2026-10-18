@@ -209,7 +209,7 @@
     "feedback": "Masukan & koreksi",
     "feedbackText": "Hubungi dukungan untuk masukan produk, koreksi konten, pemulihan akun, atau pertanyaan penghapusan. Lampirkan berkas diagnostik hanya jika berguna; isinya status runtime dan jumlah, bukan konten belajar, alamat email, pengenal catatan, URL, token, atau stack trace.",
     "contact": "Hubungi dukungan",
-    "unavailable": "Kontak dukungan belum dikonfigurasi untuk build ini. Jangan rilis build ini kepada pengguna.",
+    "unavailable": "Kontak dukungan saat ini tidak tersedia.",
     "diagnostics": "Diagnostik yang disamarkan",
     "diagnosticsText": "Unduh laporan JSON lokal yang memuat rilis, kemampuan browser, penyimpanan, dan status sinkronisasi. Tinjau sebelum melampirkannya ke permintaan dukungan.",
     "diagnosticsDownload": "Unduh diagnostik",
@@ -229,7 +229,7 @@
     "storageBudget": "Perkiraan browser untuk situs ini: {{used}} MiB dari {{quota}} MiB digunakan. Ini mungkin termasuk berkas aplikasi.",
     "storageBudgetWarning": "Situs ini telah memakai lebih dari 80% ruang berdasarkan perkiraan browser: {{used}} MiB dari {{quota}} MiB. Ekspor cadangan dan kosongkan ruang perangkat segera.",
     "clearTitle": "Hapus konten lokal",
-    "clearIntro": "Hapus konten, progres belajar, dan pengaturan model hanya dari browser ini. Akun Anda tidak dihapus. Ekspor cadangan di atas jika ingin menyimpan konten ini.",
+    "clearIntro": "Hapus konten, progres belajar, dan pengaturan model hanya dari browser ini. Akun Anda tidak dihapus. Ekspor cadangan terlebih dahulu jika ingin menyimpan konten ini.",
     "clearInspect": "Tinjau konten lokal",
     "clearSummary": "Ini akan menghapus {{drafts}} sumber, {{meanings}} makna, {{packages}} paket, {{targets}} item belajar, dan {{events}} peristiwa.",
     "clearPending": "Ada {{count}} persiapan yang belum selesai. Persiapan tidak dapat dilanjutkan setelah penghapusan.",
@@ -237,5 +237,24 @@
     "clearConfirm": "Saya telah menyimpan cadangan yang diperlukan dan mengonfirmasi penghapusan konten lokal ini.",
     "clearAction": "Hapus konten lokal",
     "clearDone": "Konten lokal dihapus. Buka ulang aplikasi untuk menggunakan pustaka kosong."
+  },
+  "syncRecovery": {
+    "blocked": "Sinkronisasi perlu diperiksa sebelum dilanjutkan. Data lokal Anda masih tersimpan. Ekspor cadangan, unduh diagnostik, lalu hubungi dukungan.",
+    "hint": "Cadangan hanya menyimpan data perangkat ini. Cadangan tidak menyelesaikan masalah sinkronisasi atau menyertakan perubahan cloud yang belum diunduh.",
+    "backup": "Cadangkan perangkat ini",
+    "hideBackup": "Sembunyikan cadangan"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Siapkan data untuk perangkat baru",
+    "preparing": "Menyiapkan data akun untuk perangkat lain…",
+    "preparingUpload": "Mengirim data yang diperlukan perangkat baru…",
+    "receiving": "Menerima data akun…",
+    "prepared": "Data akun siap untuk perangkat baru.",
+    "preparationFailed": "Persiapan belum selesai. Coba lagi nanti. Data yang tersinkron tetap tersimpan.",
+    "preparationCancelled": "Persiapan dihentikan. Data yang tersinkron tetap tersimpan.",
+    "stop": "Hentikan sinkronisasi ini",
+    "stopping": "Menghentikan…",
+    "cancelled": "Sinkronisasi dihentikan. Anda dapat mencoba lagi.",
+    "processed": "Data diproses: {{amount}} MiB"
   }
 }

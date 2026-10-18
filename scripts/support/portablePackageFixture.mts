@@ -27,6 +27,7 @@ export type PortablePackageFixtureOptions=Readonly<{
   expressionKind?:SensaPortableLightweightPackage['targetExpression']['expressionKind'];
   meaning?:string;
   scene?:string;
+  usagePattern?:string;
   senseId?:string;
   title?:string;
   createdAt?:string;
@@ -136,7 +137,7 @@ export const portablePackageFixture=(options:PortablePackageFixtureOptions={})=>
         targetStart:(options.example??expression).indexOf(expression),
         targetEnd:(options.example??expression).indexOf(expression)+expression.length,
       },
-      optional:{},
+      optional:options.usagePattern?{languageStructure:{expressionTypeLabel:null,partOfSpeech:null,usagePattern:options.usagePattern}}:{},
     },
     media:[{
       mediaId,

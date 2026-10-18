@@ -1,3 +1,6 @@
+import {RecordValidationStorageError} from '../sqliteRecordValidation';
+import type {RecordValidationIndex} from '../sqliteRecordValidation';
+import {hydrateMeaningContexts,contextMediaReferences} from '../../../experience/personalMeaningJourney/contextRecords';
 import {semanticProposalSchema} from '@sensa/contracts/sensa';
 import {z} from 'zod';
 
@@ -14,25 +17,16 @@ import {runSynchronously} from '../../../experience/personalMeaningJourney/coope
 
 type RequireRow=(table:Table,id:string)=>any;
 
-/** Validate Personal Semantic World objects and return its cross-domain source resolver. */
-export function* validatePersonalSemanticWorldReplicaSteps(input:{
- rows:LibraryRecordRows;
- maps:LibraryRecordLookups;
- requireRow:RequireRow;
- fail:()=>never;
-}){
- const {rows,maps,requireRow,fail}=input,uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
- try{yield*assertPersonalSemanticWorldRecordSteps({get:(table,key)=>maps[table].get(key),entries:table=>rows[table]});}catch{fail();}
- for(const {key,value} of rows.media){const media=parseStoredMedia(value);if(media.mediaId!==key)fail();uuid.parse(key);yield;}
- for(const {value:meaning} of rows.semanticMeanings){for(const branch of meaningHistoryRecords(meaning))for(const revision of branch.personalSemanticAnchorRevisions)if(revision.personalMediaObjectId&&!maps.media.has(revision.personalMediaObjectId))fail();yield;}
- for(const {value:item} of rows.semanticInbox){for(const mediaId of item.payload.context?.mediaReferenceIds??[])if(!maps.media.has(mediaId))fail();yield;}
+/** Resolve an exact historical source from already admitted World facts. */
+export function personalSourceResolver(maps:LibraryRecordLookups,fail:()=>never){
+ const uuid=z.string().uuid();
  const requirePersonalSource=(source:any)=>{
   if(!maps.semanticState.has('root'))fail();
   for(const field of ['personalMeaningId','personalMeaningRevisionId','personalMeaningAlignmentId','alignmentBasisReferenceId','senseId','senseVersionId','bindingId','bindingVersionId'])uuid.parse(source[field]);
   z.number().int().positive().parse(source.alignmentRevision);if(source.meaningFocusId!==null)uuid.parse(source.meaningFocusId);
   // A durable learning source pins historical facts, not today's World view.
   // Tombstoning the personal origin must not invalidate already accepted learning.
-  const current=(maps.semanticMeanings.get(source.personalMeaningId) as MeaningJourneyRecord|undefined)??fail();
+  const current=hydrateMeaningContexts(maps.semanticMeanings.get(source.personalMeaningId)??fail(),key=>maps.semanticContexts.get(key));
   const record=meaningHistoryRecords(current).find(branch=>branch.personalMeaningRevisions.some(row=>row.personalMeaningRevisionId===source.personalMeaningRevisionId)&&branch.alignments.some(row=>row.personalMeaningAlignmentId===source.personalMeaningAlignmentId))??fail();
   if(!record.personalMeaningRevisions.some((candidate:any)=>candidate.personalMeaningRevisionId===source.personalMeaningRevisionId))fail();
   const alignment=record.alignments.find((candidate:any)=>candidate.personalMeaningAlignmentId===source.personalMeaningAlignmentId)??fail();
@@ -56,6 +50,23 @@ export function* validatePersonalSemanticWorldReplicaSteps(input:{
       :expressionAnchorId!=null&&confirmation.senseProposalVersionId===null&&confirmation.personalExpressionAnchorRevisionId===expressionAnchorId)))fail();
   return {record,alignment};
  };
+ return requirePersonalSource;
+}
+
+/** Validate Personal Semantic World objects and return its cross-domain source resolver. */
+export function* validatePersonalSemanticWorldReplicaSteps(input:{
+ storageKeysUnique?:true;validationIndex?:RecordValidationIndex;
+ rows:LibraryRecordRows;
+ maps:LibraryRecordLookups;
+ requireRow:RequireRow;
+ fail:()=>never;
+}){
+ const {rows,maps,requireRow,fail}=input,uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
+ try{yield*assertPersonalSemanticWorldRecordSteps({storageKeysUnique:input.storageKeysUnique,validationIndex:input.validationIndex,get:(table,key)=>maps[table].get(key),entries:table=>rows[table]});}catch(cause){if(cause instanceof RecordValidationStorageError)throw cause;fail();}
+ for(const {key,value} of rows.media){const media=parseStoredMedia(value);if(media.mediaId!==key)fail();uuid.parse(key);yield;}
+ for(const {value:context} of rows.semanticContexts){for(const mediaId of contextMediaReferences(context))if(!maps.media.has(mediaId))fail();yield;}
+ for(const {value:item} of rows.semanticInbox){for(const mediaId of item.payload.context?.mediaReferenceIds??[])if(!maps.media.has(mediaId))fail();yield;}
+ const requirePersonalSource=personalSourceResolver(maps,fail);
  for(const {value:draft} of rows.drafts){uuid.parse(draft.id);z.number().int().positive().parse(draft.revision);z.string().max(16000).parse(draft.text);if(draft.images)conversationImagesSchema.parse(draft.images);timestamp.parse(draft.createdAt);timestamp.parse(draft.updatedAt);yield;}
  for(const {value:session} of rows.sessions){const draft=requireRow('drafts',session.draftId);if(session.draftRevision>draft.revision)fail();if(session.candidate)semanticProposalSchema.parse(session.candidate);if(session.inputImages)conversationImagesSchema.parse(session.inputImages);if(session.contextSummary!==undefined)z.string().min(1).max(16000).parse(session.contextSummary);if(Array.isArray(session.messages))conversationImagesSchema.parse([...(session.inputImages??[]),...session.messages.flatMap((message:any)=>message.images??[])]);if(!Array.isArray(session.messages)||!Number.isInteger(session.revision)||session.revision<1)fail();if(!['idle','waiting','proposal','inflight','failed','stopped','accepted'].includes(session.status))fail();if(session.status==='accepted'&&requireRow('meanings',session.meaningId).sessionId!==session.id)fail();yield;}
  for(const {key,value} of rows.identities){z.string().regex(/^[a-f0-9]{64}$/u).parse(key);for(const field of ['senseId','senseVersionId','bindingId','bindingVersionId'])uuid.parse(value[field]);yield;}

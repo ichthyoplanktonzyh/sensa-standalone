@@ -1,6 +1,7 @@
+import {stableLearningTargetId} from '../../learning/runtime/learningIdentity';
 import {stableUuid} from '@sensa/learning-kernel';
 import {sensaFormalPinnedLanguageContextSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
-import {resolveDirectLearningSource,type DirectLearningReference,type DirectLearningSource} from '../../learning/system/directLearningSource';
+import {resolveDirectLearningSource,type DirectLearningReference,type DirectLearningSource,type ResolvedDirectLearningReference} from '../../learning/system/directLearningSource';
 import {planningMembershipForContext} from '../../learning/runtime/curriculumEligibility';
 import type {LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import {curriculumEnrollmentId,curriculumEnrollmentSchema,type LocalCurriculumEnrollment} from './curriculumEnrollments';
@@ -19,11 +20,10 @@ export interface DirectLearningEnrollment {
   selection:DirectLearningSource;
   membershipRevision?:number;
 }
-const targetIdFor=(learnerId:string,reference:DirectLearningReference)=>stableUuid(`sensa-learning-target:${learnerId}:${reference.senseVersionId}:${reference.bindingVersionId}`);
+const targetIdFor=(learnerId:string,reference:ResolvedDirectLearningReference)=>stableLearningTargetId(learnerId,reference.senseId,reference.expressionId);
 export function assertDirectTargetIdentity(target:LocalLearningTarget,selection:DirectLearningSource,learnerId:string):void{
  const reference=selection.reference;
- if(target.id!==targetIdFor(learnerId,reference)||target.identity.learnerUserId!==learnerId||target.identity.senseId!==reference.senseId||target.identity.senseVersionId!==reference.senseVersionId
-   ||target.identity.senseExpressionBindingId!==reference.bindingId||target.identity.bindingVersionId!==reference.bindingVersionId||target.expression!==selection.expression.surfaceForm
+ if(target.id!==targetIdFor(learnerId,reference)||target.identity.learnerUserId!==learnerId||target.identity.senseId!==reference.senseId||target.identity.expressionId!==reference.expressionId
    ||target.targetLanguageTag!==selection.targetLanguageTag)throw new Error('localFlow.invalidTarget');
 }
 export async function directSourceAlreadyCovered(tx:LibraryTransaction,targetId:string,context:SensaFormalPinnedLanguageContext,selection:DirectLearningSource,learnerId:string){

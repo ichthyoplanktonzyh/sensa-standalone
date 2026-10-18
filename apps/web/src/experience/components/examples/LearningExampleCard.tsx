@@ -11,6 +11,8 @@ interface LearningExampleSense {
 }
 
 interface LearningExampleCardProps {
+  readonly targetLanguageTag?: string;
+  readonly supportLanguageTag?: string;
   readonly sentence: Sentence;
   readonly sentenceContent?: ReactNode;
   readonly active?: boolean;
@@ -68,6 +70,8 @@ function SyncedMediaSurface({ render }: { readonly render: SyncedExampleMediaRen
  */
 export function LearningExampleCard({
   sentence,
+  targetLanguageTag,
+  supportLanguageTag,
   sentenceContent,
   active = false,
   compact = false,
@@ -120,10 +124,10 @@ export function LearningExampleCard({
             )}
           </button>
         )}
-        <div className="sensa-example-l2">
+        <div lang={targetLanguageTag} dir="auto" className="sensa-example-l2">
           {sentenceContent ?? <ClickableSentence sentenceHtml={sentence.en} />}
         </div>
-        {hasTranslation && showTranslation && <p className="sensa-example-l1">{sentence.zh}</p>}
+        {hasTranslation && showTranslation && <p lang={supportLanguageTag} dir="auto" className="sensa-example-l1">{sentence.zh}</p>}
         {hasTranslation && onToggleTranslation && (
           <button
             type="button"

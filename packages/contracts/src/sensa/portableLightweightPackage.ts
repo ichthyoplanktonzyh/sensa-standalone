@@ -6,7 +6,7 @@ import {
   sensaExpressionBindingRelationSchema,
   sensaExpressionTypeSchema,
   sensaSemanticCoverageSchema,
-  sensaSenseSemanticSpecSchema,
+  sensaPublishedSenseSemanticSpecSchema,
 } from "./semanticRegistry.js";
 import {sensaInteractiveHtmlSchema} from './richExperience.js';
 
@@ -49,7 +49,7 @@ export const sensaPortableLightweightSemanticDeclarationSchema = z.object({
     senseKey: boundedText(500),
     versionNumber: positiveInteger,
     semanticPolicyVersion: boundedText(500),
-    semanticSpec: sensaSenseSemanticSpecSchema,
+    semanticSpec: sensaPublishedSenseSemanticSpecSchema,
   }).strict(),
   expression: z.object({
     expressionId: z.string().uuid(),

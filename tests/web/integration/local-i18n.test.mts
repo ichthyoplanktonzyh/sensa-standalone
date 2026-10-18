@@ -95,7 +95,7 @@ Object.assign(globalThis,{
 });
 const {changeInterfaceLanguage,default:i18n}=await import('../../../apps/web/src/i18n/index.ts');
 await import('../../../apps/web/src/i18n/workspaceResources.ts');
-const {localFlowErrorKey,localFlowNotice}=await import('../../../apps/web/src/i18n/localFlowText.ts');
+const {localFlowText,localFlowErrorKey,localFlowNotice}=await import('../../../apps/web/src/i18n/localFlowText.ts');
 for(const locale of interfaceLocales){
   await changeInterfaceLanguage(locale);
   assert.equal(documentElement.lang,locale);
@@ -113,6 +113,11 @@ for(const locale of interfaceLocales){
 const zhLocalFlow=(resources.get('zh-CN')!.get('localFlow')!.localFlow as Record<string,string>);
 const enLocalFlow=(resources.get('en')!.get('localFlow')!.localFlow as Record<string,string>);
 const jaLocalFlow=(resources.get('ja')!.get('localFlow')!.localFlow as Record<string,string>);
+for(const locale of ['zh-CN','en','de'] as const){
+  await changeInterfaceLanguage(locale);
+  assert(localFlowText('packageExpressionCount',{count:1000}).includes(new Intl.NumberFormat(locale).format(1000)));
+  assert(!localFlowText('packagePreviewDirectory',{count:1}).includes('{{'));
+}
 await changeInterfaceLanguage('ja');
 assert.equal(localFlowNotice('localFlow.preparationStopped'),jaLocalFlow.preparationStopped);
 assert.equal(localFlowNotice(zhLocalFlow.preparationStopped),jaLocalFlow.preparationStopped);

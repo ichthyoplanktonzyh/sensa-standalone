@@ -19,6 +19,7 @@ type CatalogCache = Readonly<{
   items: readonly SensaPortableBookDescriptor[];
   revision: string | null;
   checkedAt: string | null;
+  previewVariant: boolean;
 }>;
 
 const emptyCatalog: CatalogCache = {
@@ -26,6 +27,7 @@ const emptyCatalog: CatalogCache = {
   items: [],
   revision: null,
   checkedAt: null,
+  previewVariant: false,
 };
 
 const browserSha256=async(value:string)=>Array.from(new Uint8Array(
@@ -56,6 +58,7 @@ const parseCatalogCache = (raw: unknown): CatalogCache => {
     items,
     revision: candidate.revision,
     checkedAt: checkedAt && Number.isFinite(Date.parse(checkedAt)) ? checkedAt : null,
+    previewVariant: candidate.previewVariant === true,
   };
 };
 
@@ -80,6 +83,7 @@ const refreshCatalog = async (
   if (
     !force
     && !localOwnerAcceptance
+    && cache.previewVariant
     && cache.checkedAt
     && Date.now() - Date.parse(cache.checkedAt) < 6 * 60 * 60 * 1_000
   ) return { items: cache.items, status: 'cached' };
@@ -97,12 +101,15 @@ const refreshCatalog = async (
   }
   const items = parsed?.items ?? cache.items;
   const revision = parsed?.revision ?? cache.revision;
+  signal?.throwIfAborted();
   await writeLibraryCache(async (tx) => {
+    signal?.throwIfAborted();
     tx.put('meta', 'package-catalog', {
       format: 'sensa-local-registry-cache-v3',
       items,
       revision,
       checkedAt: new Date().toISOString(),
+      previewVariant: true,
     } satisfies CatalogCache);
   });
   const { rehydratePublishedPortableInstallations } = await import('../portable/portableCatalog');
@@ -205,6 +212,10 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
 
 export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise<unknown> => {
   switch (query.kind) {
+    case 'book_preview':{
+      const {fetchPublishedBookPreview}=await import('../portable/portableCatalog');
+      return fetchPublishedBookPreview(query.descriptor,query.signal);
+    }
     case 'direct_provisioning_task': {
       const {directProvisioningTaskId}=await import('../../data/library/directProvisioning');
       const {personalLearningTaskSnapshot}=await import('../../data/library/personalLearning');
@@ -213,6 +224,10 @@ export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise
     case 'workspace':
       return readWorkspace();
     case 'catalog':return readLibrary(async tx=>parseCatalogCache(await tx.get<unknown>('meta','package-catalog')).items);
+    case 'catalog_snapshot':return readLibrary(async tx=>{
+      const cache=parseCatalogCache(await tx.get<unknown>('meta','package-catalog'));
+      return {items:cache.items,checkedAt:cache.checkedAt};
+    });
     case 'route_counts':return readLibrary(tx=>tx.packageCacheProjection({kind:'route_counts'}));
     case 'runtime_packages':
       return readLibrary(async tx=>Promise.all([...new Set(query.packageKeys)].map(key=>tx.get<InstalledPackage>('packageCache',key))).then(values=>values.filter((value):value is InstalledPackage=>!!value)));
@@ -229,6 +244,11 @@ export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise
       const {readPersonalProvisioningSource}=await import('../../data/library/personalProvisioningSource');
       const {isPersonalProvisioningTask}=await import('../provisioning/contracts');
       return readLibrary(async tx=>{const task=await tx.get<import('../provisioning/contracts').ContentProvisioningTask>('personalLearning',query.taskId);return task&&isPersonalProvisioningTask(task)?readPersonalProvisioningSource(tx,task.source,task.contextPin,true):null;});
+    }
+    case 'personal_provisioning_presentation':{
+      const {readPersonalProvisioningPresentation}=await import('../../data/library/personalProvisioningSource');
+      const {isPersonalProvisioningTask}=await import('../provisioning/contracts');
+      return readLibrary(async tx=>{const task=await tx.get<import('../provisioning/contracts').ContentProvisioningTask>('personalLearning',query.taskId);return task&&isPersonalProvisioningTask(task)?readPersonalProvisioningPresentation(tx,task.source,task.contextPin):null;});
     }
     case 'provisioning_control': {
       const { personalLearningControlSnapshot } = await import('../../data/library/personalLearning');

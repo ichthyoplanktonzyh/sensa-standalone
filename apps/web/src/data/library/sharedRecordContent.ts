@@ -1,5 +1,5 @@
 import {sha256} from '@sensa/learning-kernel';
-import {gzipSync,gunzipSync,strToU8,strFromU8} from 'fflate';
+import {gzipSync,Gunzip,strToU8,strFromU8} from 'fflate';
 import {decodeBackupValue,type WireValue} from './backupCodec';
 
 const referenceTag='sensa-shared-content-v1';
@@ -9,11 +9,42 @@ const hashPattern=/^[a-f0-9]{64}$/u;
 const maximumRecordBytes=96*1024*1024;
 const fail=():never=>{throw new Error('sqlite_shared_content_invalid');};
 export interface SharedRecordContent{readonly value:WireValue;readonly bodies:ReadonlyMap<string,string>;}
+/** Worker-owned preparation; exact existing storage is rechecked at activation. */
+export interface PreparedStoredRecord{readonly valueJson:string;readonly bodies:readonly {digest:string;stored:string;existing:string|null}[];}
+
+/** One activation or fenced private preparation. Exact text keys retain only
+ * immutable transformations; count input and output UTF-8 bytes together.
+ * Never retain decoded facts or use cache presence as an admission witness. */
+export class StoredRecordMemo{
+ private readonly indexes={hash:new Map<string,Entry>(),unpack:new Map<string,Entry>()};
+ private readonly recent=new Map<Entry,undefined>();
+ private held=0;
+ constructor(private readonly budget=16*1024*1024,private readonly limit=256){
+  if(!Number.isSafeInteger(budget)||budget<0||budget>16*1024*1024||!Number.isSafeInteger(limit)||limit<0||limit>256)throw Error('sqlite_record_cache_budget');
+ }
+ transform(kind:'hash'|'unpack',input:string,compute:()=>string):string{
+  const index=this.indexes[kind],hit=index.get(input);
+  if(hit){this.recent.delete(hit);this.recent.set(hit,undefined);return hit.output;}
+  const output=compute();
+  if(!this.limit||input.length+output.length>this.budget)return output;
+  const bytes=strToU8(input).length+strToU8(output).length;
+  if(bytes>this.budget)return output;
+  while(this.recent.size&&(this.held+bytes>this.budget||this.recent.size>=this.limit)){
+   const oldest=this.recent.keys().next().value!;
+   this.recent.delete(oldest);this.indexes[oldest.kind].delete(oldest.input);this.held-=oldest.bytes;
+  }
+  const entry:Entry={kind,input,output,bytes};index.set(input,entry);this.recent.set(entry,undefined);this.held+=bytes;
+  return output;
+ }
+ clear():void{this.indexes.hash.clear();this.indexes.unpack.clear();this.recent.clear();this.held=0;}
+}
+type Entry={kind:'hash'|'unpack';input:string;output:string;bytes:number};
+const bodyDigest=(text:string,memo?:StoredRecordMemo)=>memo?memo.transform('hash',text,()=>sha256(text)):sha256(text);
 
 /** Lossless storage representation only: identities, revisions, provenance,
  * bindings and outcomes remain caller-owned facts. Bodies have no references
  * themselves, so each record has a bounded, directly owned dependency set. */
-export function externalizeSharedRecordContent(value:WireValue):SharedRecordContent{
+export function externalizeSharedRecordContent(value:WireValue,memo?:StoredRecordMemo):SharedRecordContent{
  const decoded=decodeBackupValue(value) as {format?:unknown}|null;
  const scope=decoded?.format==='sensa-study-scope-v1';
  const bodies=new Map<string,string>();
@@ -21,7 +52,7 @@ export function externalizeSharedRecordContent(value:WireValue):SharedRecordCont
   if(depth>80||!Array.isArray(node))fail();
   if((sharedFields.has(field)||scope&&(field==='scopeMember'||field==='range'))&&(node[0]==='object'||node[0]==='array')){
    const text=JSON.stringify(node);
-   if(text.length>=512){const digest=sha256(text);bodies.set(digest,text);return [referenceTag,digest];}
+   if(text.length>=512){const digest=bodyDigest(text,memo);bodies.set(digest,text);return [referenceTag,digest];}
   }
   if(node[0]==='object')return ['object',node[1].map(([key,item]:[string,unknown])=>[key,visit(item,key,depth+1)])];
   if(node[0]==='array')return ['array',node[1].map((item:unknown)=>visit(item,scope&&field==='members'?'scopeMember':'',depth+1))];
@@ -32,14 +63,14 @@ export function externalizeSharedRecordContent(value:WireValue):SharedRecordCont
 
 /** Verify once per distinct body in this read. Never substitute a missing body
  * from a current Target, package cache or a guessed older representation. */
-export function expandSharedRecordContent(value:WireValue,read:(digest:string)=>string|undefined):WireValue{
+export function expandSharedRecordContent(value:WireValue,read:(digest:string)=>string|undefined,memo?:StoredRecordMemo):WireValue{
  const cache=new Map<string,WireValue>();
  const visit=(node:any,depth=0):any=>{
   if(depth>80||!Array.isArray(node))fail();
   if(node[0]===referenceTag){
    const digest=node[1];if(node.length!==2||typeof digest!=='string'||!hashPattern.test(digest))fail();
    if(!cache.has(digest)){
-    const text=read(digest);if(text===undefined||sha256(text)!==digest)fail();
+    const text=read(digest);if(text===undefined||bodyDigest(text,memo)!==digest)fail();
     const body=JSON.parse(text!);decodeBackupValue(body);cache.set(digest,body);
    }
    return cache.get(digest);
@@ -71,17 +102,27 @@ export function packStoredRecord(text:string):string{
  const packed=JSON.stringify([compressedTag,sha256(bytes),base64(gzipSync(bytes,{level:6}))]);
  return packed.length<text.length?packed:text;
 }
-export function unpackStoredRecord(text:string):string{
+export function unpackStoredRecord(text:string,memo?:StoredRecordMemo,outputLimit=maximumRecordBytes):string{
  // Writers use this exact envelope. Ordinary tagged facts need not be parsed
  // merely to discover that they are not compressed records.
  if(!text.startsWith(`["${compressedTag}",`))return text;
+ if(memo)return memo.transform('unpack',text,()=>unpackStoredRecord(text,undefined,outputLimit));
  const value=JSON.parse(text);
  if(!Array.isArray(value)||value[0]!==compressedTag)return text;
  if(value.length!==3||typeof value[1]!=='string'||!hashPattern.test(value[1])||typeof value[2]!=='string')fail();
  const bytes=unbase64(value[2]);if(bytes.length<18)fail();
  const size=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(bytes.length-4,true);
- if(size>maximumRecordBytes)fail();
- const plain=gunzipSync(bytes);if(plain.byteLength!==size||sha256(plain)!==value[1])fail();
+ if(!Number.isSafeInteger(outputLimit)||outputLimit<0||size>Math.min(outputLimit,maximumRecordBytes))fail();
+ // ISIZE alone is not an output bound. A fixed gunzipSync buffer can silently
+ // truncate a forged longer stream to an otherwise valid tagged JSON prefix.
+ const plain=new Uint8Array(size);let at=0,finished=false;
+ const stream=new Gunzip((chunk,final)=>{
+  if(at+chunk.length>size||at+chunk.length>outputLimit)fail();
+  plain.set(chunk,at);at+=chunk.length;finished=final;
+ });
+ stream.onmember=fail; // Stored writers emit exactly one gzip member.
+ for(let offset=0;offset<bytes.length;offset+=8192)stream.push(bytes.subarray(offset,offset+8192),offset+8192>=bytes.length);
+ if(!finished||at!==size||sha256(plain)!==value[1])fail();
  return strFromU8(plain);
 }
 
@@ -126,13 +167,5 @@ export function expandArchiveWire(value:any,depth=0):WireValue{
 /** Archive decoding can share immutable bodies across rows, rather than
  * expanding the same content into several temporary tagged object graphs. */
 export function decodeSharedArchiveWire(value:any,bodies:ReadonlyMap<string,unknown>,used:Set<string>,depth=0):any{
- if(depth>80||!Array.isArray(value))fail();
- if(value[0]===referenceTag){const digest=value[1];if(value.length!==2||typeof digest!=='string'||!bodies.has(digest))fail();used.add(digest);return bodies.get(digest);}
- if(value[0]==='array')return value[1].map((item:unknown)=>decodeSharedArchiveWire(item,bodies,used,depth+1));
- if(value[0]==='object'){
-  const object:Record<string,unknown>={},seen=new Set<string>();
-  for(const [key,item] of value[1]){if(typeof key!=='string'||seen.has(key))fail();seen.add(key);Object.defineProperty(object,key,{value:decodeSharedArchiveWire(item,bodies,used,depth+1),enumerable:true,writable:true,configurable:true});}
-  return object;
- }
- return decodeBackupValue(value);
+ return decodeBackupValue(value,depth,digest=>{if(!bodies.has(digest))fail();used.add(digest);return bodies.get(digest);});
 }

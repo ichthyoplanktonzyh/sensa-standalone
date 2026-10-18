@@ -48,7 +48,7 @@ export function publishedMaterialMembership(target:LocalLearningTarget,material:
   &&(typeof provenance.curriculumMembershipId==='string'?member.id===provenance.curriculumMembershipId:typeof member.material.snapshot.provenance.curriculumMembershipId!=='string'));
  if(!member)return undefined;
  if(typeof provenance.curriculumMembershipId==='string'){
-  const fields=['curriculumMembershipId','curriculumEnrollmentId','packageKey','packageDigest','packageVersion','bookId','bookVersionId','contentReleaseId','publicationArchiveSha256','senseId','senseVersionId','bindingId','bindingVersionId','materializationOperationId','sourceReadyAt'] as const;
+  const fields=['curriculumMembershipId','curriculumEnrollmentId','packageKey','packageDigest','packageVersion','bookId','bookVersionId','contentReleaseId','publicationArchiveSha256','senseId','senseVersionId','expressionId','expressionVersionId','bindingId','bindingVersionId','materializationOperationId','sourceReadyAt'] as const;
   if(fields.some(field=>provenance[field]!==member.material.snapshot.provenance[field]))return undefined;
  }
  return member;

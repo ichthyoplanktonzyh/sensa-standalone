@@ -10,9 +10,9 @@ export async function useNodeLearningCapacityStorage(){
  database.initialize();
  const adapter=await sqliteRecordAdapter();
  const methods=[
-  'get','entries','entriesPage','recordKeysPage','practiceExpressions','existingRecordKeys','packageCacheProjection','lookupMeanings','worldBrowse','worldSceneMeaning','registrySelection','learningSemanticMemory','worldLearningChoices','existingJourneyIdentities','replicaCandidate',
+  'get','entries','entriesPage','recordKeysPage','practiceExpressions','existingRecordKeys','packageCacheProjection','lookupMeanings','contextBrowse','worldBrowse','worldSceneMeaning','registrySelection','learningSemanticMemory','personalEnrollmentIndex','worldLearningChoices','existingJourneyIdentities','replicaCandidate',
   'changesSince','hasChangesSince','syncBaseEntries','syncBaseReferences','count','estimateRecordBytes','homeLearningProjection','countIntroducedLearningTargets','learningRunIdsForTarget','openLearningRunTargets',
-  'countContentAttemptsSince','learningTargetIdsForBookUpgrade','isMediaReferenced','portableMedia','portableMediaDiagnostics','commit','diagnostics','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates','studyScopeMember','latestLearningActionAt',
+  'countContentAttemptsSince','learningTargetIdsForBookUpgrade','isMediaReferenced','portableMedia','portableMediaDiagnostics','commit','diagnostics','learningSchedulePage','learningHistoryPage','learningManagementSummary','runtimeLearningCandidates','studyScopeMember','latestLearningActionAt',
  ] as const satisfies readonly (keyof SqliteRecordAdapter)[];
  for(const name of methods){
   const method=Reflect.get(database,name);

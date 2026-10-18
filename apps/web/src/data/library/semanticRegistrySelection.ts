@@ -38,8 +38,8 @@ export function validateRegistrySelection(query:RegistrySelectionQuery):void{
  const valid=query.kind==='senseKey'?text(query.senseKey)
   :query.kind==='learningChoices'?typeof query.normalizedPrefix==='string'&&query.normalizedPrefix.length<=500&&text(query.languageTag)&&Number.isSafeInteger(query.offset)&&query.offset>=0&&Number.isSafeInteger(query.limit)&&query.limit>0&&query.limit<=41
   :query.kind==='expression'?text(query.normalizedForm)&&text(query.languageTag)&&sensaExpressionTypeSchema.safeParse(query.expressionType).success
-  :query.kind==='binding'?isUuid(query.senseId)&&isUuid(query.expressionId)&&['realizes','approximates','evokes'].includes(query.relation)
-  :query.kind==='bindingVersion'?isUuid(query.bindingId)&&isUuid(query.senseVersionId)&&isUuid(query.expressionVersionId)&&['exact','broader','narrower','overlapping'].includes(query.coverage)
+  :query.kind==='binding'?isUuid(query.senseId)&&isUuid(query.expressionId)&&(query.relation===null||['realizes','approximates','evokes'].includes(query.relation))
+  :query.kind==='bindingVersion'?isUuid(query.bindingId)&&isUuid(query.senseVersionId)&&isUuid(query.expressionVersionId)&&(query.coverage===null||['exact','broader','narrower','overlapping'].includes(query.coverage))
   :query.kind==='ordinal'&&kinds.includes(query.registryKind);
  if(!valid)throw new Error('semantic_registry_query_invalid');
 }
@@ -50,14 +50,15 @@ export function registrySelectionSql(query:RegistrySelectionQuery):{sql:string;b
  switch(query.kind){
   case 'learningChoices':return {sql:`SELECT bv.record_key FROM sensa_records AS ev
    JOIN sensa_records AS expression ON expression.table_name='semanticRegistry' AND expression.record_key='expressions:'||sensa_registry_field(ev.value_json,'expressionId')
-   JOIN sensa_records AS binding ON binding.table_name='semanticRegistry' AND sensa_registry_field(binding.value_json,'kind')='bindings' AND sensa_registry_field(binding.value_json,'expressionId')=sensa_registry_field(ev.value_json,'expressionId') AND sensa_registry_field(binding.value_json,'relation')='realizes'
+   JOIN sensa_records AS binding ON binding.table_name='semanticRegistry' AND sensa_registry_field(binding.value_json,'kind')='bindings' AND sensa_registry_field(binding.value_json,'expressionId')=sensa_registry_field(ev.value_json,'expressionId')
    JOIN sensa_records AS bv ON bv.table_name='semanticRegistry' AND bv.record_key='bindingVersions:'||sensa_registry_field(binding.value_json,'currentBindingVersionId')
    JOIN sensa_records AS sv ON sv.table_name='semanticRegistry' AND sv.record_key='senseVersions:'||sensa_registry_field(bv.value_json,'senseVersionId')
    WHERE ev.table_name='semanticRegistry' AND sensa_registry_field(ev.value_json,'kind')='expressionVersions'
     AND sensa_registry_field(ev.value_json,'normalizedForm')>=? AND sensa_registry_field(ev.value_json,'normalizedForm')<?
     AND sensa_registry_field(expression.value_json,'languageTag')=?
     AND sensa_registry_field(bv.value_json,'expressionVersionId')=sensa_registry_field(ev.value_json,'expressionVersionId')
-    AND sensa_registry_field(bv.value_json,'semanticCoverage')='exact' AND sensa_registry_field(bv.value_json,'reviewStatus')!='rejected' AND sensa_registry_field(sv.value_json,'reviewStatus')!='rejected'
+    AND ((sensa_registry_field(binding.value_json,'relation') IS NULL AND sensa_registry_field(bv.value_json,'semanticCoverage') IS NULL) OR (sensa_registry_field(binding.value_json,'relation')='realizes' AND sensa_registry_field(bv.value_json,'semanticCoverage')='exact'))
+    AND sensa_registry_field(bv.value_json,'reviewStatus')!='rejected' AND sensa_registry_field(sv.value_json,'reviewStatus')!='rejected'
    ORDER BY sensa_registry_field(ev.value_json,'normalizedForm'),bv.record_key LIMIT ? OFFSET ?`,bind:[query.normalizedPrefix,query.normalizedPrefix+'\u{10ffff}',query.languageTag,query.limit,query.offset]};
   case 'senseKey':return {sql:`SELECT record_key FROM sensa_records WHERE ${source} AND sensa_registry_field(value_json,'kind')='senses' AND ${value('senseKey')}=? ${order} LIMIT 2`,bind:[query.senseKey]};
   case 'expression':return {sql:`SELECT expression.record_key AS expression_key,version.record_key AS version_key FROM sensa_records AS version
@@ -65,8 +66,8 @@ export function registrySelectionSql(query:RegistrySelectionQuery):{sql:string;b
    WHERE version.table_name='semanticRegistry' AND sensa_registry_field(version.value_json,'kind')='expressionVersions' AND sensa_registry_field(version.value_json,'normalizedForm')=?
     AND sensa_registry_field(expression.value_json,'languageTag')=? AND sensa_registry_field(expression.value_json,'expressionType')=?
    ORDER BY sensa_registry_field(expression.value_json,'ordinal'),sensa_registry_field(version.value_json,'ordinal'),expression.record_key,version.record_key LIMIT 1`,bind:[query.normalizedForm,query.languageTag,query.expressionType]};
-  case 'binding':return {sql:`SELECT record_key FROM sensa_records WHERE ${source} AND sensa_registry_field(value_json,'kind')='bindings' AND ${value('senseId')}=? AND ${value('expressionId')}=? AND ${value('relation')}=? ${order} LIMIT 1`,bind:[query.senseId,query.expressionId,query.relation]};
-  case 'bindingVersion':return {sql:`SELECT record_key FROM sensa_records WHERE ${source} AND sensa_registry_field(value_json,'kind')='bindingVersions' AND ${value('senseExpressionBindingId')}=? AND ${value('senseVersionId')}=? AND ${value('expressionVersionId')}=? AND ${value('semanticCoverage')}=? ${order} LIMIT 1`,bind:[query.bindingId,query.senseVersionId,query.expressionVersionId,query.coverage]};
+  case 'binding':return {sql:`SELECT record_key FROM sensa_records WHERE ${source} AND sensa_registry_field(value_json,'kind')='bindings' AND ${value('senseId')}=? AND ${value('expressionId')}=? AND ${value('relation')} IS ? ${order} LIMIT 1`,bind:[query.senseId,query.expressionId,query.relation]};
+  case 'bindingVersion':return {sql:`SELECT record_key FROM sensa_records WHERE ${source} AND sensa_registry_field(value_json,'kind')='bindingVersions' AND ${value('senseExpressionBindingId')}=? AND ${value('senseVersionId')}=? AND ${value('expressionVersionId')}=? AND ${value('semanticCoverage')} IS ? ${order} LIMIT 1`,bind:[query.bindingId,query.senseVersionId,query.expressionVersionId,query.coverage]};
   // An explicit indexed tail read stays bounded after cold OPFS reopen. MAX
   // over this decoded expression can choose a source scan despite the index.
   case 'ordinal':return {sql:`SELECT sensa_registry_field(value_json,'ordinal')+1 AS next_ordinal FROM sensa_records INDEXED BY sensa_registry_kind_ordinal WHERE ${source} AND sensa_registry_field(value_json,'kind')=? ORDER BY sensa_registry_field(value_json,'ordinal') DESC LIMIT 1`,bind:[query.registryKind]};
@@ -85,7 +86,7 @@ export function memoryRegistrySelection(query:RegistrySelectionQuery,rows:Array<
  if(query.kind==='learningChoices'){
   const choices=kind('bindings').flatMap(binding=>{
    const b=binding.value.value,bv=kind('bindingVersions').find(row=>row.value.value.bindingVersionId===b.currentBindingVersionId);
-   if(b.relation!=='realizes'||!bv||bv.value.value.semanticCoverage!=='exact'||bv.value.value.reviewStatus==='rejected')return [];
+   if(!bv||!((b.relation===null&&bv.value.value.semanticCoverage===null)||(b.relation==='realizes'&&bv.value.value.semanticCoverage==='exact'))||bv.value.value.reviewStatus==='rejected')return [];
    const ev=kind('expressionVersions').find(row=>row.value.value.expressionVersionId===bv.value.value.expressionVersionId&&row.value.value.expressionId===b.expressionId);
    const expression=kind('expressions').find(row=>row.value.value.expressionId===b.expressionId),sv=kind('senseVersions').find(row=>row.value.value.senseVersionId===bv.value.value.senseVersionId);
    return ev&&expression?.value.value.languageTag===query.languageTag&&sv&&sv.value.value.reviewStatus!=='rejected'&&ev.value.value.normalizedForm.startsWith(query.normalizedPrefix)?[{key:bv.key,form:ev.value.value.normalizedForm as string}]:[];

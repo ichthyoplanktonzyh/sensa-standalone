@@ -2,33 +2,37 @@
 .sensa-today-heading h1 { font-size: 2.25rem; font-weight: 550; line-height: 1.2; text-wrap: balance; }
 .sensa-today-heading time { font-size: 0.875rem; color: var(--sensa-fg-secondary); }
 .sensa-today-status { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--sensa-border-strong); border-radius: var(--sensa-radius-control); color: var(--sensa-fg-primary); overflow-wrap: anywhere; }
-.sensa-today-learning { padding: 2rem; border: 1px solid var(--sensa-border-subtle); border-radius: var(--sensa-radius-card); background: var(--sensa-surface-panel); }
+.sensa-today-learning { padding: 2rem 0 1rem; }
 .sensa-today-invitation { min-width: 0; }
-.sensa-today-invitation h2 { max-width: 22ch; font-size: 2rem; line-height: 1.4; font-weight: 500; text-wrap: balance; }
+.sensa-today-invitation h2 { max-width: 28ch; font-size: clamp(1.75rem, 3vw, 2.5rem); line-height: 1.35; font-weight: 500; overflow-wrap: anywhere; text-wrap: balance; }
+.sensa-today-task-type { color: var(--sensa-fg-secondary); margin-bottom: .75rem; font-size: .875rem; }
 .sensa-today-hint { max-width: 44ch; margin-top: 1rem; font-size: 1rem; line-height: 1.8; color: var(--sensa-fg-secondary); text-wrap: pretty; }
 .sensa-today-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 2rem; }
 .sensa-today .sensa-today-start { min-height: 3.25rem; min-width: 12rem; justify-content: space-between; }
 .sensa-today-empty { margin-top: 1rem; font-size: 0.8125rem; color: var(--sensa-fg-secondary); }
-.sensa-today-plan { min-width: 0; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--sensa-border-subtle); }
+.sensa-today-plan { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; min-width: 0; margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--sensa-border-subtle); }
 .sensa-today-plan h3 { font-size: 0.875rem; font-weight: 550; }
-.sensa-today-counts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin-block: 1.5rem 1rem; }
+.sensa-today-counts { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-block: 0; }
+.sensa-today-counts > div { display: flex; align-items: baseline; gap: .5rem; }
 .sensa-today-counts dt { font-size: 0.8125rem; color: var(--sensa-fg-secondary); }
 .sensa-today-counts dd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin-top: 0.5rem; }
-.sensa-today-counts strong { font-size: 2.25rem; font-weight: 450; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sensa-today-counts strong { font-size: 1rem; font-weight: 550; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .sensa-today-counts dd span { font-size: 0.75rem; color: var(--sensa-fg-secondary); }
 .sensa-today-plan > button { margin-inline-start: calc(-1 * var(--sensa-component-control-inline-inset)); }
-.sensa-today-discover { margin-top: 3rem; }
+.sensa-today-discover { margin-top: 1.5rem; }
 .sensa-today-discover h2 { font-size: 1rem; font-weight: 550; margin-bottom: 1.25rem; text-wrap: balance; }
-.sensa-today-entries { border-top: 1px solid var(--sensa-border-subtle); }
-.sensa-today-entry { display: flex; width: 100%; min-height: 6.5rem; align-items: center; gap: 1.25rem; padding: 1.5rem 0; border-bottom: 1px solid var(--sensa-border-subtle); text-align: start; color: var(--sensa-fg-primary); cursor: pointer; }
+.sensa-today-entries { display:flex; flex-wrap:wrap; gap:.5rem 1.5rem; }
+.sensa-today-entry { display: flex; width: auto; min-height: 2.75rem; align-items: center; gap: .5rem; padding: .5rem 0; text-align: start; color: var(--sensa-fg-primary); cursor: pointer; }
 .sensa-today-entry > svg { flex-shrink: 0; color: var(--sensa-action-primary); }
 .sensa-today-entry > span { min-width: 0; flex: 1; }
-.sensa-today-entry strong { display: block; font-size: 1rem; font-weight: 500; text-wrap: balance; }
+.sensa-today-entry strong { display: block; font-size: .8125rem; font-weight: 500; text-wrap: balance; }
 .sensa-today-entry > span > span { display: block; margin-top: 0.375rem; font-size: 0.875rem; line-height: 1.7; color: var(--sensa-fg-secondary); text-wrap: pretty; }
 .sensa-today-entry:focus-visible { outline: 2px solid var(--sensa-focus); outline-offset: 4px; border-radius: var(--sensa-radius-control); }
 @media (hover: hover) and (pointer: fine) { .sensa-today-entry:hover { background: var(--sensa-surface-subtle); } }
 @media (max-width: 40rem) {
-  .sensa-today-learning { padding: 1.25rem; }
+  .sensa-today-learning { padding: 1rem 0; }
   .sensa-today-actions { align-items: stretch; flex-direction: column; }
   .sensa-today-invitation h2 { font-size: 1.75rem; }
 }
+.sensa-today > [data-sensa-page-region="header"] { padding-top: 1.5rem; margin-bottom: 1.25rem; }
+.sensa-today > [data-sensa-page-region="primary"] { margin-top: 0; }

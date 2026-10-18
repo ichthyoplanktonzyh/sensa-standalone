@@ -132,7 +132,7 @@ test('direct enrollment persists one fixed intent without a Meaning or fabricate
   await api.restoreLibraryTransaction(async(tx:any)=>{tx.put('packageInstallations',collision.pack.key,collision.installation);tx.put('packageCache',collision.pack.key,collision.pack);});
   const collisionSource=await api.learningSystem.read({kind:'direct_source',reference:collision.reference});
   const collisionInput={...input,operationId:crypto.randomUUID(),reference:collision.reference,expectedDigest:collisionSource.sourceDigest};
-  await expect(api.learningSystem.execute(collisionInput)).rejects.toThrow('invalidTarget');
+  await expect(api.learningSystem.execute(collisionInput)).rejects.toThrow('meaningChanged');
   expect(await api.readLibrary((tx:any)=>tx.get('operations',collisionInput.operationId))).toBeUndefined();
   expect((await snapshot()).learningTargets).toEqual(updated.learningTargets);
  }finally{await rm(directory,{recursive:true,force:true});}

@@ -209,7 +209,7 @@
     "feedback": "反馈与内容纠错",
     "feedbackText": "产品反馈、内容纠错、账号恢复或删除问题均可联系支持。仅在确有帮助时附上诊断文件；文件包含运行状态和数量，不包含学习内容、邮箱、记录标识、网址、token 或调用栈。",
     "contact": "联系支持",
-    "unavailable": "此构建未配置支持联系方式，不应发布给用户。",
+    "unavailable": "支持联系方式暂不可用。",
     "diagnostics": "脱敏诊断",
     "diagnosticsText": "下载一份本机 JSON 报告，其中仅含发布版本、浏览器能力、存储和同步状态。附在支持请求前请先自行查看。",
     "diagnosticsDownload": "下载诊断文件",
@@ -229,7 +229,7 @@
     "storageBudget": "浏览器为本站估算：已使用 {{used}} MiB / {{quota}} MiB。该数值也可能包含应用文件。",
     "storageBudgetWarning": "浏览器为本站提供的空间已使用超过 80%：{{used}} MiB / {{quota}} MiB。请尽快导出备份并释放设备空间。",
     "clearTitle": "清除本机资料",
-    "clearIntro": "仅清除这个浏览器中的资料、学习进度和模型设置，不删除账号。需要保留的内容请先在上方导出备份。",
+    "clearIntro": "仅清除这个浏览器中的资料、学习进度和模型设置，不删除账号。需要保留的内容请先导出备份。",
     "clearInspect": "检查要清除的资料",
     "clearSummary": "将移除 {{drafts}} 份材料、{{meanings}} 个意思、{{packages}} 个学习包、{{targets}} 项学习内容和 {{events}} 条学习记录。",
     "clearPending": "还有 {{count}} 项未完成准备；清除后将无法继续。",
@@ -237,5 +237,24 @@
     "clearConfirm": "我已保存需要的备份，确认清除以上本机资料。",
     "clearAction": "确认清除本机资料",
     "clearDone": "本机资料已清除。重新打开应用可开始使用空资料库。"
+  },
+  "syncRecovery": {
+    "blocked": "同步需要检查后才能继续。本地资料仍在。请先备份并下载诊断，再联系支持。",
+    "hint": "备份只保存本机资料，不会解决同步问题，也不包含尚未下载的云端更改。",
+    "backup": "备份本机资料",
+    "hideBackup": "收起备份"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "为新设备准备资料",
+    "preparing": "正在为其他设备准备账号资料…",
+    "preparingUpload": "正在上传为其他设备准备的资料…",
+    "receiving": "正在接收账号资料…",
+    "prepared": "已为新设备准备好账号资料。",
+    "preparationFailed": "未完成新设备的资料准备。已同步的资料仍在，可稍后重试。",
+    "preparationCancelled": "已停止新设备的资料准备。已同步的资料仍在。",
+    "stop": "停止本次同步",
+    "stopping": "正在停止…",
+    "cancelled": "已停止本次同步。已保存的资料仍在，可手动重试。",
+    "processed": "已处理数据：{{amount}} MiB"
   }
 }

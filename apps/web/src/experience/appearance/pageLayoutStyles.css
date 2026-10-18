@@ -113,6 +113,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+[data-sensa-shell-item-short-label] { display: none; }
+@media (max-width: 63.99rem) {
+ [data-sensa-shell-item-label] { display: none; }
+ [data-sensa-shell-item-short-label] { display: block; max-width: 100%; font-size: inherit; line-height: 1.3; white-space: normal; overflow-wrap: anywhere; hyphens: auto; }
+}
 
 [data-sensa-shell-utility-label] {
   position: absolute;
@@ -420,3 +425,38 @@
   grid-row: 2;
   overflow: hidden;
 }
+
+/* Expression canvas and pinned preview share their functional layout across skins. */
+.sensa-expression-graph-workspace { display: flex; min-width: 0; }
+.sensa-expression-graph-surface { flex: 1; height: max(25rem, calc(100dvh - 22rem)); }
+.sensa-expression-graph-detail { width: min(22rem, 40%); max-height: max(25rem, calc(100dvh - 22rem)); overflow-y: auto; overflow-wrap: anywhere; }
+.sensa-expression-point:focus-visible .sensa-expression-dot { stroke: var(--sensa-fg-primary); }
+
+/* Keep actual charts and content readable; overflow stays in their own region. */
+.sensa-statistics { --sensa-layout-detail-region-gap: 1.25rem; }
+.sensa-stat-period button[aria-pressed=true] { font-weight: 600; }
+.sensa-stat-controls label { min-width: 0; }
+.sensa-stat-controls :is(input,select) { max-width: 100%; }
+.sensa-stat-counts dt { min-height: 2.75rem; overflow-wrap: anywhere; }
+.sensa-stat-record > span { flex-basis: 12rem; }
+.sensa-stat-trend-scroll:focus-visible { outline: 2px solid var(--sensa-focus); outline-offset: 4px; }
+.sensa-world-secondary label { min-width: 0; }
+.sensa-world-secondary select { max-width: 100%; }
+.sensa-settings-row > span { overflow-wrap: anywhere; }
+@media (max-width: 40rem) {
+ .sensa-statistics .sensa-stat-counts { gap: .625rem; }
+ .sensa-statistics .sensa-stat-counts dt { font-size: .8125rem; line-height: 1.6; }
+ .sensa-stat-record time { text-align: start; }
+ #s-real-world-listening #real-world-listening-controls { padding-inline: .5rem; }
+ #s-real-world-listening #real-world-listening-controls > div:nth-child(2) { gap: 0; }
+ #s-real-world-listening #real-world-listening-controls > div:nth-child(2) > button { padding-inline: .5rem; min-width: 2.75rem; }
+ #s-real-world-listening #real-world-listening-controls > div:nth-child(2) > button:nth-child(3) { margin-inline: .25rem; }
+}
+
+/* Secondary World filters reveal on demand at phone widths. */
+.sensa-world-filters > summary { list-style: none; }
+.sensa-world-filters > summary::after { content: '⌄'; margin-inline-start: .5rem; }
+.sensa-world-filters[open] > summary::after { content: '⌃'; }
+@media (min-width: 48rem) { .sensa-world-filters > summary { display: none; } }
+.sensa-world [data-sensa-page-region="navigation"] button { overflow-wrap: normal; word-break: normal; hyphens: auto; }
+.sensa-stat-counts dt { overflow-wrap: normal; word-break: normal; hyphens: auto; min-block-size: 2.75rem; }

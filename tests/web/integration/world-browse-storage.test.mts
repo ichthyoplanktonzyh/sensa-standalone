@@ -1,3 +1,4 @@
+import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 /** Actual SQLite/Wasm: bounded PRIVATE browsing, shared authority and atomic derivation. */
 import {test,expect,describe,beforeAll,afterAll} from 'vitest';
 import init from '@sqlite.org/sqlite-wasm';
@@ -8,7 +9,7 @@ import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec'
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {createSeededClock} from '../../../apps/web/src/experience/personalMeaningJourney/ports';
-import {summarizeWorldItem,worldLearningChoice} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
+import {summarizeWorldItem,worldLearningChoice,worldItemFromRegistry,projectWorldGraphItem,worldSearchText,matchesWorldFilter,matchesWorldLanguages} from '../../../apps/web/src/experience/personalMeaningJourney/worldRead';
 import type {JourneyState} from '../../../apps/web/src/experience/personalMeaningJourney/store';
 import type {SqliteMutation} from '../../../apps/web/src/data/library/sqliteProtocol';
 import {semanticLookupPayload,semanticLookupSpec,syntheticSemanticWorld,advanceSemanticHeads,deleteFirstMeaning} from '../support/semanticLookupFixtures';
@@ -17,10 +18,7 @@ import {directPublishedFixture} from '../support/directPublishedFixture';
 const sqlite=await init(),encode=(value:unknown)=>JSON.stringify(encodeBackupValue(value));
 const ids={senses:'senseId',senseVersions:'senseVersionId',expressions:'expressionId',expressionVersions:'expressionVersionId',bindings:'senseExpressionBindingId',bindingVersions:'bindingVersionId'} as const;
 function rows(state:JourneyState):SqliteMutation['puts']{
- const result:SqliteMutation['puts']=[{table:'semanticState',key:'root',encodedValue:encode({version:state.version})}];
- for(const value of state.meanings)result.push({table:'semanticMeanings',key:value.personalMeaning.personalMeaningId,encodedValue:encode(value)});
- for(const kind of Object.keys(ids) as Array<keyof typeof ids>)state.registry[kind].forEach((value,ordinal)=>result.push({table:'semanticRegistry',key:`${kind}:${(value as unknown as Record<string,string>)[ids[kind]]}`,encodedValue:encode({kind,ordinal,value})}));
- return result;
+ return [...semanticRecords(state)].map(row=>({...row,encodedValue:encode(row.value)}));
 }
 async function seed(){
  const repository=new MemoryJourneyRepository(),modules=createJourneyModules({repository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
@@ -107,6 +105,7 @@ test('memory and SQLite World reads agree on a deleted unbound Meaning and keep 
   expect(trash.pending).toBe(1);expect(trash.next?.personalMeaningId).toBe(meaningId);
   for(const filter of ['all','pending','deleted','binding','complete'] as const)for(const term of ['', 'borrow', 'no such context']){
    const selection={...query,filter,query:term};expect(await memory.worldBrowse(selection)).toEqual(database.worldBrowse(selection));
+   for(const offset of [0,1,2])expect(await memory.worldBrowse({...selection,offset,limit:1})).toEqual(database.worldBrowse({...selection,offset,limit:1}));
   }
  }finally{database.close();}
 });
@@ -115,7 +114,7 @@ test('World pages preserve exact labels/phases, search private Context, and neve
  const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
  try{
   const {state,modules}=await seed();database.commit({clears:[],deletes:[],puts:rows(state),contentRevision:1});
-  expect(database.worldBrowse(query)).toEqual({items:modules.personalMeaningJourney.getWorldItems().map(summarizeWorldItem),total:1,pending:0,next:null});
+  expect(database.worldBrowse(query)).toEqual({items:modules.personalMeaningJourney.getWorldItems().map(summarizeWorldItem),total:1,pending:0,next:null,expressionLanguages:['en'],expressionCount:1});
   const choices=modules.personalMeaningJourney.getLearningSources(state.meanings[0]!.personalMeaning.personalMeaningId).map(worldLearningChoice);
   expect(database.worldLearningChoices({...query,targetLanguageTag:'en'})).toEqual({items:choices,total:1});
   expect(database.worldLearningChoices({...query,query:'ＭＡＹ',targetLanguageTag:'en'}).items).toEqual(choices);
@@ -157,7 +156,11 @@ test('a failed World-index write rolls back source facts and existing pages; mis
   raw.exec("CREATE TEMP TRIGGER reject_choice_delete BEFORE DELETE ON sensa_world_learning_choices BEGIN SELECT RAISE(ABORT,'fixture-choice-index-failure'); END;");
   expect(()=>database.commit({clears:[],deletes:[],puts:rows(deleteFirstMeaning(state)).filter(row=>row.table==='semanticMeanings'),contentRevision:2})).toThrow('fixture-choice-index-failure');
   expect(database.entries('semanticMeanings')).toEqual(source);expect(database.worldLearningChoices({...query,targetLanguageTag:'en'})).toEqual(choices);
-  raw.exec('DROP TRIGGER reject_choice_delete;DROP TABLE sensa_world_browse_search;');
+  raw.exec('DROP TRIGGER reject_choice_delete;');
+  raw.exec("CREATE TEMP TRIGGER reject_expression_member BEFORE INSERT ON sensa_world_expression_members BEGIN SELECT RAISE(ABORT,'fixture-expression-member-failure'); END;");
+  expect(()=>database.commit({clears:[],deletes:[],puts:rows(advanceSemanticHeads(state)).filter(row=>row.table==='semanticMeanings'||row.table==='semanticContexts'),contentRevision:2})).toThrow('fixture-expression-member-failure');
+  expect(database.entries('semanticMeanings')).toEqual(source);expect(database.worldBrowse(query)).toEqual(before);
+  raw.exec('DROP TRIGGER reject_expression_member;DROP TABLE sensa_world_expression_members;');
   // Initialization only replaces derived tables and their own metadata.
   new SqliteRecordDatabase(sqlite,raw,'memory').initialize();
   expect(database.worldBrowse(query)).toEqual(before);expect(database.entries('semanticMeanings')).toEqual(source);
@@ -181,11 +184,38 @@ test('one Meaning with multiple accepted bindings exposes every exact pin and se
   database.commit({clears:[],deletes:[],puts:rows(await repository.load()),contentRevision:1});
   const sources=gateway.getLearningSources(accepted.personalMeaningId);
   expect(sources).toHaveLength(3);
+  const memory=new MemoryRecordAdapter();await memory.commit({clears:[],deletes:[],puts:rows(await repository.load()),contentRevision:1});
+  for(const expressionLanguages of [[],['en'],['fr'],['en','fr'],['ja']]){
+   const selection={...query,expressionLanguages};
+   expect(await memory.worldBrowse(selection)).toEqual(database.worldBrowse(selection));
+  }
+  const languagePlan=raw.exec({sql:'EXPLAIN QUERY PLAN SELECT meaning_id FROM sensa_world_expression_members WHERE language_tag=?',bind:['fr'],rowMode:'object',returnValue:'resultRows'}) as {detail:string}[];
+  expect(languagePlan.some(row=>row.detail.includes('sensa_world_expression_language'))).toBe(true);
+  expect(database.worldBrowse({...query,expressionLanguages:['fr']})).toMatchObject({total:1,expressionCount:1,expressionLanguages:['en','fr']});
+  expect(database.worldBrowse({...query,expressionLanguages:['en','fr']})).toMatchObject({total:1,expressionCount:3});
+  expect(database.worldBrowse({...query,expressionLanguages:['ja']})).toMatchObject({total:0,expressionCount:0});
+  expect(database.worldBrowse({...query,query:'May',expressionLanguages:['fr']})).toMatchObject({total:1,expressionCount:1});
+  expect(database.worldLearningChoices({...query,expressionLanguages:['ja'],targetLanguageTag:'en'})).toEqual({items:[],total:0});
+  expect(database.worldLearningChoices({...query,expressionLanguages:['fr'],targetLanguageTag:'en'})).toEqual({items:[],total:0});
+  expect(await memory.worldLearningChoices({...query,expressionLanguages:['fr'],targetLanguageTag:'en'})).toEqual({items:[],total:0});
+  expect(database.worldLearningChoices({...query,expressionLanguages:['fr'],targetLanguageTag:'fr'}).total).toBe(1);
   const en=database.worldLearningChoices({...query,targetLanguageTag:'en'});
   expect(en.total).toBe(2);expect(en.items.map(choice=>choice.label).sort()).toEqual(['borrow','take on loan']);
   expect(new Set(en.items.map(choice=>choice.reference.personalMeaningAlignmentId)).size).toBe(1);
   expect(database.worldLearningChoices({...query,targetLanguageTag:'en',limit:1,offset:1}).items[0]?.key).not.toBe(database.worldLearningChoices({...query,targetLanguageTag:'en',limit:1}).items[0]?.key);
   expect(database.worldLearningChoices({...query,targetLanguageTag:'fr'}).items).toEqual(sources.filter(source=>source.targetLanguageTag==='fr').map(worldLearningChoice));
+  const senseId=sources[0]!.reference.senseId;
+  const annotations={clears:[],deletes:[],puts:[{table:'annotations' as const,key:`saved_sense:${senseId}`,encodedValue:encode({id:`saved_sense:${senseId}`,kind:'saved_sense',senseId,createdAt:1})},{table:'annotations' as const,key:`sense_note:${senseId}`,encodedValue:encode({id:`sense_note:${senseId}`,kind:'sense_note',senseId,body:'隔离笔记',revision:1,createdAt:1,updatedAt:1})}],contentRevision:2};
+  database.commit(annotations);await memory.commit(annotations);
+  for(const referenceFilter of ['saved','notes'] as const)for(const expressionLanguages of [['en'],['fr'],['ja']]){
+   const selection={...query,query:'May',referenceFilter,expressionLanguages};
+   expect(await memory.worldBrowse(selection)).toEqual(database.worldBrowse(selection));
+   expect(database.worldBrowse(selection).total).toBe(expressionLanguages[0]==='ja'?0:1);
+  }
+  const cleared={clears:[],deletes:[],puts:[{...annotations.puts[1]!,encodedValue:encode({id:`sense_note:${senseId}`,kind:'sense_note',senseId,body:'',revision:2,createdAt:1,updatedAt:2})}],contentRevision:3};
+  database.commit(cleared);await memory.commit(cleared);
+  expect(database.worldBrowse({...query,referenceFilter:'notes'}).total).toBe(0);
+  expect(await memory.worldBrowse({...query,referenceFilter:'notes'})).toEqual(database.worldBrowse({...query,referenceFilter:'notes'}));
  }finally{database.close();}
 });
 
@@ -197,7 +227,7 @@ test('a SQLite read failure during World maintenance is not converted into commi
   const id=state.meanings[0]!.personalMeaning.personalMeaningId;
   await modules.personalMeaningJourney.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:id,expectedRevision:state.meanings[0]!.personalMeaning.currentRevision,blocks:[{kind:'text',bodyText:'Changed private source'}]});
   expect(modules.personalMeaningJourney.getDetail(id)?.materialBlocks[0]?.bodyText).toBe('Changed private source');
-  const replacement=rows(await repository.load()).filter(row=>row.table==='semanticMeanings');
+  const replacement=rows(await repository.load()).filter(row=>row.table==='semanticMeanings'||row.table==='semanticContexts');
   const get=database.get.bind(database);let meaningReads=0,injected=false;
   database.get=(table,key)=>{
    if(table==='semanticMeanings'&&key===id)meaningReads++;
@@ -212,6 +242,31 @@ test('a SQLite read failure during World maintenance is not converted into commi
   database.commit({clears:[],deletes:[],puts:replacement,contentRevision:2});
   expect(database.worldBrowse({...query,query:'May asked'}).total,'retired capture remains searchable after Context replacement').toBe(1);
   expect(database.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:1}).revision,'Context-only changes do not revise Expression material').toBe(materialFrame);
+ }finally{database.close();}
+});
+
+test('compact graph snapshots preserve every interpretation and filter without source reads, and rebuild from unchanged facts',async()=>{
+ const {expressionWorldFixture}=await import('../support/expressionWorldFixture');
+ const {buildMeaningGraph,relatedMeaningExpressions}=await import('../../../apps/web/src/experience/ui/meaningGraph');
+ const state=await expressionWorldFixture(),raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory'),memory=new MemoryRecordAdapter();database.initialize();
+ try{
+  const mutation={clears:[],deletes:[],puts:rows(state),contentRevision:1} as SqliteMutation;database.commit(mutation);await memory.commit(mutation);
+  const senseId=state.registry.senses[0]!.senseId,annotations=[{id:`saved_sense:${encodeURIComponent(senseId)}`,kind:'saved_sense',senseId},{id:`sense_note:${encodeURIComponent(senseId)}`,kind:'sense_note',senseId,body:'private note'}];
+  const saved={clears:[],deletes:[],puts:annotations.map(value=>({table:'annotations' as const,key:value.id,encodedValue:encode(value)})),contentRevision:2};database.commit(saved);await memory.commit(saved);
+  const full=state.meanings.map(record=>worldItemFromRegistry(record,state.registry)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||a.personalMeaningId.localeCompare(b.personalMeaningId));
+  const before=database.entries('semanticMeanings'),get=database.get.bind(database);let sourceReads=0;database.get=(table,key)=>{if(['semanticMeanings','semanticRegistry','semanticContexts','media'].includes(table))sourceReads++;return get(table,key);};
+  for(const filter of ['all','continue','binding','complete'] as const)for(const text of ['', '原文来源','borrow','借用编号'] as const)for(const languages of [[],['fr'],['en','fr'],['ja']])for(const referenceFilter of ['all','saved','notes'] as const){
+   const input={query:text,filter,expressionLanguages:languages,referenceFilter},actual=database.worldGraph(input),expected=full.filter(item=>matchesWorldFilter(item,filter)&&matchesWorldLanguages(summarizeWorldItem(item),languages)&&worldSearchText(item).includes(text)&&(referenceFilter==='all'||summarizeWorldItem(item).senseIds?.includes(senseId))).map(projectWorldGraphItem);
+   expect(actual.items).toEqual(expected);expect(await memory.worldGraph(input)).toEqual(actual);
+   const narrowGraph=buildMeaningGraph(actual.items,languages),fullGraph=buildMeaningGraph(full.filter(item=>expected.some(row=>row.personalMeaningId===item.personalMeaningId)),languages);
+   expect(narrowGraph.edges).toEqual(fullGraph.edges);expect(narrowGraph.nodes.map(node=>node.id)).toEqual(fullGraph.nodes.map(node=>node.id));
+   for(const node of fullGraph.nodes)expect(relatedMeaningExpressions(narrowGraph,node.id)).toEqual(relatedMeaningExpressions(fullGraph,node.id));
+   expect(actual.expressionCount).toBe(narrowGraph.nodes.length);
+  }
+  expect(sourceReads).toBe(0);database.get=get;
+  const graphBefore=database.worldGraph({query:'',filter:'all'});raw.exec('UPDATE sensa_world_browse_meta SET version=20;');database.initialize();
+  expect(database.worldGraph({query:'',filter:'all'})).toEqual(graphBefore);expect(database.entries('semanticMeanings')).toEqual(before);
+  raw.exec("UPDATE sensa_world_browse SET valid=0 WHERE id=(SELECT min(id) FROM sensa_world_browse)");expect(()=>database.worldGraph({query:'',filter:'all'})).toThrow('world_source_invalid');
  }finally{database.close();}
 });
 
@@ -232,6 +287,7 @@ describe('private World reads over a prepared synthetic 10k library',()=>{
   const started=performance.now();
   const originalGet=database.get.bind(database);let sourceReads=0;
   database.get=(table,key)=>{if(table==='semanticMeanings'||table==='semanticRegistry')sourceReads++;return originalGet(table,key);};
+  const graph=database.worldGraph({query:'',filter:'all'});expect(graph.items).toHaveLength(10_000);expect(graph.expressionCount).toBe(10_000);expect(JSON.stringify(graph)).not.toMatch(/bodyText|capturedSources|semanticSpec|dataUrl/);
   const page=database.worldBrowse({...query,limit:40}),last=database.worldBrowse({...query,offset:9960,limit:40});
   const choices=database.worldLearningChoices({...query,targetLanguageTag:'en',limit:64});
   expect(choices.total).toBe(10_000);expect(choices.items).toHaveLength(64);

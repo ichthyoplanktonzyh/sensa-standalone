@@ -40,6 +40,8 @@ jobs:
         run: node --import tsx scripts/release/semanticLookupRetention.mts
       - name: Erase expired unreferenced sync blocks
         id: sync-retention
+        env:
+          SENSA_LIBRARY_HISTORY_RETENTION_ENABLED: ${{ vars.SENSA_LIBRARY_HISTORY_RETENTION_ENABLED }}
         run: node --import tsx scripts/release/libraryCloudRetention.mts
       - name: Erase expired model request receipts
         id: model-retention

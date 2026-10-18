@@ -7,41 +7,33 @@ import {test,expect,chromium} from '@playwright/test';
 import {createServer as createViteServer,type ViteDevServer} from 'vite';
 import {sqlitePoolDirectory,sqliteLibrarySchemaVersion,type SqliteWorkerInput,type SqliteWorkerResult} from '../../../apps/web/src/data/library/sqliteProtocol';
 
-for(const interrupted of [false,true])test(`OPFS baseline layout upgrade preserves exact bytes across reopen (native short write: ${interrupted})`,async({browser},testInfo)=>{
-  test.setTimeout(120_000);
-  let vite:ViteDevServer|undefined,http:Server|undefined;
-  const context=await browser.newContext(),page=await context.newPage(),entryUrl=`/@fs/${resolve('scripts/support/sqliteRuntimeFailureBrowserEntry.ts')}`;
-  type FixtureInput=SqliteWorkerInput|{kind:'close'|'test_arm_short_write'|'test_native_write_stats'|'test_seed_baseline_layout17'|'test_probe_baseline_upgrade'|'test_baseline_upgrade_evidence'};
-  type Snapshot={version:number;definition:string;indexes:unknown[];facts:unknown[]};
-  const invoke=(input:FixtureInput)=>page.evaluate(async({entryUrl,input})=>{const api=await import(/* @vite-ignore */ entryUrl);return api.request(input);},{entryUrl,input}) as Promise<SqliteWorkerResult>;
-  const value=(reply:SqliteWorkerResult)=>{expect(reply.ok,reply.ok?'':reply.error).toBe(true);if(!reply.ok)throw Error(reply.error);return reply.value;};
-  const reopen=()=>page.evaluate(async entryUrl=>{const api=await import(/* @vite-ignore */ entryUrl);api.terminate();await api.open();},entryUrl);
-  const encoded=JSON.stringify(['object',[['opaque',['string','Synthetic owner text: '+'exact '.repeat(2000)]],['undefined',['undefined']],['when',['date','2026-10-03T00:00:00.000Z']]]]);
-  const refs=['b'.repeat(64),'a'.repeat(64),'b'.repeat(64)];
-  try{
-    vite=await createViteServer({configFile:resolve('apps/web/vite.config.ts'),root:resolve('apps/web'),logLevel:'error',server:{middlewareMode:true,hmr:false,fs:{allow:[process.cwd()]}}});
-    http=createServer(vite.middlewares);http.listen(0,'127.0.0.1');await once(http,'listening');const address=http.address();if(!address||typeof address==='string')throw Error('upgrade_origin_missing');const origin=`http://127.0.0.1:${address.port}`;
-    await page.route('**/*',async route=>{if(new URL(route.request().url()).origin!==origin){await route.abort('blockedbyclient');return;}if(route.request().resourceType()==='document'){await route.fulfill({contentType:'text/html',body:'<!doctype html><body>Isolated layout upgrade</body>'});return;}await route.continue();});
-    await page.goto(origin);await page.evaluate(async entryUrl=>{const api=await import(/* @vite-ignore */ entryUrl);await api.open();},entryUrl);
-    value(await invoke({kind:'initialize'}));
-    value(await invoke({kind:'commit',mutation:{clears:[],deletes:[],puts:[{table:'meta',key:'sentinel',encodedValue:encoded}],syncBaseReplacement:[{table:'meta',key:'sentinel',valueJson:encoded,blockRefs:refs}]}}));
-    const original=value(await invoke({kind:'test_seed_baseline_layout17'})) as Snapshot;expect(original.version).toBe(17);expect(original.definition).toMatch(/WITHOUT ROWID$/u);
-    value(await invoke({kind:'close'}));await reopen();value(await invoke({kind:'test_probe_baseline_upgrade'}));
-    let nativeFault:unknown;
-    if(interrupted){
-      value(await invoke({kind:'test_arm_short_write'}));const failed=await invoke({kind:'initialize'});expect(failed.ok).toBe(false);if(failed.ok)throw Error('expected_native_upgrade_failure');expect(failed.error).toContain('SQLITE_IOERR');
-      const evidence=value(await invoke({kind:'test_baseline_upgrade_evidence'})) as {before:Snapshot};expect(evidence.before).toEqual(original);
-      const stats=value(await invoke({kind:'test_native_write_stats'})) as {fault:{requested:number;returned:number}};expect(stats.fault.returned).toBe(stats.fault.requested-1);nativeFault=stats;
-      value(await invoke({kind:'close'}));await reopen();value(await invoke({kind:'test_probe_baseline_upgrade'}));
-    }
-    value(await invoke({kind:'initialize'}));
-    const evidence=value(await invoke({kind:'test_baseline_upgrade_evidence'})) as {before:Snapshot;after:Snapshot};
-    expect(evidence.before).toEqual(original);expect(evidence.after.version).toBe(sqliteLibrarySchemaVersion);expect(evidence.after.definition).not.toContain('WITHOUT ROWID');expect(evidence.after.facts).toEqual(original.facts);expect(evidence.after.indexes).toEqual(original.indexes);
-    expect(value(await invoke({kind:'get',table:'meta',key:'sentinel'}))).toBe(encoded);
-    expect(value(await invoke({kind:'syncBaseEntries'}))).toEqual([{table:'meta',key:'sentinel',valueJson:encoded,blockRefs:refs}]);
-    value(await invoke({kind:'diagnostics',verifyIntegrity:true}));value(await invoke({kind:'close'}));await reopen();value(await invoke({kind:'initialize'}));expect(value(await invoke({kind:'get',table:'meta',key:'sentinel'}))).toBe(encoded);value(await invoke({kind:'close'}));
-    await testInfo.attach('baseline-layout-upgrade-evidence',{contentType:'application/json',body:JSON.stringify({interrupted,nativeFault,browser:browser.version(),beforeVersion:original.version,afterVersion:evidence.after.version,exactFactsAndRefsPreserved:true,scope:'small synthetic metadata; real OPFS migration/short-write/reopen, not large migration peak disk or memory',paidCalls:0})});
-  }finally{await context.close();if(http)await new Promise<void>((resolve,reject)=>http!.close(error=>error?reject(error):resolve()));await vite?.close();}
+for(const schemaVersion of [17,18] as const)test(`unsupported schema ${schemaVersion} is rejected by native OPFS without changing retained files`,async({browser},testInfo)=>{
+ test.setTimeout(120_000);
+ let vite:ViteDevServer|undefined,http:Server|undefined;
+ const context=await browser.newContext(),page=await context.newPage(),entryUrl=`/@fs/${resolve('scripts/support/sqliteRuntimeFailureBrowserEntry.ts')}`;
+ const invoke=(input:SqliteWorkerInput|{kind:'close'}|{kind:'test_seed_unsupported_schema';schemaVersion:17|18})=>page.evaluate(async({entryUrl,input})=>{const api=await import(/* @vite-ignore */ entryUrl);return api.request(input);},{entryUrl,input}) as Promise<SqliteWorkerResult>;
+ const value=(reply:SqliteWorkerResult)=>{expect(reply.ok,reply.ok?'':reply.error).toBe(true);if(!reply.ok)throw Error(reply.error);return reply.value;};
+ const files=()=>page.evaluate(async directory=>{
+  let root=await navigator.storage.getDirectory();for(const segment of directory.split('/').filter(Boolean))root=await root.getDirectoryHandle(segment);
+  const rows=[];for await(const [name,handle] of (root as FileSystemDirectoryHandle&{entries():AsyncIterable<[string,FileSystemHandle]>}).entries())if(handle.kind==='file'){const file=await (handle as FileSystemFileHandle).getFile(),hash=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());rows.push({name,size:file.size,sha256:Array.from(new Uint8Array(hash),byte=>byte.toString(16).padStart(2,'0')).join('')});}
+  return rows.sort((a,b)=>a.name.localeCompare(b.name));
+ },`${sqlitePoolDirectory}/.opaque`);
+ try{
+  vite=await createViteServer({configFile:resolve('apps/web/vite.config.ts'),root:resolve('apps/web'),logLevel:'error',server:{middlewareMode:true,hmr:false,fs:{allow:[process.cwd()]}}});
+  http=createServer(vite.middlewares);http.listen(0,'127.0.0.1');await once(http,'listening');const address=http.address();if(!address||typeof address==='string')throw Error('unsupported_origin_missing');const origin=`http://127.0.0.1:${address.port}`;
+  await page.route('**/*',async route=>{if(new URL(route.request().url()).origin!==origin){await route.abort();return;}if(route.request().resourceType()==='document'){await route.fulfill({contentType:'text/html',body:'<!doctype html><body>Isolated unsupported format rejection</body>'});return;}await route.continue();});
+  await page.goto(origin);await page.evaluate(async entryUrl=>{const api=await import(/* @vite-ignore */ entryUrl);await api.open();},entryUrl);
+  value(await invoke({kind:'initialize'}));const encoded=JSON.stringify(['object',[['opaque',['string','Retained synthetic owner body']]]]),refs=['b'.repeat(64),'a'.repeat(64),'b'.repeat(64)];
+  value(await invoke({kind:'commit',mutation:{clears:[],deletes:[],puts:[{table:'meta',key:'sentinel',encodedValue:encoded}],syncBaseReplacement:[{table:'meta',key:'sentinel',valueJson:encoded,blockRefs:refs}]}}));
+  const retained=value(await invoke({kind:'test_seed_unsupported_schema',schemaVersion})) as {version:number;facts:unknown[]};expect(retained.version).toBe(schemaVersion);
+  value(await invoke({kind:'close'}));const before=await files();expect(before.length).toBeGreaterThan(0);
+  for(let attempt=0;attempt<2;attempt++){
+   await page.evaluate(async entryUrl=>{const api=await import(/* @vite-ignore */ entryUrl);api.terminate();await api.open({unmodified:true});},entryUrl);
+   const rejected=await invoke({kind:'initialize'});expect(rejected).toMatchObject({ok:false,error:`sqlite_schema_legacy:${schemaVersion}`});
+   expect(await files()).toEqual(before);value(await invoke({kind:'close'}));expect(await files()).toEqual(before);
+  }
+  await testInfo.attach('unsupported-schema-preservation',{contentType:'application/json',body:JSON.stringify({schemaVersion,supported:sqliteLibrarySchemaVersion,browser:browser.version(),retained,before,after:await files(),paidCalls:0,scope:'Real native OPFS v12 pool; synthetic legacy header and facts; repeated unmodified production Worker rejects without file deletion, migration or byte changes.'})});
+ }finally{await context.close();if(http)await new Promise<void>((resolve,reject)=>http!.close(error=>error?reject(error):resolve()));await vite?.close();}
 });
 
 test('native OPFS short write quarantines the production connection without deleting committed data',async({browser},testInfo)=>{

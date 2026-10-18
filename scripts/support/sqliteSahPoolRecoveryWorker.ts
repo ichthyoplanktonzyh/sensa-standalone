@@ -13,7 +13,7 @@ type PoolOptions=Readonly<{
 
 type WorkerRequest=PoolOptions&Readonly<{
   requestId:string;
-  action:'createSentinel'|'initExpectedConflict'|'openAndRead'|'openAbruptly'|'holdSlots'|'probeSlots'|'releaseSlots'|'damageDigest'|'restoreDigest'|'inspectFile'|'createEmptySlot';
+  action:'createSentinel'|'initExpectedConflict'|'openAndRead'|'openAbruptly'|'holdSlots'|'probeSlots'|'releaseSlots'|'damageDigest'|'restoreDigest'|'inspectFile'|'createEmptySlot'|'createUnassociatedTail';
   sentinelKey?:string;
   sentinelValue?:string;
   slotCount?:number;
@@ -162,6 +162,30 @@ const createEmptySlot=async(request:WorkerRequest):Promise<unknown>=>{
   const file=await(await directory.getFileHandle(fileName,{create:true})).getFile();
   if(file.size!==0)throw new Error('fixture_empty_slot_not_empty');
   return {fileName,size:file.size};
+};
+
+/** A synthetic free slot models unlink stopping after its canonical header was flushed. */
+const createUnassociatedTail=async(request:WorkerRequest):Promise<unknown>=>{
+  const directory=await poolOpaqueDirectory(request.directory);
+  let fileName:string|undefined,mainFileName:string|undefined;
+  for await(const [name,entry] of directory.entries()){
+    if(entry.kind!=='file')continue;
+    const file=await (entry as FileSystemFileHandle).getFile();
+    const header=new Uint8Array(await file.slice(0,524).arrayBuffer());
+    if(header.length!==524)throw Error('fixture_incomplete_pool_header');
+    const path=new TextDecoder().decode(header.subarray(0,512)).split('\0')[0];
+    if(path===request.databaseFile)mainFileName=name;
+    if(!fileName&&file.size===4096&&header.every(value=>value===0))fileName=name;
+  }
+  if(!fileName||!mainFileName)throw Error('fixture_free_slot_or_database_missing');
+  const mainBefore=await inspectFile({...request,fileName:mainFileName});
+  const handle=await(await directory.getFileHandle(fileName)).createSyncAccessHandle();
+  try{
+    const bytes=new TextEncoder().encode('synthetic-unlinked-tail');
+    if(handle.write(bytes,{at:4096})!==bytes.length)throw Error('fixture_tail_short_write');
+    handle.flush();
+  }finally{handle.close();}
+  return {fileName,mainFileName,mainBefore,size:4096+'synthetic-unlinked-tail'.length};
 };
 
 const createSentinel=async(request:WorkerRequest):Promise<unknown>=>{
@@ -341,6 +365,7 @@ scope.addEventListener('message',(event:MessageEvent<WorkerRequest>)=>{
       case 'damageDigest':case 'restoreDigest':return editDigest(request);
       case 'inspectFile':return inspectFile(request);
       case 'createEmptySlot':return createEmptySlot(request);
+      case 'createUnassociatedTail':return createUnassociatedTail(request);
     }
   })().then(
     value=>respond(request.requestId,true,value),

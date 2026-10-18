@@ -1,3 +1,5 @@
+import {librarySyncManifest,librarySyncPatch,type LibrarySyncHead} from '@sensa/contracts/sensa';
+import {decodeLibrarySyncBlock} from '@sensa/contracts/sensa/library-sync-blocks';
 import {readCloudSync,synchronizeLibrary,type SyncRequest} from '../../apps/web/src/data/library/cloudSync';
 import {
   assertCurrentLibrary,
@@ -39,8 +41,8 @@ const id=(index:number)=>`00000000-0000-4000-8000-${String(index).padStart(12,'0
 const sharedImage=`data:image/jpeg;base64,${'YWJj'.repeat(16_384)}`;
 
 function fakeCloud(){
-  const blocks=new Map<string,string>(),commits=new Map<string,{digest:string;revision:number}>();
-  let head:{revision:number;manifest:string[]|null}={revision:0,manifest:null};
+  const blocks=new Map<string,string>(),commits=new Map<string,{digest:string;head:LibrarySyncHead}>(),rows=new Map<string,any>();
+  let head:LibrarySyncHead={revision:0,manifest:null};
   const metrics={uploadedBlocks:0,uploadedChars:0,fetchedBlocks:0};
   const request:SyncRequest=async(path,body:any)=>{
     if(path==='/head')return {...head,storage:{usedBytes:[...blocks.values()].reduce((sum,value)=>sum+value.length,0),capacityBytes:256*1024*1024}};
@@ -55,10 +57,15 @@ function fakeCloud(){
     }
     if(path==='/commit'){
       const digest=JSON.stringify(body),prior=commits.get(body.operationId);
-      if(prior){if(prior.digest!==digest)throw new Error('operation_conflict');return {...head,revision:prior.revision};}
+      if(prior){if(prior.digest!==digest)throw new Error('operation_conflict');return prior.head;}
       if(body.baseRevision!==head.revision)throw new Error('library_sync_conflict');
-      if(body.manifest.some((blockHash:string)=>!blocks.has(blockHash)))throw new Error('library_sync_missing_block');
-      head={revision:head.revision+1,manifest:[...body.manifest]};commits.set(body.operationId,{digest,revision:head.revision});return {...head};
+      const refs=body.manifest??body.patch;if(refs.some((blockHash:string)=>!blocks.has(blockHash)))throw new Error('library_sync_missing_block');
+      const value=JSON.parse(refs.map((ref:string)=>decodeLibrarySyncBlock(blocks.get(ref)!)).join(''));
+      const publication=body.manifest?librarySyncManifest.parse(value):librarySyncPatch.parse(value),changes='rows' in publication?publication.rows:publication.changes;
+      for(const row of changes){const key=JSON.stringify([row.table,row.key]);if(row.blocks)rows.set(key,row);else rows.delete(key);}
+      const requestDigest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(digest))),b=>b.toString(16).padStart(2,'0')).join('');
+      head={revision:head.revision+1,manifest:{libraryId:publication.libraryId,learnerId:publication.learnerId,snapshotRevision:1,floor:1,records:rows.size}};
+      const receipt={...head,receipt:{operationId:body.operationId,requestDigest}};commits.set(body.operationId,{digest,head:receipt});return receipt;
     }
     throw new Error(`unexpected_request:${path}`);
   };

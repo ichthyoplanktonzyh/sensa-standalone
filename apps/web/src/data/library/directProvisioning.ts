@@ -1,3 +1,4 @@
+import {stableLearningTargetId} from '../../learning/runtime/learningIdentity';
 import {stableUuid} from '@sensa/learning-kernel';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {curriculumEnrollmentSchema,assertDirectEnrollmentSource} from './curriculumEnrollments';
@@ -27,7 +28,7 @@ export async function directProvisioningSource(tx:Pick<LibraryTransaction,'get'>
   assertDirectEnrollmentSource(selection,(table,key)=>table==='packageInstallations'&&key===origin.packageKey?installation:undefined);
  }else await resolveDirectLearningSource(tx,selection.reference,selection.sourceDigest);
  const source:DirectProvisioningSource={sourceKind:'stable_sense',reference:{kind:'stable_sense',enrollmentId,sourceDigest:selection.sourceDigest,
-  senseId:selection.reference.senseId,senseVersionId:selection.reference.senseVersionId,bindingId:selection.reference.bindingId,bindingVersionId:selection.reference.bindingVersionId},
+  senseId:selection.reference.senseId,senseVersionId:selection.reference.senseVersionId,expressionId:selection.reference.expressionId,expressionVersionId:selection.reference.expressionVersionId,bindingId:selection.reference.bindingId,bindingVersionId:selection.reference.bindingVersionId},
   targetLanguageTag:selection.targetLanguageTag,expression:structuredClone(selection.expression),semanticSpec:structuredClone(selection.semanticSpec)};
  return {owner,enrollment,selection,source};
 }
@@ -44,7 +45,7 @@ export async function enrollDirectProvisioning(operationId:string,enrollmentId:s
   await assertSupplementalMembershipActive(tx,supplementalSourceDescriptor({kind:'stable_sense',id:enrollmentId},enrollment,owner.learnerId).id);
   const id=provisioningTaskId(source.reference,context.languageRouteId),existing=await tx.get<ContentProvisioningTask<DirectProvisioningReference>>('personalLearning',id);
   if(existing){if(canonicalConsumerJson(existing.source)!==canonicalConsumerJson(source.reference))throw new Error('localFlow.meaningChanged');return existing;}
-  const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${source.reference.senseVersionId}:${source.reference.bindingVersionId}`),target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
+  const targetId=stableLearningTargetId(owner.learnerId,source.reference.senseId,source.reference.expressionId),target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
   if(target)assertDirectTargetIdentity(target,selection,owner.learnerId);
   const covered=target&&await currentPlanningMembership(tx,target,context);
   const task:ContentProvisioningTask<DirectProvisioningReference>={id,source:source.reference,targetId,curriculumMembershipId:provisioningMembershipId(source.reference,targetId,context.languageRouteId),languageContext:context,planRevision:crypto.randomUUID(),useContext:false,status:covered?'covered':'waiting',...(covered?{coveredByMembershipId:covered.id}:{}),attemptId:null,leaseUntil:0,notice:'',createdAt:new Date().toISOString()};

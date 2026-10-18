@@ -81,11 +81,24 @@
     "readFailed": "Modelleinstellungen konnten nicht geladen werden. Versuchen Sie es erneut.", "saveFailed": "Einstellungen konnten nicht gespeichert werden. Versuchen Sie es erneut.", "statusFailed": "Der Dienststatus ist nicht verfügbar. Versuchen Sie es erneut.", "updated": "Einstellungen aktualisiert.", "keyLabel": "API-Schlüssel für {{name}}", "modelList": "Verfügbare Modelle auflisten", "diagnostics": "Diagnose", "purposeTeacher": "Klärung und Erklärung", "purposeContent": "Erstellung von Lernmaterial", "purposeReview": "Unabhängige Prüfung", "purposeReference": "Bestimmung der Wortbedeutung"
   },
   "support": {
-    "about": "Über Sensa", "aboutText": "Beginnen Sie mit einer bestimmten Bedeutung, verknüpfen Sie sie mit einem Ausdruck und machen Sie sich durch Lernen und Wiederholen damit vertraut.", "privacy": "Datenschutz & Daten",
+    "about": "Über Sensa",
+    "aboutText": "Beginnen Sie mit einer bestimmten Bedeutung, verknüpfen Sie sie mit einem Ausdruck und machen Sie sich durch Lernen und Wiederholen damit vertraut.",
+    "privacy": "Datenschutz & Daten",
     "privacyText": "Inhalte und Lernfortschritt werden zuerst in diesem Browser gespeichert. Wenn Sie sich anmelden, werden unterstützte Datensätze mit dem aktuellen Kontostand synchronisiert; die Synchronisierung ist keine versionierte Sicherung. Beim Löschen der Websitedaten werden lokale und noch nicht synchronisierte Datensätze entfernt. Bei einer Kontolöschung wird die serverseitige Kontokopie gelöscht; Offlinekopien in anderen Browsern müssen auf den jeweiligen Geräten entfernt werden.",
-    "providers": "Externe Dienste", "providersText": "Ein konfigurierter Modellanbieter erhält den Text oder die Bilder, die für die Modellanfrage erforderlich sind. Der standardmäßige Sprachanbieter erhält Text, Sprache und ausgewählte Stimme, die zum Erzeugen der Audiodatei benötigt werden. Wörterbuch- und YouGlish-Anfragen übermitteln die Suchanfrage und übliche Netzwerkmetadaten an diese Dienste. Für eigene Anbieter gelten deren Nutzungs- und Aufbewahrungsbedingungen.",
-    "retention": "Speicherung und Aufbewahrung", "retentionText": "Kurzlebige semantische Suchdaten laufen nach 24 Stunden ab. Erfolgreiche Antworten verwalteter Modelle werden bis zu 6 Stunden und Anfragemetadaten bis zu 26 Stunden gespeichert. Der aktuelle Cloud-Synchronisierungspunkt und Kontoinhalte bleiben erhalten, bis sie ersetzt oder gelöscht werden. Verschlüsselte Sicherungsdateien bleiben dort, wo Sie sie speichern.",
-    "feedback": "Feedback & Korrekturen", "feedbackText": "Wenden Sie sich mit Produktfeedback, Inhaltskorrekturen, Fragen zur Kontowiederherstellung oder Löschung an den Support. Fügen Sie die Diagnosedatei nur bei, wenn sie hilfreich ist. Sie enthält Laufzeitstatus und Zähler, aber keine Lerninhalte, E-Mail-Adressen, Datensatzkennungen, URLs, Tokens oder Stacktraces.", "contact": "Support kontaktieren", "unavailable": "Der Supportkontakt ist für diesen Build nicht eingerichtet. Geben Sie diesen Build nicht an Benutzer weiter.", "diagnostics": "Bereinigte Diagnose", "diagnosticsText": "Laden Sie einen lokalen JSON-Bericht mit Release-, Browserfähigkeits-, Speicher- und Synchronisierungsstatus herunter. Prüfen Sie ihn, bevor Sie ihn einer Supportanfrage beifügen.", "diagnosticsDownload": "Diagnose herunterladen", "diagnosticsWorking": "Diagnose wird vorbereitet…", "diagnosticsReady": "Diagnosedatei heruntergeladen.", "diagnosticsFailed": "Die Diagnose konnte nicht erstellt werden. Kontaktieren Sie den Support ohne Anhang."
+    "providers": "Externe Dienste",
+    "providersText": "Ein konfigurierter Modellanbieter erhält den Text oder die Bilder, die für die Modellanfrage erforderlich sind. Der standardmäßige Sprachanbieter erhält Text, Sprache und ausgewählte Stimme, die zum Erzeugen der Audiodatei benötigt werden. Wörterbuch- und YouGlish-Anfragen übermitteln die Suchanfrage und übliche Netzwerkmetadaten an diese Dienste. Für eigene Anbieter gelten deren Nutzungs- und Aufbewahrungsbedingungen.",
+    "retention": "Speicherung und Aufbewahrung",
+    "retentionText": "Kurzlebige semantische Suchdaten laufen nach 24 Stunden ab. Erfolgreiche Antworten verwalteter Modelle werden bis zu 6 Stunden und Anfragemetadaten bis zu 26 Stunden gespeichert. Der aktuelle Cloud-Synchronisierungspunkt und Kontoinhalte bleiben erhalten, bis sie ersetzt oder gelöscht werden. Verschlüsselte Sicherungsdateien bleiben dort, wo Sie sie speichern.",
+    "feedback": "Feedback & Korrekturen",
+    "feedbackText": "Wenden Sie sich mit Produktfeedback, Inhaltskorrekturen, Fragen zur Kontowiederherstellung oder Löschung an den Support. Fügen Sie die Diagnosedatei nur bei, wenn sie hilfreich ist. Sie enthält Laufzeitstatus und Zähler, aber keine Lerninhalte, E-Mail-Adressen, Datensatzkennungen, URLs, Tokens oder Stacktraces.",
+    "contact": "Support kontaktieren",
+    "unavailable": "Die Kontaktdaten des Supports sind derzeit nicht verfügbar.",
+    "diagnostics": "Bereinigte Diagnose",
+    "diagnosticsText": "Laden Sie einen lokalen JSON-Bericht mit Release-, Browserfähigkeits-, Speicher- und Synchronisierungsstatus herunter. Prüfen Sie ihn, bevor Sie ihn einer Supportanfrage beifügen.",
+    "diagnosticsDownload": "Diagnose herunterladen",
+    "diagnosticsWorking": "Diagnose wird vorbereitet…",
+    "diagnosticsReady": "Diagnosedatei heruntergeladen.",
+    "diagnosticsFailed": "Die Diagnose konnte nicht erstellt werden. Kontaktieren Sie den Support ohne Anhang."
   },
   "dataControl": {
     "persistenceTitle": "Schutz des Browserspeichers",
@@ -99,7 +112,7 @@
     "storageBudget": "Browserschätzung für diese Website: {{used}} MiB von {{quota}} MiB belegt. Darin können auch App-Dateien enthalten sein.",
     "storageBudgetWarning": "Diese Website verwendet mehr als 80 % des geschätzten Browser-Speichers: {{used}} MiB von {{quota}} MiB. Exportieren Sie bald eine Sicherung und geben Sie Gerätespeicher frei.",
     "clearTitle": "Lokale Inhalte löschen",
-    "clearIntro": "Löscht Inhalte, Lernfortschritt und Modelleinstellungen nur aus diesem Browser. Ihr Konto wird nicht gelöscht. Exportieren Sie oben eine Sicherung, wenn Sie diese Inhalte behalten möchten.",
+    "clearIntro": "Löscht Inhalte, Lernfortschritt und Modelleinstellungen nur aus diesem Browser. Ihr Konto wird nicht gelöscht. Exportieren Sie zuerst eine Sicherung, wenn Sie diese Inhalte behalten möchten.",
     "clearInspect": "Lokale Inhalte prüfen",
     "clearSummary": "Entfernt werden {{drafts}} Quellen, {{meanings}} Bedeutungen, {{packages}} Pakete, {{targets}} Lerninhalte und {{events}} Ereignisse.",
     "clearPending": "Es gibt {{count}} unvollständige Vorbereitungen. Nach dem Löschen können sie nicht fortgesetzt werden.",
@@ -107,5 +120,24 @@
     "clearConfirm": "Ich habe benötigte Sicherungen gespeichert und bestätige das Löschen dieser lokalen Inhalte.",
     "clearAction": "Lokale Inhalte löschen",
     "clearDone": "Lokale Inhalte gelöscht. Öffnen Sie die App erneut, um die leere Bibliothek zu verwenden."
+  },
+  "syncRecovery": {
+    "blocked": "Die Synchronisierung muss geprüft werden, bevor sie fortgesetzt werden kann. Deine lokalen Daten sind gespeichert. Exportiere eine Sicherung, lade die Diagnose herunter und kontaktiere den Support.",
+    "hint": "Eine Sicherung enthält nur die Daten dieses Geräts. Sie löst das Synchronisierungsproblem nicht und enthält keine noch nicht heruntergeladenen Cloud-Änderungen.",
+    "backup": "Dieses Gerät sichern",
+    "hideBackup": "Sicherung ausblenden"
+  },
+  "cloudSyncPreparation": {
+    "prepareDevice": "Daten für ein neues Gerät vorbereiten",
+    "preparing": "Kontodaten für andere Geräte werden vorbereitet…",
+    "preparingUpload": "Benötigte Daten für das neue Gerät werden übertragen…",
+    "receiving": "Kontodaten werden empfangen…",
+    "prepared": "Die Kontodaten sind für ein neues Gerät bereit.",
+    "preparationFailed": "Die Vorbereitung ist fehlgeschlagen. Versuche es später erneut. Synchronisierte Daten bleiben erhalten.",
+    "preparationCancelled": "Vorbereitung angehalten. Synchronisierte Daten bleiben erhalten.",
+    "stop": "Diese Synchronisierung anhalten",
+    "stopping": "Wird angehalten…",
+    "cancelled": "Synchronisierung angehalten. Du kannst es erneut versuchen.",
+    "processed": "Verarbeitete Daten: {{amount}} MiB"
   }
 }

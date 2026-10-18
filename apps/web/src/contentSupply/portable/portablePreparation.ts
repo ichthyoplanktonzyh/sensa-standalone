@@ -2,13 +2,14 @@ import {
  LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION,
  SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,canonicalConsumerJson,installedLearningContentSchema,
  sensaLightweightInitialMaterializationContentSchema,sensaPortableBookDescriptorSchema,
- type InstalledLearningContent,type SensaLightweightInitialMaterialRole,type SensaPortableBookDescriptor,
+ type InstalledLearningContent,type SensaLightweightInitialMaterialRole,type SensaPortableBookDescriptor,type SensaPortableLightweightPackage,
 } from '@sensa/contracts/sensa';
 import {createSensaPortableLightweightPackageArchive,readSensaPortableLightweightPackage,type SensaPortableLightweightPackageArchive} from '@sensa/content-validator/portable-lightweight';
-import {readSensaPortableBook,type SensaPortableBookPackage} from '@sensa/content-validator/portable-book';
+import {createPortableBookPreview,readPortableBookPreview,readSensaPortableBook,type SensaPortableBookPackage} from '@sensa/content-validator/portable-book';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {portablePackageInstallationFor,publicationBookMembership,type PackageInstallation,type PortablePublicationAttestation} from '../../data/library/packageRecords';
 import {validateInstalledLearningContent} from './installedLearningContent';
+import {portableEntryIdentity} from './portableEntryIdentity';
 
 const invalidPortablePackage=(cause:unknown):never=>{throw new Error('localFlow.resourceInvalid',{cause});};
 
@@ -140,17 +141,13 @@ const compileInstalledContent=(
   if(publication&&!declaration)return invalidPortablePackage(
     new Error('Published Portable Package has no semantic declaration'),
   );
-  const senseSeed=`${value.metadata.packageId}:${value.sense.senseId}`;
-  const bindingSeed=`${senseSeed}:${value.route.targetLanguage}:${value.targetExpression.expressionKind}:${value.targetExpression.text}:${value.targetExpression.spokenForm??''}`;
+
   return installedLearningContentSchema.parse({
     format:'sensa-installed-learning-content-v1',
     targetLanguage:value.route.targetLanguage,
     supportLanguage:value.route.supportLanguage,
     entries:[{
-      senseId:declaration?.sense.senseId??stableUuid(`sensa-portable-sense:${senseSeed}`),
-      senseVersionId:declaration?.sense.senseVersionId??stableUuid(`sensa-portable-sense-version:${senseSeed}`),
-      bindingId:declaration?.binding.senseExpressionBindingId??stableUuid(`sensa-portable-binding:${bindingSeed}`),
-      bindingVersionId:declaration?.binding.bindingVersionId??stableUuid(`sensa-portable-binding-version:${bindingSeed}`),
+      ...portableEntryIdentity(value,!!publication),
       expression:value.targetExpression.text,
       meaning:value.resources.senseConfirmation.text,
       content:compileContent(archive),
@@ -244,9 +241,14 @@ export function readPublishedBook(bytes:Uint8Array,raw:SensaPortableBookDescript
   contentRelease:manifest.contentRelease,route:manifest.route,publishedAt:manifest.publishedAt,
   changeSummary:manifest.changeSummary,memberCount:manifest.members.length,
   byteLength:bytes.byteLength,sha256:archive.archiveDigest,url:descriptor.url,
+  ...(descriptor.preview?{preview:descriptor.preview}:{}),
  });
  if(canonicalConsumerJson(actual)!==canonicalConsumerJson(descriptor))throw new Error('localFlow.catalogMismatch');
  return archive;
+}
+
+export function inspectPublishedBookPreview(bytes:Uint8Array,descriptor:SensaPortableBookDescriptor){
+ return descriptor.preview?readPortableBookPreview(bytes,descriptor):createPortableBookPreview(readPublishedBook(bytes,descriptor));
 }
 
 export function preparePublishedBook(bytes:Uint8Array,descriptor:SensaPortableBookDescriptor):readonly PreparedPortableInstallation[]{

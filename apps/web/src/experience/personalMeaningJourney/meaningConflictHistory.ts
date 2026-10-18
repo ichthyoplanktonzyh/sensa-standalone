@@ -18,17 +18,17 @@ const uuid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[
  * Registry/receipt/media authority as the current Meaning. */
 export function assertMeaningConflictHistory(record:MeaningJourneyRecord):void{
  const history=record.conflictHistory;if(history===undefined)return;
- if(!history||history.version!==1||!Array.isArray(history.branches)||!Array.isArray(history.decisions))invalid();
+ if(!history||Object.keys(history).some(key=>!['version','head','branches','decisions'].includes(key))||history.version!==1||!Array.isArray(history.branches)||!Array.isArray(history.decisions))invalid();
  const branches=new Map<string,MeaningConflictBranch>(),decisions=new Map<string,MeaningConflictDecision>();
  const identity=record.personalMeaning;
  for(const branch of history.branches){
-  if(!branch||!branch.record||'conflictHistory'in branch.record||branch.digest!==digestOf({head:branch.head,record:branch.record})||branches.has(branch.digest))invalid();
+  if(!branch||Object.keys(branch).some(key=>!['digest','head','record'].includes(key))||!branch.record||'conflictHistory'in branch.record||branch.digest!==digestOf({head:branch.head,record:canonicalMeaningFacts(branch.record)})||branches.has(branch.digest))invalid();
   const owner=branch.record.personalMeaning;
   if(!owner||owner.personalMeaningId!==identity.personalMeaningId||owner.learnerUserId!==identity.learnerUserId||(branch.head!==null&&!uuid(branch.head)))invalid();
   branches.set(branch.digest,branch);
  }
  for(const decision of history.decisions){
-  if(!decision||!uuid(decision.id)||decisions.has(decision.id)||!Number.isFinite(Date.parse(decision.createdAt))||!Array.isArray(decision.parents)||decision.parents.length!==2||new Set(decision.parents).size!==2||!decision.parents.includes(decision.selected)||decision.parents.some(parent=>!branches.has(parent))||(decision.base!==null&&!branches.has(decision.base)))invalid();
+  if(!decision||Object.keys(decision).some(key=>!['id','createdAt','parents','selected','base'].includes(key))||!uuid(decision.id)||decisions.has(decision.id)||!Number.isFinite(Date.parse(decision.createdAt))||!Array.isArray(decision.parents)||decision.parents.length!==2||new Set(decision.parents).size!==2||!decision.parents.includes(decision.selected)||decision.parents.some(parent=>!branches.has(parent))||(decision.base!==null&&!branches.has(decision.base)))invalid();
   decisions.set(decision.id,decision);
  }
  if(!decisions.has(history.head))invalid();
@@ -106,6 +106,10 @@ export function mergeMeaningConflictHistory(base:MeaningJourneyRecord,local:Mean
   if(covers(remote,local))return {ok:true as const,value:remote};
   if(covers(local,remote))return {ok:true as const,value:local};
   if((local.conflictHistory?.head??null)!==(remote.conflictHistory?.head??null))return {ok:false as const};
+  // A later revision can contain the exact earlier branch even when both
+  // devices have moved past the checkpoint. Compare retained facts, not clocks.
+  if(remote.personalMeaning.currentRevision>local.personalMeaning.currentRevision&&meaningBranchExtends(plain(local),plain(remote)))return {ok:true as const,value:remote};
+  if(local.personalMeaning.currentRevision>remote.personalMeaning.currentRevision&&meaningBranchExtends(plain(remote),plain(local)))return {ok:true as const,value:local};
   const merged=mergeMeaningBranch(plain(base),plain(local),plain(remote));if(!merged.ok)return merged;
   const head=local.conflictHistory?.head;
   if(head)merged.value.conflictHistory={version:1,head,...histories(local,remote)};
