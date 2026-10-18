@@ -79,6 +79,7 @@ jobs:
           npm run build -w @sensa/learning-kernel
           npm run build -w @sensa/contracts
           npm run build -w @sensa/content-validator
+          npm run build -w @sensa/model-runtime
           node --import tsx content/tools/route_foundation.mts expand content/authored/route-foundation-v1/prepared.json .tmp/release-book-sources
           cp content/authored/*.json .tmp/release-book-sources/
           SENSA_BOOK_RELEASE_SOURCE_DIRECTORY=.tmp/release-book-sources node --import tsx scripts/release/buildPortableBookRegistry.mts
