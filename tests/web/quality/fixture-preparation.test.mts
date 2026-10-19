@@ -5,6 +5,15 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {createWebTestBuildCache,loopbackTestPort,rememberLoopbackTestPort} from '../support/webTestBuild';
 import {retentionCapacityCacheKey,prepareRetentionCapacityCache} from '../../../scripts/support/retentionCapacityCache.mts';
+import {readRestoringSyncStatus} from '../support/librarySyncStatus';
+
+test('restore observation retries only a retired read and never manufactures a successful state',async()=>{
+ await expect(readRestoringSyncStatus(async()=>{throw Error('localFlow.libraryReplaced');})).resolves.toBe('library-replacing');
+ for(const status of ['none','syncing','failed','synced'])await expect(readRestoringSyncStatus(async()=>status)).resolves.toBe(status);
+ for(const message of ['localFlow.storageOpen','localFlow.wrongAccount','other localFlow.libraryReplaced error']){
+  await expect(readRestoringSyncStatus(async()=>{throw Error(message);})).rejects.toThrow(message);
+ }
+});
 
 test('exact immutable Web builds reuse only configuration, never test server or mutable data',async()=>{
   let builds=0;
