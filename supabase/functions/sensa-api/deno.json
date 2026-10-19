@@ -16,6 +16,7 @@
     "@genkit-ai/compat-oai": "npm:@genkit-ai/compat-oai@1.42.0",
     "openai": "npm:openai@4.104.0",
     "openai/shims/web": "npm:openai@4.104.0/shims/web",
-    "ws": "npm:ws@8.21.3"
+    "ws": "npm:ws@8.21.3",
+    "@sensa/contracts/speech/edge-read-aloud": "../../../packages/contracts/dist/speech/edgeReadAloud.js"
   }
 }

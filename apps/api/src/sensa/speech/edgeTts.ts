@@ -1,22 +1,9 @@
-import {createHash, randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {edgeSpeechConnectionUrl, edgeSpeechWireDate} from '@sensa/contracts/speech/edge-read-aloud';
 import {Buffer} from 'node:buffer';
 import WebSocket from 'ws';
 
-const token = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-const version = '143.0.3650.75';
 const maxAudioBytes = 2_000_000;
-const endpoint = 'wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1';
-
-function connectionUrl(now: Date): URL {
-  const rounded = Math.floor(now.getTime() / 1000 / 300) * 300;
-  const ticks = (BigInt(rounded + 11_644_473_600) * 10_000_000n).toString();
-  const url = new URL(endpoint);
-  url.searchParams.set('TrustedClientToken', token);
-  url.searchParams.set('Sec-MS-GEC', createHash('sha256').update(ticks + token).digest('hex').toUpperCase());
-  url.searchParams.set('Sec-MS-GEC-Version', `1-${version}`);
-  url.searchParams.set('ConnectionId', randomUUID().replaceAll('-', ''));
-  return url;
-}
 
 function escapeXml(text: string): string {
   return text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu, ' ')
@@ -41,13 +28,15 @@ export async function synthesizeEdgeSpeech(input: {
   surface: string;
   voice: string;
   locale: string;
-}, signal: AbortSignal): Promise<Buffer> {
-  const now = new Date();
+}, signal: AbortSignal, dependencies: {socket?: (url: URL, options: WebSocket.ClientOptions) => WebSocket; clock?: () => Date} = {}): Promise<Buffer> {
+  const now = dependencies.clock?.() ?? new Date();
   signal.throwIfAborted();
-  const socket = new WebSocket(connectionUrl(now), {
+  const socket = (dependencies.socket ?? ((url, options) => new WebSocket(url, options)))(edgeSpeechConnectionUrl(now, randomUUID()), {
     headers: {
       Origin: 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
+      Cookie: `muid=${randomUUID().replaceAll('-', '').toUpperCase()};`,
+      'Accept-Language': 'en-US,en;q=0.9',
       Pragma: 'no-cache',
       'Cache-Control': 'no-cache',
     },
@@ -71,7 +60,7 @@ export async function synthesizeEdgeSpeech(input: {
     const cancel = () => finish(new Error('speech_cancelled'));
     signal.addEventListener('abort', cancel, {once: true});
     socket.on('open', () => {
-      const timestamp = now.toUTCString().replace('GMT', 'GMT+0000 (Coordinated Universal Time)');
+      const timestamp = edgeSpeechWireDate(now);
       socket.send(`X-Timestamp:${timestamp}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n${JSON.stringify({context:{synthesis:{audio:{metadataoptions:{sentenceBoundaryEnabled:'false',wordBoundaryEnabled:'false'},outputFormat:'audio-24khz-48kbitrate-mono-mp3'}}}})}\r\n`);
       const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${input.locale}'><voice name='${input.voice}'><prosody pitch='+0Hz' rate='+0%' volume='+0%'>${escapeXml(input.surface)}</prosody></voice></speak>`;
       socket.send(`X-RequestId:${randomUUID().replaceAll('-', '')}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n${ssml}`);

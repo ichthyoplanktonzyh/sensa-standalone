@@ -77,6 +77,24 @@ afterAll(async()=>{globalThis.fetch=originalFetch;await rm(temp,{recursive:true,
    restoreSpeech();
    });
   }
+  for(const responseKind of ['direct-json','validate-tool','prepare-tool']){
+   await test(`speech service failure stops ${responseKind} without spending further model turns`,async()=>{
+    let modelCalls=0,checkpoint:any;
+    const restoreSpeech=api.replaceClientSpeechProvider({id:'unavailable',revision:1,displayName:'Unavailable',synthesize:async()=>{throw Error('edge_tts_connection_failed');}});
+    const resources=[cue,bridge,scene];
+    globalThis.fetch=async(url,options)=>{
+     if(String(url).endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(options?.body)),references:[]}));
+     modelCalls++;
+     const message=responseKind==='direct-json'?{content:JSON.stringify({resources})}:{content:null,tool_calls:responseKind==='validate-tool'?[tool('submit_resources',{resources}),tool('validate_resources')]:[tool('prepare_pronunciation')]};
+     return new Response(JSON.stringify({model:'fixture',choices:[{finish_reason:responseKind==='direct-json'?'stop':'tool_calls',message}]}));
+    };
+    try{
+     await assert.rejects(api.generateLearningCandidate(await createRequest(),provider,true,new AbortController().signal,async()=>{},undefined,async(c:any)=>{checkpoint=c;}),/localFlow.spokenResourceUnavailable/);
+     assert.equal(modelCalls,1,'a speech outage cannot be repaired by another model turn');
+     assert.equal(checkpoint.resources.length,responseKind==='prepare-tool'?0:3,'the candidate remains recoverable');
+    }finally{restoreSpeech();}
+   });
+  }
   await test('background queue bounds concurrency, deduplicates and cancels pending work',async()=>{
   const queue=new api.BackgroundPreparationQueue(2);let active=0,max=0;const released:(()=>void)[]=[];
   const work=()=>new Promise<void>(resolve=>{active++;max=Math.max(max,active);released.push(()=>{active--;resolve();});});

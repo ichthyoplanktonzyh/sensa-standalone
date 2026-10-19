@@ -8,7 +8,8 @@
     "./sensa": "./dist/sensa/index.js",
     "./sensa/canonical-json": "./dist/sensa/canonicalJson.js",
     "./sensa/language": "./dist/sensa/language.js",
-    "./sensa/library-sync-blocks": "./dist/sensa/librarySyncBlocks.js"
+    "./sensa/library-sync-blocks": "./dist/sensa/librarySyncBlocks.js",
+    "./speech/edge-read-aloud": "./dist/speech/edgeReadAloud.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

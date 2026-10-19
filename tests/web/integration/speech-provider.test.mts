@@ -52,7 +52,7 @@ try{
  assert.equal(sound.surface,'put <up> & with');assert.equal(sound.languageTag,'en');assert.equal(sound.method,'tts');
  assert.match(sound.audioUrl,/^data:audio\/mpeg;base64,\/\//u);
  assert.match(openedUrl,/^wss:\/\/speech\.platform\.bing\.com\//u);
- assert.match(openedUrl,/Sec-MS-GEC=[A-F0-9]{64}/u);assert.match(openedUrl,/ConnectionId=11111111222243338444555555555555/u);
+ assert.match(openedUrl,/Sec-MS-GEC=[A-F0-9]{16}-[A-F0-9]{64}/u);assert.match(openedUrl,/ConnectionId=11111111222243338444555555555555/u);
  assert.equal(sent.length,2);assert.match(sent[0]!,/Path:speech\.config/u);assert.match(sent[1]!,/Path:ssml/u);
  assert.match(sent[0]!,/X-Timestamp:Mon Sep 21 2026 00:01:00 GMT\+0000 \(Coordinated Universal Time\)/u);
  assert.match(sent[1]!,/put &lt;up&gt; &amp; with/u);assert.doesNotMatch(sent[1]!,/put <up>/u);
@@ -73,10 +73,75 @@ try{
  assert.equal(generic.source,'fixture');assert.equal(genericCalls,1);restore();
  const mismatched=api.replaceClientSpeechProvider({id:'bad',revision:1,displayName:'Bad',synthesize:async()=>({...generic,surface:'lend'})});
  await assert.rejects(api.prepareSpokenResource('borrow',{targetLanguageTag:'en',supportLanguageTag:'zh-CN'},signal),/spokenResourceUnavailable/);mismatched();
+ for(const message of ['edge_tts_connection_failed','edge_tts_empty_audio','speech_language_unavailable','localFlow.authUnavailable']){
+  const restoreFailure=api.replaceClientSpeechProvider({id:'failed',revision:1,displayName:'Failed',synthesize:async()=>{throw Error(message);}});
+  try{await assert.rejects(api.prepareSpokenResource('phone',{targetLanguageTag:'en',supportLanguageTag:'zh-CN'},signal),message==='localFlow.authUnavailable'?/authUnavailable/:/spokenResourceUnavailable/);}finally{restoreFailure();}
+ }
+ const cancelled=new AbortController();cancelled.abort();
+ const restoreAbort=api.replaceClientSpeechProvider({id:'aborted',revision:1,displayName:'Aborted',synthesize:async()=>{throw Error('edge_tts_connection_failed');}});
+ try{await assert.rejects(api.prepareSpokenResource('phone',{targetLanguageTag:'en',supportLanguageTag:'zh-CN'},cancelled.signal),error=>error===cancelled.signal.reason);}finally{restoreAbort();}
  console.log('PASS: provider-neutral client speech boundary, default Edge TTS wire adapter, saved bytes and exact identity; no external calls.');
 }finally{
  Object.assign(globalThis,{WebSocket:original});
  await rm(temp,{recursive:true,force:true});
 }
 
+});
+
+// Vectors independently calculated with edge-tts 7.3.0's reference implementation.
+test('Edge Read Aloud v2 protocol vectors include the five-minute rollover', async () => {
+ const {edgeSpeechConnectionUrl}=await import('@sensa/contracts/speech/edge-read-aloud');
+ const vectors=[
+  ['2026-09-21T00:01:00Z','F57C9AAC46669946-288FD147551925388A222EBF92CD4D0200E826848A1047DAD108C1364D7C52D4'],
+  ['2026-10-19T07:15:00Z','E2219CFD3FDE9189-294A63DB992EDD3AA136D2D10E6F60D6833BFF9D930F00AE558D8D5CFA9DCDA7'],
+  ['2026-10-19T07:19:59Z','E2219CFD3FDE9189-294A63DB992EDD3AA136D2D10E6F60D6833BFF9D930F00AE558D8D5CFA9DCDA7'],
+  ['2026-10-19T07:20:00Z','4BF669ACBA5D04CC-F0C3F544CB9EFA4A7D67EFFD13D9F6AFE6C76D94E672D86D45463FF4EAC13D82'],
+ ];
+ for(const [time,token] of vectors){
+  const url=edgeSpeechConnectionUrl(new Date(time!),'11111111-2222-4333-8444-555555555555');
+  assert.equal(url.searchParams.get('Sec-MS-GEC'),token);
+  assert.equal(url.searchParams.get('Sec-MS-GEC-Version'),'2-143.0.3650.75');
+ }
+ assert.throws(()=>edgeSpeechConnectionUrl(new Date(NaN),'fixture'),/invalid_clock/);
+});
+
+test('server speech transport negotiates v2, saves bounded audio and rejects failed or cancelled turns', async () => {
+ const {WebSocket,WebSocketServer}=await import('ws');
+ const {synthesizeEdgeSpeech}=await import('../../../apps/api/src/sensa/speech/edgeTts.js');
+ const {once}=await import('node:events');
+ const server=new WebSocketServer({host:'127.0.0.1',port:0});
+ await once(server,'listening');
+ const address=server.address();assert.ok(address&&typeof address!=='string');
+ let mode:'audio'|'empty'|'oversized'|'closed'|'cancel'='audio';
+ server.on('connection',(socket,request)=>{
+  assert.match(request.headers.cookie??'',/^muid=[A-F0-9]{32};$/u);
+  let messages=0;
+  socket.on('message',data=>{
+   messages++;
+   assert.match(String(data),/X-Timestamp:Mon Oct 19 2026 07:15:00 GMT\+0000 \(Coordinated Universal Time\)/u);
+   if(messages!==2)return;
+   assert.match(String(data),/Time\)Z\r\nPath:ssml/u);
+   assert.match(String(data),/phone &amp; &lt;test&gt;/u);
+   if(mode==='cancel')return;
+   if(mode==='closed'){socket.close();return;}
+   if(mode!=='empty'){
+    const header=Buffer.from('Path:audio\r\nContent-Type:audio/mpeg\r\n');
+    const audio=mode==='oversized'?Buffer.alloc(2_000_001):Buffer.from([0xff,0xfb,0x90,0x64]);
+    const frame=Buffer.alloc(2+header.length+audio.length);frame.writeUInt16BE(header.length);header.copy(frame,2);audio.copy(frame,2+header.length);socket.send(frame);
+   }
+   socket.send('Path:turn.end\r\n\r\n');
+  });
+ });
+ const dependencies={clock:()=>new Date('2026-10-19T07:15:00Z'),socket:(url:URL,options:import('ws').ClientOptions)=>{
+  assert.equal(url.searchParams.get('Sec-MS-GEC'),'E2219CFD3FDE9189-294A63DB992EDD3AA136D2D10E6F60D6833BFF9D930F00AE558D8D5CFA9DCDA7');
+  return new WebSocket(`ws://127.0.0.1:${address.port}`,options);
+ }};
+ const input={surface:'phone & <test>',voice:'en-US-AriaNeural',locale:'en-US'};
+ try{
+  assert.deepEqual(await synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),Buffer.from([0xff,0xfb,0x90,0x64]));
+  mode='empty';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),/empty_audio/);
+  mode='oversized';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),/audio_too_large/);
+  mode='closed';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),/connection_closed/);
+  mode='cancel';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(50),dependencies),/speech_cancelled/);
+ }finally{for(const socket of server.clients)socket.terminate();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });

@@ -1,37 +1,15 @@
+import {edgeSpeechConnectionUrl,edgeSpeechWireDate} from '@sensa/contracts/speech/edge-read-aloud';
 import {clientSpeechInputSchema,type ClientSpeechInput,type ClientSpeechMaterial,type ClientSpeechProvider} from './provider';
 import {edgeVoiceByLanguage} from './edgeVoiceCatalog';
 import {auth} from '../../account/auth';
 import {captureAccountSessionBoundary,assertAccountSessionBoundary} from '../../account/accountSessionBoundary';
 
-const TRUSTED_CLIENT_TOKEN='6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-const EDGE_VERSION='143.0.3650.75';
-const EDGE_TTS_URL='wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1';
 const MAX_AUDIO_BYTES=2_000_000;
 
 type SocketFactory=(url:string)=>WebSocket;
 type EdgeTtsDependencies=Readonly<{socket?:SocketFactory;clock?:()=>Date;randomId?:()=>string}>;
 
-const hex=(bytes:ArrayBuffer)=>Array.from(new Uint8Array(bytes),value=>value.toString(16).padStart(2,'0')).join('').toUpperCase();
 const escapeXml=(value:string)=>value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu,' ').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
-const wireDate=(date:Date)=>{
- const weekdays=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],pad=(value:number)=>String(value).padStart(2,'0');
- return `${weekdays[date.getUTCDay()]} ${months[date.getUTCMonth()]} ${pad(date.getUTCDate())} ${date.getUTCFullYear()} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())} GMT+0000 (Coordinated Universal Time)`;
-};
-
-async function connectionUrl(now:Date,connectionId:string){
- const unixSeconds=Math.floor(now.getTime()/1000);
- const rounded=unixSeconds-unixSeconds%300;
- const windowsTicks=BigInt(rounded+11_644_473_600)*10_000_000n;
- const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`${windowsTicks}${TRUSTED_CLIENT_TOKEN}`));
- const query=new URLSearchParams({
-  TrustedClientToken:TRUSTED_CLIENT_TOKEN,
-  'Sec-MS-GEC':hex(digest),
-  'Sec-MS-GEC-Version':`1-${EDGE_VERSION}`,
-  ConnectionId:connectionId.replaceAll('-',''),
- });
- return `${EDGE_TTS_URL}?${query}`;
-}
-
 function audioFrame(data:ArrayBuffer){
  const bytes=new Uint8Array(data);
  if(bytes.byteLength<2)throw Error('edge_tts_invalid_audio_frame');
@@ -56,7 +34,7 @@ async function synthesizeEdge(input:ClientSpeechInput,signal:AbortSignal,depende
  const randomId=dependencies.randomId??(()=>crypto.randomUUID());
  const now=dependencies.clock?.()??new Date();
  const requestId=randomId().replaceAll('-','');
- const url=await connectionUrl(now,randomId());
+ const url=edgeSpeechConnectionUrl(now,randomId()).toString();
  signal.throwIfAborted();
  const socket=(dependencies.socket??(address=>new WebSocket(address)))(url);
  socket.binaryType='arraybuffer';
@@ -78,10 +56,10 @@ async function synthesizeEdge(input:ClientSpeechInput,signal:AbortSignal,depende
   socket.onerror=()=>finish(Error('edge_tts_connection_failed'));
   socket.onclose=()=>{if(!settled)finish(Error('edge_tts_connection_closed'));};
   socket.onopen=()=>{
-   const timestamp=wireDate(now);
+   const timestamp=edgeSpeechWireDate(now);
    socket.send(`X-Timestamp:${timestamp}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n${JSON.stringify({context:{synthesis:{audio:{metadataoptions:{sentenceBoundaryEnabled:'false',wordBoundaryEnabled:'false'},outputFormat:'audio-24khz-48kbitrate-mono-mp3'}}}})}\r\n`);
    const ssml=`<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${selection.locale}'><voice name='${selection.voice}'><prosody pitch='+0Hz' rate='+0%' volume='+0%'>${escapeXml(input.surface)}</prosody></voice></speak>`;
-   socket.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}\r\nPath:ssml\r\n\r\n${ssml}`);
+   socket.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n${ssml}`);
   };
   socket.onmessage=event=>{
    messageQueue=messageQueue.then(async()=>{

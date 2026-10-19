@@ -806,6 +806,51 @@ test('reply streams before candidate disclosure, explicit acceptance persists, a
  expect(requests,'joining with unavailable content provider must not call a paid model or invent ready content').toHaveLength(1);
 });
 
+test('failed personal speech preparation recovers from the learning target without marking its method unsupported',async({page})=>{
+ await enterAndConfigureTeacher(page,true);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的语义世界',exact:true}).click();
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'手动创建',exact:true}).click();
+ const form=page.locator('.sensa-manual-meaning');
+ await form.getByLabel('情境或原句',{exact:true}).fill('Every morning I water the plants.');
+ await form.getByLabel('原文中的表达（可在上方选中）',{exact:true}).fill('water');
+ await form.getByLabel('表达语言',{exact:true}).selectOption('en');
+ await form.getByLabel('这里表达的意思',{exact:true}).fill('给植物供水。');
+ await form.getByText('这个意思适用的典型场景',{exact:true}).click();await form.getByLabel('这个意思适用的典型场景',{exact:true}).fill('一个人给植物浇水，让它们获得需要的水分。');
+ await form.getByRole('button',{name:'确认并保存',exact:true}).click();await expect(form).toHaveCount(0);
+ const candidate={resources:[
+  {role:'experience_recall_cue',payload:{scene:'清晨，一个人用水壶给室内的植物浇水。',senseFocus:'给植物供水'}},
+  {role:'scene_bridge',payload:{text:'把给植物供水的动作联系到这个表达。',meaningRendering:{meaning:'给植物供水。',languageTag:'zh-CN'}}},
+  {role:'scene_realization',payload:{example:'Every morning I water the plants.',targetStart:16,targetEnd:21,experienceResourceKey:'experience_recall_cue:0'}},
+ ]};
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.setSpeechFixtureForTest(true));plans=[{value:candidate}];
+ const preparation=page.getByRole('region',{name:'个人内容学习准备',exact:true});
+ await preparation.getByRole('checkbox',{name:'使用我的场景准备学习内容。',exact:true}).check();
+ await preparation.getByRole('button',{name:'加入学习',exact:true}).click();
+ await expect(preparation).toContainText('尚未找到这个表达的可用声音材料');
+ const failed=await facts(page);expect(failed.provisioning[0]).toMatchObject({status:'failed',useContext:true});expect(failed.learning.targetIds).toHaveLength(0);expect(requests).toHaveLength(1);
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();
+ const study=page.locator('#s-study');await study.locator('summary').filter({hasText:'管理学习内容'}).click();
+ await study.locator('[data-learning-target]').filter({hasText:'water'}).click();
+ const target=page.locator('#s-learning-target');
+ await expect(target.getByRole('heading',{name:'内容仍在准备',exact:true})).toBeVisible();
+ await expect(target.getByRole('heading',{name:'当前方式暂不可用',exact:true})).toHaveCount(0);
+ await expect(target).toContainText('尚未找到这个表达的可用声音材料');
+ await page.reload();await expect(target).toContainText('尚未找到这个表达的可用声音材料');expect(requests).toHaveLength(1);
+ // This fixture uses a local connection; its key intentionally lives only in page memory.
+ await page.getByRole('button',{name:'账号与设置',exact:true}).click();
+ await page.locator('#s-profile').getByRole('button',{name:/模型服务/}).click();
+ await page.getByRole('button',{name:'填写或更换密钥',exact:true}).click();
+ await page.getByLabel('旅程测试教师 的密钥',{exact:true}).fill('fixture-not-a-secret');
+ await page.getByRole('button',{name:'仅保存在本页',exact:true}).click();
+ await page.getByRole('navigation',{name:'主要导航'}).getByRole('button',{name:'我的学习',exact:true}).click();
+ await study.locator('summary').filter({hasText:'管理学习内容'}).click();
+ await study.locator('[data-learning-target]').filter({hasText:'water'}).click();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.setSpeechFixtureForTest(false));plans=[{value:candidate}];
+ await preparation.getByRole('button',{name:'重试 / 恢复准备',exact:true}).click();
+ await expect.poll(async()=>(await facts(page)).provisioning[0]).toMatchObject({status:'ready',useContext:true});
+ expect((await facts(page)).learning.targetIds).toHaveLength(1);expect((await facts(page)).learning.records).toHaveLength(0);
+});
+
 test('personal preparation pins explicit Context updates, preserves the active Run and recovers unavailable speech without leaking revoked Context',async({page})=>{
  test.setTimeout(150_000);
  page.setDefaultTimeout(15_000);
@@ -878,6 +923,7 @@ test('personal preparation pins explicit Context updates, preserves the active R
  await consent.uncheck();await preparation.getByRole('button',{name:'使用当前场景设置更新资源',exact:true}).click();
  await expect(preparation.getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible();
  await expect.poll(async()=>(await facts(page)).provisioning[0]).toMatchObject({status:'failed',useContext:false});
+ await expect(preparation).toContainText('尚未找到这个表达的可用声音材料');
  expect((await facts(page)).learning).toEqual(updated);
  await preparation.getByRole('button',{name:'查看学习资源',exact:true}).click();
  await expect(page.getByRole('dialog',{name:/^学习资源/u}).getByText('傍晚，一个人在阳台上给花浇水。',{exact:true})).toBeVisible();
