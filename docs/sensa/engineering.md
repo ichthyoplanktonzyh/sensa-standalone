@@ -990,10 +990,10 @@ Personal Meaning 与 Package Center 重旅程的单次受控 UI 耗时区分产�
 
 PR 与 main 使用完全相同的固定小门禁，清单只在 `tests/web/ciWhitelist.mts` 维护：
 
-- 静态／构建 job：typecheck、完整 build、`test:edge`，以及 16 个 Node 文件的 77 个登记案例。
+- 静态／构建 job：typecheck、完整 build、`test:edge`，以及 17 个 Node 文件的 85 个登记案例。
 - 数据库／浏览器 job：7 个纯 PostgreSQL 案例，以及独立 `ci-core.spec.ts` 的 4 个真实 E2E 案例。
 
-共 88 个登记案例；Node 24 的 Base64 功能探测允许其中 3 个条件跳过，数据库与 E2E 不允许跳过。
+共 96 个登记案例；Node 24 的 Base64 功能探测允许其中 3 个条件跳过，数据库与 E2E 不允许跳过。
 E2E 使用单表达 Book、一个有效 Meaning 和空隔离 context，不导入大 spec 或生成成熟历史。
 它覆盖离线手动保存／重开、游客学习／真实调度到期复习、过期会话 online 恢复且不重放事实，
 以及真实 PostgreSQL 原生恢复／增量同步／重开。外部 Auth HTTP 受控；生产 Web、SDK、OPFS、Hono 和数据库实际执行。
@@ -1004,7 +1004,7 @@ npm run check             # 每次提交：typecheck、build、固定 Node 门�
 npm run test:edge
 npm run test:ci:postgres  # 需要已迁移的一次性 PostgreSQL 与受限测试角色
 npm run test:ci:e2e       # 同一数据库，并安装 Chromium
-npm run test:ci           # 固定 88 案例；不含 typecheck/build/edge
+npm run test:ci           # 固定 96 案例；不含 typecheck/build/edge
 ```
 
 其余目录测试默认是本地专项，按风险显式选择 `test:fast`、`test:browser`、`test:db` 或 `test:capacity:storage`；
@@ -1253,10 +1253,10 @@ application-only 变化。数据库迁移、`infra/`、Supabase/Cloudflare 生�
 2. 固定绿色验证的 CI run id / attempt，再独立核验候选 artifact ID 与构建 attempt；不替换触发它的 run；
 3. 读取上一份 `sensa-system-release-manifest-v1|v2`，按路径影响生成最小安全 Release Plan；新成功记录写为带授权证据的 v2；
 4. 如需发布应用，从该成功 CI run 下载已经测试和固定的 Web、扩展与 API 候选，重新核对来源、目标和全部摘要，不再重新构建；
-5. 完整应用发布才应用前向数据库迁移、对齐 Supabase Auth／服务配置并部署 Supabase Edge Function；
+5. 所需组件全部完成只读预检；内容同时在此构建、验证并封存一次。预检核对凭据存在及可用的读权限、项目／域名目标、当前 Registry 合同、迁移前缀与受限运行时角色，失败阻断所有生产写入；完整应用发布才应用前向迁移、对齐 Auth／服务配置并部署 API；
 6. 上传 Cloudflare Worker 版本，先核验预览文件，再提升到生产；完整发布才用 `wrangler triggers deploy` 应用域名路由；
 7. 执行公网非模型 smoke，并核验 API 构建身份、生产 Web 文件摘要和 Cloudflare 实际 100% 流量版本；
-8. 如需发布内容，在所需应用通过核验后构建、验证、上传不可变 Book/Registry 并提升 Registry；
+8. 如需发布内容，在所需应用通过核验后按精确 artifact ID 恢复预检封存的 Book/Registry 与编译依赖，核验原 build attempt、SHA、计划、项目和完整文件摘要后上传／提升，并回读实际公开 Registry；发布 job 不重新构建；
 9. 生成同时固定 Application、公开配置目标、前向 migration 集合与 Learning Content 身份的系统清单；
 10. 独立 archive job 将已核验的候选 ZIP 与系统清单保存到 GitHub 原生 Release，核验回读摘要后发布归档。
 
@@ -1280,9 +1280,29 @@ Planner 会要求 `scope=all` 的完整 bootstrap，而不是猜测线上组件�
 `bookPreview=1` 请求完整目录。两种表示分别按实际响应重算 revision 与 ETag，Book archive identity 不变。
 本机目录缓存区分该表示；旧标签页写回基础目录后，新版会重新请求完整表示。
 
-应用交付遵循 `build once → verify → promote`：生产 workflow 没有应用 build job，不接受其他仓库／SHA／run 的候选，也不拿验证 attempt 冒充构建 attempt。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。备用入口只接受已完成的绿色 CI；未完成时立即给出可操作状态，不在发布 job 内等待一个短于实际 CI 时长的固定窗口。
+应用交付遵循 `build once → verify → promote`：生产 workflow 没有应用 build job，不接受其他仓库／SHA／run 的候选，也不拿验证 attempt 冒充构建 attempt。它仍会 checkout 同一 SHA 读取 forward-only migration 和发布脚本，在生产边界重新校验候选及目标，再执行 Supabase/Cloudflare 提升。候选保留 14 天；过期后发布应失败并重新取得当前 SHA 的绿色 CI 证据，不能在生产 job 中临时重建。备用 dispatch 入口只接受已完成的绿色 CI；未完成时立即给出可操作状态，不在发布 job 内等待一个短于实际 CI 时长的固定窗口。
 
 发布计划、组件回执和完整系统清单使用独立产物身份；重跑组件后，记录器接收该成功执行返回的 artifact ID，不按同名文件猜测最新结果。`releaseStatus.mjs` 在失败后记录有限允许列表内的步骤 outcome，并区分 `not-deployed`、`partial-or-unverified` 与完成状态。迁移／配置命令失败也可能留下部分变更，不能认领“生产未变化”或“已自动回滚”。统一报告分别展示等待授权、no-op、完整记录与 incomplete；实际应用已核验但归档失败时显示 `verified-but-unarchived`，重跑 archive job，不重跑部署。命令 outcome、线上构建证明和用户旅程验收是不同证据。
+
+预检是 GET 与只读 SQL，不创建迁移台账、不变更 bucket、secret 或权限，也不调用付费模型。它证明当前连接与读权限，不能证明未来写权限、模型密钥有效性或迁移耗时。已有生产台账必须是候选迁移名的连续前缀；未知文件、缺口、重复项及已成功基线迁移源码字节变化均阻断。旧台账没有已应用 SQL 摘要，不能据此声称核验了生产历史 SQL 字节。只有空数据库的显式 bootstrap 可以没有台账；迁移器在同一 advisory lock 内再次检查，再逐文件事务应用并跳过已有记录。前面已提交的文件不会随后续失败自动回滚。新迁移须按 expand/contract 保持当前与候选 API、Web、Registry 的滚动兼容；预检不从 SQL 猜测语义兼容。
+
+失败恢复统一使用以下入口规则，不维护第二套部署清单：
+
+| 失败位置 | 恢复操作与边界 |
+| --- | --- |
+| plan 尚未成功 | 确认没有组件写入后，从唯一入口启动新 run；plan 的成功输出不得重新计算 |
+| preflight／内容准备 | 修复具名失败后重跑失败 jobs；保留原 plan artifact ID、release ID 和成功准备产物；首次准备 gate 中任一必要预检失败均无组件写入 |
+| backend | 核对实际已提交迁移，重跑失败 job；迁移按台账跳过，Auth 按现状对账；同一 backend job 内服务配置与 API 命令可能幂等重放 |
+| Web upload | 保留成功 backend，只重跑失败 upload 及下游；上传成功但回执丢失时不能认领可复用版本，检查 Cloudflare 后再续跑 |
+| Web preview／promote／smoke | 保留 backend 与 upload 的精确输出 ID；只重跑失败 promotion job，沿用原 version ID。当前已是该版本 100% 时跳过提升；预览、公网和实际流量核验继续执行 |
+| learning_content | 此时应用可能已经成功写入；内容 write-boundary recheck 失败只说明内容尚未开始写入，不表示系统未变化。保留成功应用和封存内容。沿用原内容 build attempt；已存在且摘要相同的对象只读跳过，不覆盖不同字节；当前已是同一完整 Registry 时跳过 secret 提升，最后仍核对完整公开 Registry |
+| record／archive | 保留成功组件输出 ID；仅重跑失败记录／归档 job。归档失败使用原记录 artifact ID，不重跑应用或内容 |
+
+使用 Actions 的 **Re-run failed jobs**，保留成功 job 的原生 outputs；禁止 **Re-run all jobs** 或重新运行成功 plan。工作流对 attempt > 1 的 plan 失败关闭，避免同一 run 重新授权或重算基线。若成功 job 的输出／artifact 已过期或无法恢复，停止续跑并先核对实际生产状态；不能改用同名或“最新”产物。新的 dispatch 是新的发布请求，不是对部分部署的自动恢复。
+
+CI 构建 attempt、CI 验证 attempt、release ID 中的 plan attempt 与各组件执行／record attempt 分别记录。组件重跑后只用其返回的 artifact ID；预检跨 environment 对账也按精确 ID 下载，不用 wildcard 合并多次结果。系统清单的 `evidence.planWorkflowRunAttempt` 保留最初计划身份，`workflowRunAttempt` 表示实际记录执行；恢复基线继续核对 SHA/run/record attempt 与 artifact 名称。历史 SHA-only 系统记录只接受精确同 SHA 的成功 main run、首次 attempt 及原 artifact 元数据，重跑不能沿用此历史格式。回退需另行明确授权：Web 只能选已核验旧版本且确认 API／迁移／内容仍兼容；内容只能恢复已验证 Registry 指针且保留不可变对象；数据库使用前向修复或经过验证的独立恢复流程，不自动反向执行迁移。
+
+固定版本临时入口 `sensa-owner-deploy-8957424f.yml` 已退役。2026-10-18 的一次性 owner CI 豁免保存在 [原始豁免回执](../release-exceptions/2026-10-18-8957424f.json) 和 [历史执行](https://github.com/ichthyoplanktonzyh/sensa-standalone/actions/runs/39134075890)；`ciPassed=false`、`ciGateWaived=true` 和未生成标准绿色系统清单的事实保留，不给后续 SHA 发布资格。正常自动授权策略、显式 owner 授权和 environment 行为维持原边界。
 
 `releaseArchive.mjs` 使用原生 GitHub Releases，不增加备份数据库。候选归档 tag 为
 `sensa-application-<FULL_SHA>-<BUILD_RUN>-<BUILD_ATTEMPT>`，保留 Actions ZIP 的精确原字节、摘要和密封 manifest；

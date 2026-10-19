@@ -18,6 +18,15 @@ on:
       release_id:
         required: true
         type: string
+      plan_artifact_id:
+        required: true
+        type: string
+      content_artifact_id:
+        required: true
+        type: string
+      content_build_attempt:
+        required: true
+        type: string
     outputs:
       evidence_artifact_id:
         value: ${{ jobs.publish.outputs.artifact_id }}
@@ -38,7 +47,7 @@ jobs:
       SENSA_RELEASE_SHA: ${{ inputs.release_sha }}
       SENSA_MEDIA_RELEASE_TAG: ${{ inputs.media_release_tag }}
       SENSA_MEDIA_PACK_SHA256: ${{ inputs.media_pack_sha256 }}
-      SENSA_AUTHORED_MEDIA_PACK: .tmp/authored-media-pack.json
+      SENSA_CONTENT_BUILD_ATTEMPT: ${{ inputs.content_build_attempt }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
@@ -52,41 +61,33 @@ jobs:
           ref: ${{ inputs.release_sha }}
       - name: Verify exact revision
         run: node scripts/release/verifyRevision.mjs
-      - name: Fetch and verify the sealed authored media input
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node --input-type=module <<'JS'
-          const env=process.env;
-          const tag=(env.SENSA_MEDIA_RELEASE_TAG??'').match(/^sensa-learning-media-([a-f0-9]{12,64})$/),digest=env.SENSA_MEDIA_PACK_SHA256??'';
-          if(!tag)throw Error('Immutable learning media release tag required');
-          if(!/^[a-f0-9]{64}$/.test(digest)||!digest.startsWith(tag[1]))throw Error('Full learning media pack digest must match its release tag');
-          JS
-          mkdir -p .tmp
-          gh release download "$SENSA_MEDIA_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern authored-media-pack.json --dir .tmp
-          node --input-type=module <<'JS'
-          import {createHash} from 'node:crypto';import {readFile} from 'node:fs/promises';
-          const bytes=await readFile(process.env.SENSA_AUTHORED_MEDIA_PACK),digest=createHash('sha256').update(bytes).digest('hex');
-          if(digest!==process.env.SENSA_MEDIA_PACK_SHA256)throw Error('Sealed authored media pack digest mismatch');
-          JS
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - name: Build and validate the immutable Registry candidate
-        run: |
-          npm run build -w @sensa/learning-kernel
-          npm run build -w @sensa/contracts
-          npm run build -w @sensa/content-validator
-          npm run build -w @sensa/model-runtime
-          node --import tsx content/tools/route_foundation.mts expand content/authored/route-foundation-v1/prepared.json .tmp/release-book-sources
-          cp content/authored/*.json .tmp/release-book-sources/
-          SENSA_BOOK_RELEASE_SOURCE_DIRECTORY=.tmp/release-book-sources node --import tsx scripts/release/buildPortableBookRegistry.mts
-          node --import tsx content/tools/assert_english_lightweight_registry.mts release-candidate/portable-catalog.json
-          node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
-          node --import tsx tests/web/run.mts --suite=fast --id=portable-learning-registry
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ inputs.plan_artifact_id }}
+          merge-multiple: true
+          path: .tmp/system-release-plan
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ inputs.content_artifact_id }}
+          merge-multiple: true
+          path: .
+      - name: Verify the sealed preflight content without rebuilding
+        id: candidate
+        run: node scripts/release/contentCandidate.mjs verify
+      - name: Recheck the content write boundary after any application deployment
+        id: write_boundary
+        env:
+          SENSA_PREFLIGHT_SCOPE: content-write-boundary
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: node scripts/release/releasePreflight.mjs content
       - name: Upload releases, verify public bytes, and prepare promotion
+        id: upload
         env:
           SENSA_CONTENT_PUBLISH: 'true'
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
@@ -95,12 +96,28 @@ jobs:
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
           version: 2.117.0
+      - name: Inspect whether this exact Registry is already promoted
+        id: current
+        run: node scripts/release/verifyContentPromotion.mjs check
       - name: Promote the verified Registry snapshot
+        id: promote
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           trap 'rm -f "$RUNNER_TEMP/sensa-learning-registry.env"' EXIT
-          supabase secrets set --env-file "$RUNNER_TEMP/sensa-learning-registry.env" --project-ref "$SUPABASE_PROJECT_REF"
+          if test "${{ steps.current.outputs.already_promoted }}" = true; then
+            echo 'Exact Registry already active; secret promotion skipped.'
+          else
+            supabase secrets set --env-file "$RUNNER_TEMP/sensa-learning-registry.env" --project-ref "$SUPABASE_PROJECT_REF"
+          fi
+      - name: Verify the actual promoted public Registry
+        id: live_verification
+        run: node scripts/release/verifyContentPromotion.mjs
+      - name: Record actual content outcomes even after failure
+        if: always()
+        env:
+          SENSA_RELEASE_STEPS: ${{ toJSON(steps) }}
+        run: node scripts/release/releaseStatus.mjs content
       - name: Preserve publication evidence
         id: evidence
         if: always()
@@ -110,5 +127,8 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
           path: |
+            release-candidate/content-release-status.json
+            release-candidate/content-candidate.json
+            release-candidate/content-preflight.json
             release-candidate/portable-catalog.json
             release-candidate/portable-learning-content-publication.json

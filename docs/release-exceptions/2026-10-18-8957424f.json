@@ -1,0 +1,21 @@
+{
+  "format": "sensa-owner-authorized-ci-exception-v1",
+  "commit": "8957424f3bec65d1fdcf9d5219f6165e58f5ab80",
+  "releaseId": "sensa-system-8957424f3bec-39134075890-1",
+  "recordedAt": "2026-10-18T14:01:52.367Z",
+  "authority": "Owner explicitly requested immediate deployment and deferred CI repair on 2026-10-18",
+  "ciPassed": false,
+  "ciGateWaived": true,
+  "failedValidationRun": "https://github.com/ichthyoplanktonzyh/sensa-standalone/actions/runs/39100640860",
+  "knownFailures": [
+    "Synthetic 10k World fixture preparation hook exceeded 120 seconds",
+    "World preparation status locator matched two status elements",
+    "World graph test did not become ready after controlled animation-frame restoration"
+  ],
+  "build": {
+    "workflowRunId": "39134075890",
+    "attempt": "1",
+    "workflow": "Owner-authorized release 8957424f (CI repair deferred)"
+  },
+  "standardGreenCiSystemManifestCreated": false
+}

@@ -1,10 +1,10 @@
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
-export async function fetchEventually(url,init,accept,label){
+export async function fetchEventually(url,init,accept,label,{fetchImpl=fetch}={}){
  let lastStatus='no response';
  for(let attempt=1;attempt<=10;attempt++){
   try{
-   const response=await fetch(url,{...init,signal:AbortSignal.timeout(20000)});
+   const response=await fetchImpl(url,{...init,signal:AbortSignal.timeout(20000)});
    lastStatus=String(response.status);
    if(accept(response))return response;
    await response.body?.cancel();

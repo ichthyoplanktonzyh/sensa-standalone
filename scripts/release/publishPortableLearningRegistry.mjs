@@ -11,7 +11,6 @@ import {
   sensaPortableLearningContentRegistrySchema,
 } from "@sensa/contracts/sensa";
 import {
-  ensurePublicLearningContentBucket,
   portableBookContentType,
   readPublishedLearningContent,
 } from "./learningContentBucket.mjs";
@@ -65,11 +64,17 @@ if (sha256(canonicalConsumerJson(registrySnapshot)) !== revision) {
 const client = createClient(supabaseUrl.href, secret, {
   auth: {persistSession: false, autoRefreshToken: false, detectSessionInUrl: false},
 });
-await ensurePublicLearningContentBucket(client.storage, bucket);
 
 const storage = client.storage.from(bucket);
 async function publishObject(path, bytes, contentType) {
   const publicUrl = storage.getPublicUrl(path).data.publicUrl;
+  const existing = await fetch(publicUrl, {redirect:'error', cache:'no-store', signal:AbortSignal.timeout(15000)});
+  if (existing.ok) {
+    if (sha256(Buffer.from(await existing.arrayBuffer())) !== sha256(bytes)) throw Error('An immutable learning content path already has different bytes');
+    return publicUrl;
+  }
+  await existing.body?.cancel();
+  if (existing.status !== 404 && existing.status !== 400) throw Error('Cannot inspect immutable content before upload');
   const uploaded = await storage.upload(path, bytes, {
     cacheControl: "31536000",
     contentType,
@@ -147,6 +152,14 @@ for (const descriptor of registry.items) {
   bookTasks.push({bookRelative, bookBytes, memberCount: archive.members.length, expectedUrl: descriptor.url});
 }
 
+// All local bytes are admitted before the first production write. Preflight owns
+// the read-only bucket check; publication never creates or changes storage policy.
+const bucketResult = await client.storage.getBucket(bucket);
+if (bucketResult.error || !bucketResult.data?.public
+  || Array.isArray(bucketResult.data.allowed_mime_types)
+    && ['application/json', portableBookContentType].some(type => !bucketResult.data.allowed_mime_types.includes(type))) {
+  throw Error('Existing public learning content bucket policy required; publication cannot change it');
+}
 await publishInBatches(bookTasks, "Portable Books", async ({bookRelative, bookBytes, expectedUrl}) => {
   const bookUrl = await publishObject(
     `releases/${bookRelative}`,

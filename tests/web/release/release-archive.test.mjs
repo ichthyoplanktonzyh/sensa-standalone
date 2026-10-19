@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {archiveClient,persistSystemRelease,restoreSystemBaseline,downloadArchivedCandidate,restoreCandidateFiles} from '../../../scripts/release/releaseArchive.mjs';
+import {archiveClient,persistSystemRelease,restoreSystemBaseline,downloadArchivedCandidate,restoreCandidateFiles,assertSystemArtifactIdentity} from '../../../scripts/release/releaseArchive.mjs';
 const repository='fixture/sensa',commit='b'.repeat(40),hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const json=value=>Buffer.from(JSON.stringify(value,null,2)+'\n');
 const env={GITHUB_REPOSITORY:repository,GH_TOKEN:'fixture-private-token'};
@@ -54,6 +54,11 @@ async function world(){
 
 test('native archives retain exact sealed bytes, restore after Actions expiry, and refuse overwrite or retained-file clearing',async()=>{
   const w=await world();try{
+    const run={id:123,run_attempt:1,head_sha:commit,head_branch:'main',status:'completed',conclusion:'success'};
+    const legacy={name:`sensa-system-release-${commit}`,workflow_run:{id:123,head_sha:commit}};
+    expect(()=>assertSystemArtifactIdentity(legacy,w.manifest,run)).not.toThrow();
+    for(const changed of [{run_attempt:2},{head_sha:'f'.repeat(40)},{conclusion:'failure'}])expect(()=>assertSystemArtifactIdentity(legacy,w.manifest,{...run,...changed})).toThrow();
+    expect(()=>assertSystemArtifactIdentity({...legacy,name:legacy.name+'-123-2'},w.manifest,run)).toThrow();
     const result=await persistSystemRelease(w.manifest,w.client);
     expect(result.receipt).toMatchObject({platformImmutable:false,applicationCandidateAvailable:true,apiCandidateAvailable:true});
     w.artifacts.get(9).expired=true;
@@ -97,6 +102,9 @@ test('newer complete production state survives a failed archive instead of falli
     expect((await restoreSystemBaseline(w.client)).releaseId).toBe(newer.releaseId);
     w.artifacts.get(20).expired=true;
     await expect(restoreSystemBaseline(w.client,{runId:'999'})).rejects.toThrow(/no recoverable/);
+    const saturated={...w.client,request:async(path,options)=>path.includes('/actions/workflows/')
+      ?{workflow_runs:Array.from({length:20},()=>w.runs[0])}:w.client.request(path,options)};
+    await expect(restoreSystemBaseline(saturated)).rejects.toThrow(/lookup exhausted/);
   }finally{await w.cleanup();}
 });
 

@@ -52,7 +52,7 @@ async function removeSourceMaps(dir){
   if(clean!==source)await writeFile(path,clean);
  }
 }
-async function databaseMigrationSet(root){
+export async function databaseMigrationSet(root){
  const directory=resolve(root,'db/migrations');
  const migrations=[];
  for(const path of (await files(directory)).filter(path=>path.endsWith('.sql')).sort()){

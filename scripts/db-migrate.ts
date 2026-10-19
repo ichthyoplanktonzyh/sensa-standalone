@@ -4,6 +4,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import pg from "pg";
+import {readMigrationLedger} from './release/migrationLedger.mjs';
 
 const databaseUrl = process.env.MIGRATION_DATABASE_URL
   ?? process.env.SENSA_DATABASE_URL
@@ -18,17 +19,18 @@ const client = new pg.Client({ connectionString: databaseUrl });
 async function main(): Promise<void> {
   await client.connect();
   try {
+    // Serialize migration executors and recheck the ledger at the write boundary.
+    await client.query("SELECT pg_advisory_lock(hashtext('sensa-schema-migrations-v1'))");
+    const migrationFiles = (await readdir(migrationDirectory, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
+      .map((entry) => entry.name).sort();
+    await readMigrationLedger(client, migrationFiles);
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.sensa_schema_migrations (
         filename TEXT PRIMARY KEY,
         applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )
     `);
-
-    const migrationFiles = (await readdir(migrationDirectory, { withFileTypes: true }))
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
-      .map((entry) => entry.name)
-      .sort((left, right) => left.localeCompare(right));
 
     for (const filename of migrationFiles) {
       const existing = await client.query<{ filename: string }>(
@@ -56,7 +58,8 @@ async function main(): Promise<void> {
       }
     }
   } finally {
-    await client.end();
+    try { await client.query("SELECT pg_advisory_unlock(hashtext('sensa-schema-migrations-v1'))"); }
+    finally { await client.end(); }
   }
 }
 
