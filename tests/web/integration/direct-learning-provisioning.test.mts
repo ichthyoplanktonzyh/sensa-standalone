@@ -116,7 +116,7 @@ test('direct on-demand preparation preserves fixed facts, never sends personal C
   await api.restoreLibraryTransaction(async(tx:any)=>tx.put('contentAttempts',oldAttempt.id,oldAttempt));
   const beforeNewPolicy=calls.length;mode='good';expect((await prepare(oldPolicy.enrollmentId)).status).toBe('ready');
   const newPolicyTask=await task(oldPolicy.enrollmentId),newPolicyRows=await snapshot(),newPolicyAttempt=newPolicyRows.contentAttempts.find((row:any)=>row.key===newPolicyTask.attemptId).value;
-  expect(newPolicyAttempt.resumedFrom).toBeNull();expect(newPolicyAttempt.request.generatorPolicyVersion).toBe('v4');
+  expect(newPolicyAttempt.resumedFrom).toBeNull();expect(newPolicyAttempt.request.generatorPolicyVersion).toBe('v5');
   expect(newPolicyAttempt.bundle.materialCandidateBundleId).not.toBe(oldAttempt.bundle.materialCandidateBundleId);
   expect(calls.length).toBeGreaterThan(beforeNewPolicy+1);
   expect(newPolicyRows.contentAttempts.find((row:any)=>row.key===oldAttempt.id).value).toEqual(oldAttempt);

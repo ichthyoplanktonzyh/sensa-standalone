@@ -79,6 +79,15 @@ const downgradedRequest={...japaneseRequest,generatorPolicyVersion:'v3'},mismatc
 mismatchedPolicy.inputSnapshotDigest=canonicalJsonDigest(downgradedRequest);
 await assert.rejects(()=>validateBundle(downgradedRequest,mismatchedPolicy,null,now),/generator_policy_mismatch/);
 assert.throws(()=>validateBundleSnapshot(downgradedRequest,mismatchedPolicy,null,now),/generator_policy_mismatch/);
+// Saved v4 evidence remains readable and must keep its required meaning rendering.
+const previousRequest={...japaneseRequest,generatorPolicyVersion:'v4'};
+const previousBundle=await produce(japaneseOutput,previousRequest);
+assert((await validateBundle(previousRequest,previousBundle,null,now)).content);
+assert(validateBundleSnapshot(previousRequest,previousBundle,null,now).content);
+const missingPreviousRendering=structuredClone(previousBundle),previousBridge=missingPreviousRendering.candidates.find(value=>value.materialRoleKey==='scene_bridge')!;
+delete previousBridge.contentPayload.meaningRendering;previousBridge.contentDigest=canonicalJsonDigest(previousBridge.contentPayload);
+assert.equal((await validateBundle(previousRequest,missingPreviousRendering,null,now)).content,null);
+assert.equal(validateBundleSnapshot(previousRequest,missingPreviousRendering,null,now).content,null);
 for(const corruption of ['missing','wrong-language','rewrite-source'] as const){
  const invalid=structuredClone(japaneseBundle),candidate=invalid.candidates.find(value=>value.materialRoleKey===(corruption==='rewrite-source'?'sense_confirmation':'scene_bridge'))!;
  if(corruption==='missing')delete candidate.contentPayload.meaningRendering;

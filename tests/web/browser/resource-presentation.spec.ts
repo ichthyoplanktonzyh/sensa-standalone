@@ -15,6 +15,7 @@ test.beforeAll(async () => {
   // Bundle preparation has its own allowance; interaction assertions stay bounded.
   test.setTimeout(90_000);
   const entry=resolve('.tmp/resource-presentation-entry.tsx');
+  const wav=Buffer.alloc(44+16000);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(16000,40);
   const compiled=await build({configFile:false,root:process.cwd(),logLevel:'silent',plugins:[react(),tailwindcss(),{
     name:'resource-renderer-fixture',async resolveId(id,importer){if(id===entry)return entry;if(importer===entry&&id.startsWith('./'))return this.resolve(resolve(id),undefined,{skipSelf:true});},
     load(id){if(id===entry)return `
@@ -33,7 +34,8 @@ import {provisionLightweightInitialContent} from './apps/web/src/contentSupply/p
 import {withBindingFixture} from './scripts/support/lightweightMaterialFixture.mts';
 const id=()=>crypto.randomUUID();
 const input=withBindingFixture({learnerUserId:id(),learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),resolvedLearningPlanRevisionId:'fixture',expressionSourceVersion:'fixture',senseSourceVersion:'fixture',expression:{surface:'borrow',languageTag:'en',expressionKind:'word'},sense:{meaning:'临时使用并归还',supportLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture',personalAnchorUseGrantId:null,experience:{scene:'向朋友借伞，稍后归还。'+ ' 长资源夹具：清晨下雨时，借用朋友的雨伞，照看好物品并约定归还时间。'.repeat(16),senseFocus:'临时使用并归还',featureLabels:[],sceneRealization:{example:'May asked to borrow an umbrella.',targetStart:13,targetEnd:19}}},referenceFacts:[{source:'dictionary',sourceVersion:'fixture',fact:{factKind:'language_structure',expressionTypeLabel:'动词',partOfSpeech:'verb',usagePattern:'borrow something from someone',contrastNote:'Compare the receiver and the giver.'}},{source:'dictionary',sourceVersion:'fixture',fact:{factKind:'etymology',explanation:'Sourced optional explanation fixture',source:'Fixture dictionary',sourceUrl:'https://fixture.invalid/entry'}}],requestedAt:new Date().toISOString()});
-const result=provisionLightweightInitialContent(input);
+const soundInput={...input,referenceFacts:input.referenceFacts.map(reference=>reference.fact.factKind==='pronunciation'?{...reference,fact:{...reference.fact,audioUrl:${JSON.stringify('data:audio/wav;base64,')}+${JSON.stringify(wav.toString('base64'))},method:'tts',phoneticNotation:'/ˈbɒrəʊ/',accentLabel:'en-US',source:JSON.stringify({provider:'microsoft-edge-read-aloud',providerRevision:1,voice:'en-US-JennyNeural',locale:'en-US',rate:'+0%',format:'audio-24khz-48kbitrate-mono-mp3'})}}:reference)};
+const result=provisionLightweightInitialContent(soundInput);
 if(result.status!=='ready')throw Error('fixture not ready');
 // Renderer-only interactive fixture: Context input does not accept generated HTML.
 const base=result.materialization,material=new URLSearchParams(location.search).has('interactive')?{...base,content:{...base.content,resources:base.content.resources.map(resource=>resource.materialRoleKey==='experience_recall_cue'?{...resource,contentPayload:{...resource.contentPayload,html:'<button data-action="increment" data-target="count">Increment</button><span id="count">0</span>'}}:resource)}}:base;
@@ -52,7 +54,7 @@ createRoot(document.getElementById('root')!).render(<><ExpressionRevealCard acti
   if(!('output' in result))throw new Error('Fixture build must return completed output');
   const output=result.output;
   const files=new Map<string,string|Uint8Array>(output.map(file=>['/'+file.fileName,file.type==='chunk'?file.code:file.source]));
-  const wav=Buffer.alloc(44+16000);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(16000,40);files.set('/audio.wav',wav);
+  files.set('/audio.wav',wav);
   const script=output.find(file=>file.type==='chunk'&&file.isEntry)!.fileName,css=output.find(file=>file.fileName.endsWith('.css'))!.fileName;
   server=createServer((request,response)=>{
     const path=new URL(request.url??'/', 'http://127.0.0.1').pathname,file=files.get(path);
@@ -99,6 +101,12 @@ for(const locale of ['zh-CN','en','de'])test(`long learning resources read at de
  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
  await page.goto(`http://127.0.0.1:${port}/?locale=${locale}`);
  const trigger=page.locator('#resource-details button');await expect(trigger).toBeVisible();expect(errors).toEqual([]);await trigger.click();const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
+ const pronunciation=dialog.getByRole('region',{name:locale==='zh-CN'?'发音':locale==='de'?'Aussprache':'Pronunciation',exact:true});
+ await expect(pronunciation.getByText('borrow',{exact:true})).toBeVisible();await expect(pronunciation.getByText('/ˈbɒrəʊ/',{exact:true})).toBeVisible();
+ await expect(pronunciation.getByText(locale==='zh-CN'?'美国英语':locale==='de'?'Englisch (Vereinigte Staaten)':'American English',{exact:true})).toBeVisible();
+ for(const raw of ['en-US','en'])await expect(pronunciation.getByText(raw,{exact:true})).toHaveCount(0);
+ for(const raw of ['providerRevision','microsoft-edge-read-aloud','JennyNeural'])await expect(pronunciation).not.toContainText(raw);
+ const pronunciationAudio=pronunciation.locator('audio');await pronunciationAudio.evaluate(async(element:HTMLAudioElement)=>{element.load();await element.play();});await expect.poll(()=>pronunciationAudio.evaluate((element:HTMLAudioElement)=>element.currentTime)).toBeGreaterThan(0);await pronunciationAudio.evaluate((element:HTMLAudioElement)=>element.pause());
  for(const width of [1280,390,320]){
   await page.setViewportSize({width,height:844});
   const panel=await dialog.boundingBox();expect(panel!.width).toBeGreaterThanOrEqual(width>640?700:width-1);
