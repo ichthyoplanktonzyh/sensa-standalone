@@ -15,7 +15,7 @@
     "@sensa/contracts": "file:../../packages/contracts",
     "@sensa/learning-kernel": "file:../../packages/learning-kernel",
     "@sensa/model-runtime": "file:../../packages/model-runtime",
-    "hono": "^4.0.0",
+    "hono": "^4.13.9",
     "jose": "^6.2.12",
     "pg": "^8.13.1",
     "ws": "^8.21.3",
