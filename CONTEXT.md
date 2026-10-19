@@ -1,13 +1,16 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-10-11
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
 is one learner-specific Sense–target-expression connection. A versioned,
 learner-selectable Learning Policy coordinates purpose-specific Learning Protocols
 that establish, check, strengthen or restore that connection across long-term retention.
+
+This glossary defines names and identity distinctions. Lifecycle, validation and execution
+rules belong to the specialized models linked from the domain index; implementation
+parameters belong to source code.
 
 ## Product system language
 
@@ -208,15 +211,9 @@ dispatch, budgets and progress reporting. It does not share agent context, conte
 identity or failure fate, and it does not define daily learning quantity.
 
 **Content Agent Attempt**:
-One bounded, auditable execution of the Learning Content LLM Role and its approved
-tools for a single Content Provisioning Task. It ends when it submits one Material
-Candidate Bundle or fails, and has no authority after termination.
-
-This is the in-product Web content-generation Agent. It is not an authorized external
-Agent such as Codex submitting Semantic Intake through an Agent Connection. The former
-produces learner-private material inside Content Supply; the latter is an Intake Surface
-and does not gain content-publication authority.
-
+One bounded execution of approved tools for one Content Provisioning Task, terminating
+with a Material Candidate Bundle or failure. It has no admission authority. This is the
+in-product content producer, distinct from an external Agent submitting Semantic Intake.
 _Avoid_: Agent thread, generation chat
 
 **Content Demand**:
@@ -268,21 +265,14 @@ an LLM generated it successfully.
 
 **Portable Lightweight Package / `.sensa`**:
 The single-file public exchange artifact for one reusable Lightweight Sense Learning
-Package on one exact Target/Support Language Route. All reusable Lightweight content that
-crosses the distribution and installation boundary, including Sensa Official content,
-uses this contract. Authoring method and trust tier remain outside the file: official
-curation, external authorship and explicit learner export use the same runtime-admission
-shape, while Registry provenance can add a separately verified trust claim. On-demand
-material, Personal Learning Scenes and other learner-private revisions do not become
-`.sensa` merely because they were generated or saved; export is a separate explicit action.
+Package on one exact Target/Support Language Route. Official, external and explicitly
+exported content share its admission contract; trust comes from verified provenance,
+not the file's self-assertion. Saving private content does not imply Portable export.
 
 **Learning Materialization**:
-The immutable, protocol-ready content snapshot resolved from published,
-on-demand or hybrid sources for a Learning Protocol Run or one of its Step Instances.
-The Run keeps the materialization used to resolve its plan as a baseline; each Step
-records the compatible materialization actually presented. Actions and outcomes cite
-that Step snapshot rather than mutable prompts, a live model response or today's
-Curriculum pointer.
+An immutable, protocol-ready snapshot resolved from published, on-demand or hybrid
+sources. A Run pins its plan baseline; each Step pins the compatible snapshot actually
+presented, and its Actions and outcomes retain that snapshot.
 
 **Learning Protocol**:
 A versioned method contract that declares required content roles, allowed
@@ -446,13 +436,10 @@ creates a new Revision after every referenced Book archive is readable; it never
 an earlier Registry, Book archive or Package artifact.
 
 **Book Installation / Book Update Application**:
-Installation verifies the complete `.sensa-book` and all of its Portable Package members,
-then commits them atomically on a Device without changing Curriculum. Application is the learner's explicit acceptance of
-that Book Version for future Study Scope revisions. Added or removed members affect future
-planning rather than changing the participant set of an already-started Run. For a stable
-Learning Target, an applied compatible material revision may refresh the current unacted
-Step and future Steps; an acted Step keeps the material it actually presented. Applying a
-newer Version never deletes prior Learning Targets, Sessions, Evidence or Retention state.
+Installation atomically admits a complete Portable Book on a Device without changing
+Curriculum. Application is the learner's explicit adoption of that Book Version for
+future planning, preserving prior targets and history. Material refresh and participant
+rules are defined in the [resource model](docs/sensa/sense-learning-resource-model.md).
 
 **Sense Relation**:  
 A reviewed, versioned semantic relationship between two Senses, such as a real
@@ -592,12 +579,10 @@ be a non-evidentiary Initial Learning Completion but is not Learning Evidence,
 Acquisition Graduation or a mastery claim.
 
 **Scheduling Handoff**:
-The explicit transition by which an Initial Learning Completion asks the
-retention scheduler to initialize a schedule. It records the
-protocol outcome, initialization basis (`protocol_completion`,
-`acquisition_graduation`, `learner_rating` or `imported`) and an independent
-evidence level (`non_evidentiary`, `self_report`, `behavioral` or
-`externally_attested`).
+The explicit transition from a successful Initial Learning Completion to retention
+schedule initialization. It preserves protocol outcome, initialization basis and evidence
+level as distinct facts; the [runtime model](docs/sensa/learning-runtime-model.md)
+defines the accepted values and atomic handoff rules.
 
 **Relearning Cycle**:  
 A Structured Acquisition Cycle used by a Structured Relearning Protocol after a
@@ -628,17 +613,11 @@ activity. It is neither an authoritative progress aggregate nor a literal model
 of the learner's mind.
 
 **Semantic Intake**:
-A port-neutral request carrying any Context, Expression, Sense and Semantic Acceptance
-facts currently available. Text selection, image/audio capture, first-party extensions
-and learner-authorized Agents all submit through this boundary. Missing facts send the
-request to the slow track. A receiver validates structure and presence only; it does
-not re-judge whether a producer-supplied Context is semantically sufficient. An Intake
-does not become Personal Semantic World membership by itself. Context acquisition
-provenance, Sense-resolution provenance and Semantic Acceptance authority are three
-orthogonal facts: an entry surface may carry all three, but its client kind is never a
-routing rule or a Personal Meaning identity component. Clarification and resolution may
-happen in Sensa's own conversation or in an authorized external Agent conversation; the
-Personal Semantic World receives the resulting facts through the same Intake authority.
+A port-neutral request carrying the available Context, Expression, Sense and Semantic
+Acceptance facts. The receiver validates structure and presence, routing unresolved
+facts to Inbox and complete accepted facts to commit. Surface identity does not decide
+semantic membership; lifecycle and provenance rules belong to the
+[personal semantic model](docs/sensa/personal-semantic-world-model.md).
 
 **Intake Inbox Item**:
 A learner-owned unresolved Semantic Intake awaiting Context, an Expression selection,
@@ -647,13 +626,10 @@ decision to discard it. The Inbox is the receiving area of the Personal Semantic
 surface, not part of its stable semantic inventory.
 
 **Semantic Acceptance**:
-The auditable authority by which a complete Context–Expression–Sense resolution is
-committed to the Personal Semantic World. Acceptance may be performed directly by
-the learner or by an Agent acting on an explicit request or standing authorization;
-provenance must distinguish these bases, but delegated acceptance does not require a
-second first-party confirmation. A one-shot request in the current Agent conversation
-does not require a separately issued grant id. Semantic Acceptance is distinct from
-transport authentication, content review, Add-to-Learning and Learning Evidence.
+Auditable learner authority to commit a complete Context–Expression–Sense resolution,
+performed directly or delegated through an explicit request or standing authorization.
+Delegation requires no second first-party confirmation or separate one-shot grant id.
+Acceptance is distinct from authentication, content review, Add-to-Learning and Evidence.
 
 **Personal Semantic World（个人语义世界）**:
 The learner-owned set of complete Personal Meanings committed through valid direct
@@ -669,12 +645,9 @@ both branches and prior decisions as immutable history; it never covers later ed
 or changes learning evidence.
 
 **Personal Semantic Tombstone**:
-A durable lifecycle fact marking a Personal Semantic World identity as deleted while
-retaining its revisions and provenance. It prevents an offline older replica from
-resurrecting the identity and does not cascade into Learning or published content.
-An explicit learner restoration advances the same identity to a new lifecycle
-revision while retaining the earlier deletion fact; an old active replica is not
-a restoration intent.
+A durable deletion fact retaining an identity's revisions and provenance. It blocks
+resurrection by older replicas; explicit restoration advances the same identity without
+erasing deletion history or cascading into Learning or published content.
 _Avoid_: Physical deletion, last-write-wins deletion
 
 **Personal Content**:  
@@ -998,11 +971,9 @@ history and scheduling state, usable locally independently of optional online se
 It contains more than Personal Semantic World and does not replace its domain identities.
 
 **Personal Library Fact（个人学习库事实）**:
-A durable, provenance-bearing record of learner-owned accepted content, a learner
-decision or a learning event and its pinned interpretation. A fact may pin an exact
-Published Content identity/digest, but re-downloadable public Bundle or media bytes are
-an installation cache rather than a learner fact. Reconciliation preserves fact history;
-a fact is distinct from a pending command and the current projection of the library.
+A durable record of accepted learner content, a decision or a learning event with pinned
+interpretation and provenance. Public bytes that can be downloaded again are cache;
+pending commands, execution bookkeeping and current projections are separate concepts.
 
 **Device Operation Ledger（设备操作账本）**:
 A device-local record used to make command retries idempotent and return the original
@@ -1020,11 +991,10 @@ devices. It does not own semantic acceptance, learning outcomes or permission to
 the local library, and convergence alone is not a historical backup guarantee.
 
 **Cloud Checkpoint（云端检查点）**:
-An account-scoped, eventually consistent copy of locally committed Personal Library
-Facts for continuing on another device. A Cloud Checkpoint is produced after meaningful
-local milestones or bounded inactivity rather than acknowledging each local operation;
-it excludes the Device Operation Ledger and is neither the local commit nor an immutable
-Account Backup Recovery Point.
+An account-scoped, eventually consistent copy of locally committed Personal Library Facts
+for continuing on another device. It excludes the Device Operation Ledger and is neither
+the local commit nor an immutable Account Backup Recovery Point.
+Trigger and convergence rules are defined by [ADR 0004](docs/adr/0004-local-facts-cloud-checkpoints.md).
 
 **Remote Intake Delivery**:
 An account-scoped durable mailbox that carries one canonical Semantic Intake from a
@@ -1033,10 +1003,10 @@ service validates the contract and queues the request but does not resolve Sense
 judge Context sufficiency or write Personal Semantic World facts.
 
 **Agent Connection Setup**:
-A short-lived, one-time exchange that lets a reviewed local installer activate an
-account-scoped, revocable and intake-only Agent Connection. The copied setup command
-does not contain the long-lived credential; consuming a replacement setup activates
-the new connection before revoking its predecessor.
+A short-lived, one-time exchange that activates a revocable intake-only Agent Connection.
+The copied setup command contains no long-lived credential; connection lifecycle and
+credential rules are defined by the [personal semantic model](docs/sensa/personal-semantic-world-model.md#4-泛在-semantic-intake-与快慢轨),
+and installation flow by the [Agent journey](docs/sensa/user-journeys.md#94-agent-连接与交付).
 
 **Agent Connection**:
 An account-scoped credential that may submit Semantic Intake facts and read receipts
@@ -1051,17 +1021,14 @@ library committed it to either the fast track or Intake Inbox. A queued receipt 
 never be presented as local save success.
 
 **Account Backup**:
-An optional recovery service that stores independently verifiable, immutable recovery
-generations for a Personal Learning Library. The first planned mode is account-assisted
-recovery, in which Sensa can operate the backup and restore path; a future zero-knowledge
-mode may encrypt data so that only the learner can recover it. Account Backup is not
-Remote Intake Delivery or multi-device synchronization.
+A planned optional service storing complete, independently verifiable immutable recovery
+generations. Account-assisted recovery is the first planned mode; zero-knowledge recovery
+is a future alternative. Neither synchronization nor Intake delivery is Account Backup.
 
 **Account Backup Recovery Point**:
-One complete, immutable backup generation identified by its library, learner, schema,
-checkpoint, predecessor, digest and size. A recovery point is only valid after the
-service has stored and verified its complete payload; a sync cursor or pending upload
-is not a recovery point.
+One complete, immutable and verified backup generation, identified by its library,
+learner, schema, checkpoint, predecessor, digest and size. A pending upload or sync
+cursor does not establish a Recovery Point.
 
 **Account / Learner**:  
 Account is the authenticated access and lifecycle identity; Learner is the
@@ -1094,30 +1061,18 @@ The locale used to present one product surface. It is a Device or surface prefer
 not a Target Language, Support Language, captured-content fact or learning result.
 
 **Semantic Design Contract（语义设计合同）**:
-The shared presentation contract that names UI roles such as primary text, surfaces,
-actions, selection and feedback, and defines their typography, visual hierarchy and
-accessibility constraints. It separates those roles from a particular palette or
-style. It does not select learning resources, authorize disclosure or define a
-Learning Protocol or Card Presentation Slot.
+The shared roles and presentation constraints that let Sensa Skins render the same
+Product Semantics. It owns no learning resource, disclosure permission or Protocol.
+See [DESIGN.md](DESIGN.md) for component and layout contracts.
 
 **Sensa Skin / Skin Plugin（Sensa 皮肤 / 皮肤插件）**:
-An identifiable, versioned, Sensa-curated implementation of the Semantic Design
-Contract for supported product surfaces. A Skin may supply colors, typography,
-shapes, elevation, icons, illustration, component presentation recipes, spatial page
-layout, overlay layout, responsive presentation and constrained density, decorative or motion choices;
-it does not own product navigation, route identity, learning content, actions, input
-state, logical reading/focus order or learner facts. An admitted Skin supplies a
-complete appearance for every supported surface and resolved color mode. Only Skins
-admitted through Sensa's design, code-review and product-release governance are
-selectable. External authorship does not grant runtime installation or permission to
-execute third-party code or replace Product Shell renderers.
+A versioned, Sensa-curated implementation of the Semantic Design Contract; “Skin Plugin”
+is an alias for Sensa Skin above, not a runtime extension permission. Presentation and
+admission constraints are defined in [DESIGN.md](DESIGN.md).
 
 **Appearance Preference（外观偏好）**:
-A Device Preference with independent choices for Sensa Skin, color mode
-(`light | dark | system`) and reading preferences such as text size. A Skin switch
-preserves the other choices and remains subordinate to accessibility requirements.
-Its resolved appearance is presentation state, not a Learning Policy Assignment,
-Learning Materialization, Learning Event or synchronization result.
+A Device Preference selecting Skin, color mode and reading presentation independently.
+It remains subordinate to accessibility settings and does not change learner facts.
 
 **Sync Health**:  
 A derived, read-only view of pending local work, connectivity, installed content

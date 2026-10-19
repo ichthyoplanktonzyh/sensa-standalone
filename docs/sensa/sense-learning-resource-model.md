@@ -1,7 +1,6 @@
 # Sense Learning Resource Model
 
 > 状态：Canonical resource model
-> 更新日期：2026-09-25
 
 本文定义 Sensa 如何通过 Published、On-demand 或 Hybrid 路径为一个固定 Learning Target 提供学习
 资源，以及这些资源如何先形成 Run 的不可变材料基线、再由每个 Step 固定实际呈现的 Learning
@@ -523,59 +522,11 @@ renderer 时只能使用 Package 声明的 approved fallback 或诚实 unavailab
 
 ### 动态 Interaction Render 的协议方向（已接受，暂缓实施）
 
-未来的动态 Interaction Render 借鉴 A2UI 的声明式、组件目录、数据绑定、动作与客户端原生渲染
-思想，但 Sensa 不把外部 A2UI wire format 直接作为领域模型或 Package 的永久存储格式。A2UI
-属于可替换的表示或传输参考；Sensa 必须拥有稳定、版本化且语言无关的 Interaction Render
-Contract，并可在需要时通过 adapter 与具体协议或客户端框架连接。
+动态交互仍属于 Later；当前文本／静态按需内容不要求动态组件协议、流式 UI 或 Interaction Catalog。未来表示／传输协议通过 adapter 连接版本化 Interaction Render Contract，不作为领域永久格式。
 
-Interaction Render Contract 位于教学意图与客户端实现之间：
+该方向保留以下约束：内容只声明教学交互，可信 closed catalog 拥有执行、状态边界、无障碍与安全；Package／模型不得下发任意代码、网络请求、隐藏副作用或自由评分逻辑。Reviewed authoring 与未来 Runtime synthesis 共用准入合同，并分别保留 provenance、review status 和 Evidence eligibility。
 
-```text
-Experience Sketch
-      ↓
-Acquisition Primitive
-      ↓
-Interaction Render Contract
-      ↓
-Sensa Interaction Catalog
-      ↓
-React / Flutter Renderer
-```
-
-该 Contract 只声明获准的教学交互，不携带任意可执行代码。它必须把组件结构、内容数据、局部状态、
-允许的事件/动作、语义不变量和无障碍语义分开，并固定 contract/catalog version、
-所需客户端 capability 与资源引用。客户端使用可信的 closed catalog 实现样式、布局、动画、输入和
-平台无障碍行为；Package 或模型不得下发任意 HTML、JavaScript、CSS、网络请求、隐藏副作用或自由
-评分逻辑。
-
-Catalog 应优先提供具有教学语义的高层组件，例如 `state_change`、`force_threshold`、
-`sequence_order`、`figure_ground`、`contrast_toggle` 或 `timeline_scrubber`，而不是只让生成器任意
-拼接 Text、Button、Slider 等低层控件。生成器可以在封闭 Schema 内选择组件并填写受约束数据，
-但状态变化规则、事件边界与渲染安全由版本化组件合同所有。
-
-Interaction Render 有两种生产来源，但只有一套 Contract、Catalog、Validator 与客户端执行模型：
-
-1. **Reviewed authoring**：内容生产阶段预先生成或编辑 Render Candidate，经确定性校验、审核和
-   release 后成为 Package 内不可变的 Published Render；
-2. **Runtime synthesis**：未来由 AI 在运行时为既有 Sketch 生成替代或 repair Render Candidate，
-   仍须经过同一 Schema、target-form 隐藏、资源、capability、无障碍和安全校验，不能成为第二套
-   私有协议。
-
-二者的差异是 provenance、review status、lifecycle 与 Evidence eligibility，而不是结构。默认可信
-级别如下：Published Render 可以服务正式教学，并仅在独立 Action/Outcome 合同允许时参与正式过程；
-由获准组件和获准内容确定性组合的 Runtime Render 必须逐项证明资格；未经审核的 ephemeral AI
-Render 只能用于解释、替代呈现或定向 repair，不产生 Gate pass、Learning Evidence，不拥有 grader，
-也不覆盖 Published Package。未来若要提高其资格，必须通过新的版本化策略明确提升，不能由客户端
-或模型自行推断。
-
-Runtime 可以为固定 target 与 protocol 创建 On-demand Learning Materialization，但不能把该行为冒充
-“发布完整 Package”。Lightweight Study 可以使用经过相应合同校验的按需文本、静态场景和练习；
-Structured Acquisition 的 Gate policy、protected assessment inventory、正确答案和评分规则仍要求
-更强的受控内容与 Runtime 合同。客户端不支持某个 catalog/version 时，只能使用 materialization
-中已固定的 approved fallback 或诚实 unavailable，不能在 response 之后让模型改写教学意图。
-
-以上 Interaction Render Contract 仍是 Later 边界。V1 接受按需生成普通文本/静态学习内容，不因此
-要求动态组件协议、流式 UI、capability negotiation 或上述 Interaction Catalog。
+未审核 ephemeral Render 只能解释或 repair，不获得 grader、Gate pass 或 Learning Evidence，也不能覆盖发布材料。不支持的呈现只能使用固定 approved fallback 或报告 unavailable，不能在 learner response 后改写教学意图。Structured assessment 的答案与评分仍遵循受控资格合同。
 
 ### Learning Example、Attested Usage 与 Example Render
 
@@ -910,14 +861,7 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
   Action 被接受之后都不得重新生成并替换该 Step 的 prompt、answer、grader 或反馈依据；未接受 Action
   的 current/future Step 只能切换到同一 Curriculum Membership、Learning Target 与固定语言方向下
   另一个已验证、不可变的 materialization；
-- 原始多模态场景及其解析结果必须固定 identity、digest、media type、source、rights/use grant 与用途；
-  原始个人媒体不能因被 Agent 看见而自动成为 learner-visible material；
-- Content Agent Attempt 只能处理一个固定 Content Provisioning Task 并调用其 closed tool catalog；
-  tool result 必须按 Context Artifact、Content Derivation 或 Material Candidate 的真实角色保存；
-- Material Candidate Bundle 是 Agent 终止时提交的未受信提案，不是 Learning Materialization；Agent
-  preflight 不能替代 system-owned validation/admission，拒绝后的重试必须创建新 Attempt；
-- Provisioning Batch 中每个 Task 的 context、Candidate、失败与 retry 必须隔离；batch 不提供跨 target
-  内容身份，也不具有整体成功或回滚语义；
+- Agent 生产、原始多模态场景授权、工具结果归属、Bundle 独立准入与跨 Task 隔离统一遵循 [§1.2](#12-agentic-material-production)，不因批量执行获得额外权限；
 - Content Provisioning failure 只改变 purpose-specific plan readiness/blocked reason，不删除已接纳的
   Supplemental Membership，也不能静默切换 Learning Policy Profile 或制造 Runtime progress；
 - Protocol Step 只能绑定 Materialization 中具备对应 role、visibility、exposure 与 grader eligibility 的
@@ -1018,7 +962,7 @@ progress，也不选择本次具体 Asset。Release、Manifest、Encounter 与�
 version。缺失资源必须如实报告，不能以运行时 fallback、自由生成或伪造媒体通过门禁。
 
 
-### 2026-09-10 已确认扩展：经验回想内容
+### 经验回想内容
 
 轻量学习的经验回想内容用于建立或唤起经验，可以由文字、图片、离线 HTML 互动
 或其组合构成；首次学习允许通过互动建立经验。资源可由学习包预先提供，也可

@@ -120,7 +120,7 @@ Components have stable anatomy, behavior, state, and accessibility semantics. Sk
 
 The executable `sensa-component-skin-v1` contract exposes eight component families: `action`, `field`, `surface`, `selection`, `overlay`, `feedback`, `navigation`, and `learning`. A product component declares only its family, approved variant, semantic slots, and state. Shared component CSS maps that stable anatomy to `--sensa-component-*` tokens; Quiet and Clear independently implement every token. Product code must never ask which Skin is active in order to select markup, copy, data, or behavior.
 
-The first reusable React boundary includes `SensaAction`, `SensaChoice`, `SensaField`, `SensaSurface`, `SensaFeedback`, `SensaNavigation`, `SensaOverlayLayout`, `SensaOverlayFrame`, and `SensaLearningSurface`. Their data attributes are an internal styling protocol, not a public third-party extension API. Domain components may compose these primitives or expose the same contract directly when their anatomy is richer.
+Shared primitives expose this contract; domain components may compose them or expose it directly when their anatomy is richer. Component names and data attributes belong to the implementation, not a public third-party extension API.
 
 - **Button and IconButton:** preserve label, icon meaning, disabled/loading behavior, focus, hit target, and primary/secondary hierarchy.
 - **Input, Textarea, Search, and Choice controls:** preserve labels, help and error relationships, keyboard behavior, entered values, and validation state.
@@ -138,15 +138,15 @@ Quiet's domain adapters extend this shared grammar across the production surface
 - Free practice foregrounds the delivered real-world listening activity and its scope selection. Undelivered activities, if shown, remain unavailable and do not compete with executable actions. Reference lookup and example viewing remain reference activities, not learning evidence.
 - Settings use a divided directory, with bounded forms for model connections and explicit service feedback. Authentication, data removal, route selection and appearance retain their existing state and confirmation boundaries.
 
-These domain rules live in the scoped `quiet-*.css` adapters imported by `quiet.css`; they use existing semantic tokens, add no new product state and do not affect Clear. Small screens, large text and dark mode must retain all content and controls. Browser checks measure layout and state continuity independently of visual screenshot review.
+Domain adapters consume the shared semantic tokens without adding product state. Small screens, large text and dark mode must retain all content and controls. Browser checks measure layout and state continuity independently of visual screenshot review.
 
 A component must expose meaningful semantic slots and states. New component styling belongs in the shared primitive or domain component; page-local color and radius literals are not a supported extension mechanism.
 
 Each curated adapter is a versioned build-time manifest. It declares compatibility with the semantic, component, page-layout, overlay-layout, asset, and motion contracts plus reviewed capabilities for light/dark modes, text sizes, density, motion profile, asset set, and implemented layout families. The static registry is the only shipped catalog; there is no URL, package name, or executable-code field that could become an unreviewed runtime loader.
 
-The former `uiClass` recipe runtime has been retired. Stable layout and state selectors now live in their owning component or a scoped semantic stylesheet, and the appearance smoke rejects any return to the registry pattern. New product surfaces must not add recipe registries, private page palettes, or behavioral branches keyed to a skin.
+Stable layout and state selectors belong to their owning component or a scoped semantic stylesheet. Product surfaces must not add recipe registries, private page palettes, or behavioral branches keyed to a skin.
 
-In development, `/?skin-lab=1` opens the data-free Skin Lab instead of the product router. It renders every contracted component family/variant, page-layout family, overlay-layout family, and curated asset role with explicit fixture copy. Browser validation runs the Lab across every shipped Skin, light/dark mode, standard/large text, and mobile/desktop widths; it also checks semantic-region identity and order, state preservation, token and asset resolution, reduced-motion behavior, minimum control targets, keyboard focus, overflow, and runtime errors. The Lab is gated by `import.meta.env.DEV` and is not a production route.
+The development-only, data-free Skin Lab presents the contracted component, layout, overlay and asset families. Its registered browser checks cover every shipped Skin, light/dark mode, supported text sizes and responsive widths, including semantic order, state continuity, token/asset resolution, reduced motion, control targets, focus, overflow and runtime errors. Validation entry points are maintained in [engineering.md](docs/sensa/engineering.md#验证) and the [test catalog](tests/web/catalog.mts); development tooling is not a production route.
 
 ## Do's and Don'ts
 

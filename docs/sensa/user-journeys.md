@@ -829,18 +829,16 @@ Reference Release 和离线索引尚未交付，在线结果及其测试不能�
 
 ### 20.2 离线工作与同步
 
-本机事务在离线时仍是权威提交。联网后，同步通过稳定 operation、content-addressed blocks、CAS head 和
-三方合并形成新的 Cloud Checkpoint。`pending`、`offline`、`failed` 与 `synced` 必须分别显示；同步成功只
-说明当前 checkpoint，不是历史恢复点。
+离线修改保存在本机，联网后收敛到新的 Cloud Checkpoint。用户能区分待同步、离线、失败与已同步；同步成功只说明当前 checkpoint，不是历史恢复点。实现与验证入口见[工程说明](engineering.md#数据与同步)。
 
 ### 20.3 冲突与学习历史 Reconciliation
 
-- 普通内容冲突必须保留 base/local/remote 的可理解差异，并在写入前重新验证 head revision；
+- 普通内容冲突展示本机与云端的可理解差异，必要时展开共同旧版；实际内容变化后必须重新核对选择；
 - Personal Semantic World 的 delete-vs-edit 不按时间猜测；
 - 个人意义明确裁决须跨设备传播：未再修改的另一端采用同一结果，未选分支、操作收据、媒体及历史学习 pin 仍可验证；后续离线新改动或相反并发裁决不能被旧选择覆盖；
 - 两设备并发完成的学习 Run 不能使用通用“保留本机/使用云端”。两边 Run/Event 均保留，由版本化
   reconciliation decision 决定当前 Memory/Schedule 分支，另一支成为 history-only，不重复结算；
-- 多标签页共享一个 OPFS 资料库，由单一 owner 和 Web Locks 协调；旧页面或旧 schema 不得越权写入。
+- 多标签页使用同一本机资料库；旧页面或不兼容版本不得越权写入，协调机制由本机存储实现负责。
 
 ## 21. `LJ-17` 至 `LJ-20`：备份与数据控制
 

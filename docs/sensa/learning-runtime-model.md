@@ -213,15 +213,7 @@ Cycle 固定开启时的 Required Gate Set。内容或 Policy 更新不能静默
 
 #### Baseline Gate families
 
-- **Contextual Recognition**：在熟悉或基础语境中从 Form 识别目标 Sense；
-- **Meaning-to-form Recall**：从 Sense cue 主动取回目标 Lexeme；
-- **Novel-context Transfer**：在未作为教学材料使用的语境中识别同一 Sense；
-- **Boundary**：仅当 Profile 声明真实、required confusion target 时存在；
-- **Sound recognition**：只有产品/Profile 将听觉输入列为 required 时才成为独立 Gate。
-
-Gate progress 为 `unresolved | passed | failed`。Gate 只能由不泄露答案、经过所需干扰的有效
-Attempt 解决。Initial Cycle 的 Recognition、Recall 与 Transfer 各自需要独立 Attempt，不能
-合并；条件性 Boundary 可以与其中一个兼容 assessment 共解，并保存独立 basis。
+Gate 的能力定义、Recognition／Recall／Transfer 独立成功和条件性 Boundary 由[习得模型 §4](semantic-acquisition-model.md#4-acquisition-gates)裁决。Sound recognition 只在 Profile 将听觉输入列为 required 时成为独立 Gate。Runtime 保存 `unresolved | passed | failed` progress，并按固定 Profile 校验 Attempt 资格，不另定义一套能力标准。
 
 #### Failure and repair
 
@@ -940,6 +932,8 @@ Objectives，并在 Run 内拥有当前 credit；它不是 Capability Objective�
 通用 mastery dimension。Acquisition Gate 是 Structured Acquisition 使用的一类特殊 Checkpoint，
 Lightweight Protocol 不需要为了接入同一 Runtime 而创建空 Gate。
 
+多个 Checkpoint 可以检验同一 Objective，单个 Checkpoint 也可以关联多个 Objective；Checkpoint 的数量、顺序与名称由 Protocol Version 固定，不产生新的 Retention Target。
+
 Evaluation/Progression Policy 基于 Observation、合法 Evidence 与当前 Run state 产生不可变 Protocol
 Transition Decision。允许的 effect 由 Learning Kernel 定义并校验，至少可以表达：
 
@@ -1031,7 +1025,8 @@ Gate/5D。两者都不改写触发它们的 Memory Outcome，不创建新的 Sch
 ## 13. Scheduling Handoff、FSRS 与 Relearning
 
 - FSRS 按 Retention Target 消费版本化 Scheduling Handoff 或后续 Memory Outcome；
-- handoff 至少固定 protocol/version、basis、evidence level、completion time 与 initializer version；
+- handoff 固定 target、protocol/version、materialization、Initial Learning Completion／Outcome、completion time、scheduler policy／initializer version、initialization basis、evidence level、可选 Evidence references 与 learner-visible claim boundary；
+- initialization basis 为 `protocol_completion | acquisition_graduation | learner_rating | imported`，evidence level 独立为 `non_evidentiary | self_report | behavioral | externally_attested`；后续 Review／Relearning 不覆盖历史 initialization basis；
 - 每个成功的 Initial Learning Completion 必须且只能产生一个 handoff；Structured Acquisition
   Graduation 使用 `basis=acquisition_graduation, evidenceLevel=behavioral`，Lightweight Study
   Completion 使用 `basis=protocol_completion,
@@ -1228,20 +1223,6 @@ Sync record、manifest、block canonicalization、容量限制与冲突响应由
 
 ## 18. 当前实现边界
 
-当前生产 Web 的学习权威位于本机。应用层的稳定入口是
-`apps/web/src/learning/system/learningSystem.ts`：页面只提交 learner intent command、读取 projection，
-并订阅该查询的失效通知。Protocol/Policy、评价、运行协调与 presentation composition 是 Module 内部实现；
-`packages/learning-kernel` 只提供显式公开的可复用确定性纯规则，`apps/web/src/data/library` 在 SQLite WASM
-事务中执行准入并保存、恢复和重放个人事实、运行、结果与 FSRS 状态。Card/页面只是 renderer，不能直接
-调用存储命令或 Kernel 原语写入成功、证据或调度状态。
+当前生产 Web 的学习权威位于本机。页面只提交 learner intent 并渲染已解析结果，不能直接声明进度、Evidence 或调度。在线服务可以提供候选内容或运输已提交事实，不能拥有 Protocol Run、Completion、Memory Outcome 或 FSRS 结算。
 
-Hono/Edge 不是 Learning Runtime。它只提供账号和扩展授权、学习包目录/下载、普通账号 Library Cloud
-Sync、在线模型、阅读/语义查询及账号删除等可选在线能力；这些能力可以提供候选内容或运输已提交
-记录，但不能拥有 Protocol Run、Encounter、Completion、Memory Outcome 或 FSRS 结算。
-
-服务端旧 Consumer Runtime 及其 Planning/Encounter/replica vertical slice 已退出当前实现；数据库通过
-前向迁移删除对应运行、课程副本、内容生成任务与调度表，不保留旧数据兼容路径。以后增加新的
-Protocol/Profile 只能扩展本地运行时原语、版本化合同和重放验证，不能重新引入服务端学习权威。
-
-当前交付范围只保证 Web。暂停的原生客户端代码与历史参考文档不定义现行实现，也不能作为 Web
-运行时、离线能力或同步合同的验收证据。
+实现入口、事务适配和验证环境见[工程说明](engineering.md#活跃代码边界)，不在领域模型记录目录结构或退役实现。当前交付范围只保证 Web，暂停的原生客户端与历史参考不能作为 Web 的离线或同步验收证据。
