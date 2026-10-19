@@ -107,7 +107,7 @@ export async function preparePersonal(id:string,source:ContentProvisioningSource
   await checkReviewPolicy(tx,reviewProvider);await checkProvider(tx,'content',contentProvider);if(reviewProvider)await checkProvider(tx,'review',reviewProvider);
   if(!task.replacing&&target?.curriculumMemberships.some(membership=>membership.id===task.curriculumMembershipId)){task.status='ready';task.leaseUntil=0;tx.put('personalLearning',id,task);return null;}
   if(['generating','reviewing'].includes(task.status)&&task.leaseUntil>Date.now())throw new Error('localFlow.preparationBusy');
-  const recentAttemptCount=await tx.countContentAttemptsSince(id,new Date(Date.now()-86400000).toISOString());if(import.meta.env.VITE_SENSA_UNLIMITED_PREPARATION!=='true'&&recentAttemptCount>=6)throw new Error('localFlow.preparationLimit');
+  const recentAttemptCount=await tx.countContentAttemptsSince(id,new Date(Date.now()-86400000).toISOString());if(import.meta.env.VITE_SENSA_UNLIMITED_PREPARATION!=='true'&&recentAttemptCount>=20)throw new Error('localFlow.preparationLimit');
   const prior=task.attemptId?await tx.get<ContentAttempt>('contentAttempts',task.attemptId):undefined;
   const fixedInput=structuredClone({source:task.source,languageContext:task.languageContext,planRevision:task.planRevision,useContext:task.useContext});
   // Continue a saved candidate after transport interruption without repeating generation.
