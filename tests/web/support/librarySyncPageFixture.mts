@@ -8,6 +8,7 @@ import {portableBookDeliveryFixture} from '../../../scripts/support/portablePack
 import {expect,type Browser,type BrowserContext,type Page} from '@playwright/test';
 import {createLibraryCloudBrowserFixture,type LibraryCloudAccount} from './libraryCloudBrowserFixture.mts';
 import {webTestBuild,createWebTestBuildCache} from './webTestBuild';
+import {readRestoringSyncStatus} from './librarySyncStatus';
 
 /** Shipped React pages and Supabase SDK; only external Auth HTTP is synthetic.
  * Facts, artifacts, receipts and OPFS cross the real loopback API/PG boundary. */
@@ -65,3 +66,4 @@ export async function loginSyncPage(page:Page,origin:string){
  await page.getByLabel('邮箱',{exact:true}).fill('sync@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible({timeout:60000});
 }
 export async function syncPanel(page:Page,origin:string){await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();await page.locator('#settings-data').click();return page.locator('.sensa-cloud-sync');}
+export const restoringSyncStatus=(page:Page)=>page.evaluate(readRestoringSyncStatus,undefined);
