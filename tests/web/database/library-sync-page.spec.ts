@@ -21,7 +21,9 @@ test('real pages publish a native artifact, restore, edit, sync incrementally an
   const sourcePanel=await syncPanel(source,f.origin);await sourcePanel.getByRole('button',{name:'立即同步',exact:true}).click();await expect.poll(async()=>(await checkpoint(source)).state?.revision).toBe((await checkpoint(target)).state!.revision);
   expect((await checkpoint(source)).state?.receive).toMatchObject({mode:'incremental',changedRecords:4,baselineBuildRecords:0});
   expect(f.api.requests().some(row=>row.path.endsWith('/compact'))).toBe(false);expect(await facts(target)).toEqual(await facts(source));expect((await checkpoint(target)).refs).toEqual((await checkpoint(source)).refs);
-  const stable=await facts(target);await target.reload();await expect.poll(()=>target.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');expect(await facts(target)).toEqual(stable);
+  const stable=await facts(target);await target.reload();
+  await target.waitForFunction(()=>typeof window.__sensaBrowserSmoke?.syncStatus==='function');
+  await expect.poll(()=>target.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');expect(await facts(target)).toEqual(stable);
   await info.attach('real-page-checkpoint.json',{body:JSON.stringify({auth:'synthetic HTTP; real SDK',source:before.state,receiver:restored.state,nonemptyRefs:restored.refs.length,incrementalRevision:(await checkpoint(target)).state?.revision,requests:f.api.requests()}),contentType:'application/json'});
  }finally{await f.close();}
 });
