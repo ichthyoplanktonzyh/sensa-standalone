@@ -36,9 +36,9 @@ export type WebTestCatalogEntry = Readonly<{
   runner: WebTestRunner;
   memoryLibrary?: boolean;
   env?: Readonly<Record<string, string>>;
-  /** Full release validation only; default/local selection is still full. */
+  /** Excluded by explicit local quick selection; not a PR/main gate. */
   browserDepth?: 'full';
-  /** Small, always-run PR database boundary; unmarked tests remain full-only. */
+  /** Optional local core selection; fixed PR/main gates use ciWhitelist.mts. */
   databaseDepth?: 'core';
 }>;
 
@@ -84,6 +84,7 @@ const foundationTests = [
   {id:'sqlite-snapshot-source',file:'tests/web/unit/sqlite-snapshot-source.test.mts',kind:'unit',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'library-admitted-snapshot',file:'tests/web/integration/library-admitted-snapshot.test.mts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'library-snapshot-source-browser',file:'tests/web/browser/library-snapshot-source.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'chromium',suite:'browser',runner:'playwright'},
+  {id:'ci-core-e2e',file:'tests/web/database/ci-core.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'library-sync-page',file:'tests/web/database/library-sync-page.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'browser-postgres',suite:'database',databaseDepth:'core',runner:'playwright'},
   {id:'library-native-snapshot',file:'tests/web/database/library-native-snapshot.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'local-portable-snapshot-browser',file:'tests/web/browser/local-portable-snapshot.spec.ts',kind:'integration',risks:['local-correctness','durability'],environment:'chromium',suite:'browser',runner:'playwright'},

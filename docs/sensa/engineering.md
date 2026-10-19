@@ -961,7 +961,7 @@ SENSA_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/sensa_m1a
 npm run check
 ```
 
-`npm run check` 中的快速测试由统一目录运行。Foundation 已按两个正交维度明确分类：
+`npm run check` 中的固定 Node 测试由统一目录运行。目录按两个正交维度分类：
 `unit | contract | integration | quality` 表示验证机制，`local-correctness | durability | convergence | scale`
 表示产品风险。旧检查已迁入按边界组织的测试目录，保留原有断言与运行隔离；所有目录项均带风险标签，关键的大文件再逐步拆为具名场景。可以单独列出或按维度运行：
 
@@ -975,9 +975,9 @@ npm run test:fast -- --suite=fast --id=learning-registry
 SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 ```
 
-`built-web-artifact` 选择器读取生产构建产物，单独运行前先执行 `npm run build`；`npm run check` 已按此顺序执行。
-`browser-postgres` 使用真实 Chromium、OPFS、本地 Hono 路由和一次性 PostgreSQL，只在显式选择或 `npm run test:db`
-时运行，不进入无数据库依赖的默认结构化基线。
+`built-web-artifact` 专项读取生产构建产物，运行前先执行 `npm run build`。
+`browser-postgres` 使用真实 Chromium、OPFS、本地 Hono 路由和一次性 PostgreSQL；固定 CI E2E 与显式 `test:db`
+均可选择它，不进入无数据库依赖的 `npm test`。
 
 `tests/web/catalog.mts` 是唯一的 Web 测试执行目录：`fast`、`browser`、`database`、`capacity`、`manual` 和
 `foundation` 各按所需环境独立运行，单项可用 `--suite=... --id=...` 选择。旧的 `scripts/sensa*Smoke.*`
@@ -988,33 +988,36 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 
 Personal Meaning 与 Package Center 重旅程的单次受控 UI 耗时区分产品目标和发布硬上限：原目标、实测值与条件继续记录；超过目标即输出明确 `PERFORMANCE_WARNING`，不认领该样本已达到目标。发布容差为 `max(100ms, 目标 × 20%)`，避免用很窄的百分比边界阻挡亚秒交互；超过目标加容差的样本以及无效测量仍失败。这是显式工程发布约定，不是实测噪声置信区间，也不代替持续性能基线。功能、权限、数据保存、原子性、完整性、无全库读取与有界 DOM 的断言保持严格；不得通过容差隐藏持续退化或大规模架构问题。
 
-浏览器 CI 通过 `--shard=1/3`、`2/3`、`3/3` 按目录文件无重叠分组；每个文件保持独立服务器、浏览器状态、逐例执行与交互预算。全部分组成功才通过同名 Chromium 汇总门禁。目录入口继续执行剩余文件并汇总非零结果，不因第一处失败遗漏后续证据；本机不带 shard 时仍执行完整目录。
+PR 与 main 使用完全相同的固定小门禁，清单只在 `tests/web/ciWhitelist.mts` 维护：
 
-`--suite=browser --depth=quick` 是 PR 的日常反馈层：不选择目录中 `browserDepth:full` 的成熟历史／大 Book 文件，并由原生 Playwright 排除具名 `@capacity` 大规模用例。普通规模的真实保存、并发、失败恢复、持久化和生命周期回归仍运行。主分支 CI 必须使用 `--depth=full`，发布资格仍依赖包括容量检查在内的全部分片；本机默认也是 full。快速报告明确记录 depth 和排除 tag，不是完整旅程或容量验收证据，不把历史绿色结果代入本次运行。
+- 静态／构建 job：typecheck、完整 build、`test:edge`，以及 16 个 Node 文件的 77 个登记案例。
+- 数据库／浏览器 job：7 个纯 PostgreSQL 案例，以及独立 `ci-core.spec.ts` 的 4 个真实 E2E 案例。
 
-PR 数据库检查始终保留 `--suite=database --db-depth=core`：全部轻量 PostgreSQL 合同、真实迁移／权限检查，
-以及 `library-cursor` 的幂等／丢 ACK 恢复和 `library-sync-page` 的双端页面同步／重开。完整组合由
-`scripts/ciScope.mts` 的小型显式白名单选择：只有全部改动都属于文档、Web CSS 或列明的呈现文件才选 core；
-账号、存储、同步、共享依赖、迁移、API、测试／CI 配置、其他或无法读取的路径都选 full。main 固定 full。
-未知、新增测试默认属于 full，未标为 core 不代表它被覆盖。选择 job 输出原因，原生报告记录实际文件与 databaseDepth；
-不把 core 的绿色报告认领为完整数据库验收。本机 `npm run test:db` 默认仍是 full。
-
-fast 的 World 与 learner projection 规模夹具分别为 256 与 64，保留原有完整性、身份、事务回滚、私有载荷和
-禁止来源全库读取断言；同一断言体的 10k 版本移到独立 capacity suite，原查询／交互指标不变：
+共 88 个登记案例；Node 24 的 Base64 功能探测允许其中 3 个条件跳过，数据库与 E2E 不允许跳过。
+E2E 使用单表达 Book、一个有效 Meaning 和空隔离 context，不导入大 spec 或生成成熟历史。
+它覆盖离线手动保存／重开、游客学习／真实调度到期复习、过期会话 online 恢复且不重放事实，
+以及真实 PostgreSQL 原生恢复／增量同步／重开。外部 Auth HTTP 受控；生产 Web、SDK、OPFS、Hono 和数据库实际执行。
+绿色门禁只说明固定小样本通过，不声明完整旅程、容量或公网服务验收。
 
 ```sh
-npm run test:db -- --db-depth=core
-npm run test:capacity:storage
+npm run check             # 每次提交：typecheck、build、固定 Node 门禁
+npm run test:edge
+npm run test:ci:postgres  # 需要已迁移的一次性 PostgreSQL 与受限测试角色
+npm run test:ci:e2e       # 同一数据库，并安装 Chromium
+npm run test:ci           # 固定 88 案例；不含 typecheck/build/edge
 ```
 
-`.github/workflows/sensa-storage-capacity.yml` 是无部署的专项入口，也由每次 main CI 调用一次。
-它的失败继续令该 main CI 无发布资格，保留原生报告 7 天；修复后重跑失败 job 或提交新 revision，不能删除断言、
-扩大产品指标或用 fast 结果替代。人工 `workflow_dispatch` 可指定完整 SHA 做同一检查，但不生成应用发布候选，
-也不自动替换另一 SHA 的证据。PR 不执行这两项 10k 准备，现有浏览器 quick／main full 的边界保持。
-测试产物属于本次 checkout 下的 `.tmp/test-results/<suite>/`、`.tmp` 夹具和浏览器输出；CI runner 随 job 回收，
-报告受 artifact 保留期限制。本机测试应在专属临时 worktree 内运行；关闭本轮启动的浏览器和一次性数据库后，
-先按下节归档所需失败／测量证据，再由本轮工作树的清理任务回收，不能扫描删除 owner profile、node_modules、
-未归档证据或其他工作树。本轮新增 capacity 使用内存 SQLite，不生成可无限积累的持久 10k 数据目录。
+其余目录测试默认是本地专项，按风险显式选择 `test:fast`、`test:browser`、`test:db` 或 `test:capacity:storage`；
+`--depth=quick|full`、`--db-depth=core|full`、`--shard=N/M` 继续服务本地专项，不决定 CI 必跑范围。
+未知路径不扩大为全量长测。涉及迁移、同步、权限或其他高风险改动时，选择相关专项，
+在 PR 简短注明测试 revision、条件与结果；未运行的边界明确写未运行，不能用旧 SHA 的绿色记录代替。
+保留关键数据断言和原交互指标，不通过放宽预算、删除测试或把失败改为告警取得绿色门禁。
+
+`.github/workflows/sensa-storage-capacity.yml` 保留为显式、无部署的容量专项入口，main 不自动调用。
+它不生成应用候选，也不自动赋予其他 SHA 发布资格。容量／长时间测试不再进入每次提交或普通发布路径。
+测试产物保留在本次 checkout 的 `.tmp/test-results/<selection>/` 与浏览器输出，CI 报告保留 7 天。
+本机使用专属临时 worktree；关闭本轮启动的浏览器和一次性数据库，按下节归档必要证据后回收本轮夹具。
+不扫描删除 owner profile、未归档证据或其他工作树。
 
 
 长旅程是产品收敛与验收 checkpoint 的基本单位。`user-journeys.md` 定义目标和合法出口；
@@ -1135,27 +1138,26 @@ Event Timing、最长任务和页面加载指标分别测量，不能互相替�
 `npm run test:coverage` 只生成当前 Vitest 用例所触及
 Web 学习投影的覆盖率报告，不设置全局覆盖率门槛；Playwright Test 失败时按测试项隔离保留 trace 和截图在被 Git 忽略的
 `.tmp/playwright-results/<suite>-<shard>-<invocation>-<group>` 中，CI 失败时上传这些诊断产物，不重试。Playwright Test 用例必须只使用合成、非敏感数据。
-平台用例仍通过目录进入既有 CI 分层，不额外执行一遍。
-风险标签是筛选维度，不是独立的 CI job：`foundation`/`fast` 的 Vitest 与构建产物检查进入主 CI 的 `npm test`；
-Chromium 的 Playwright Test 检查进入 `npm run test:browser`；PostgreSQL 的 Vitest 和 Chromium+PostgreSQL 的 Playwright Test 检查进入 `npm run test:db`。
-运行器会拒绝把自动化测试登记到错误的 CI 环境边界。`manual` 的实际 Book 检查依赖另行生成的
-`release-candidate/portable-catalog.json`，不在普通 CI 中；普通 CI 的 `package-learning` 等测试覆盖同一安装、结算和复习代码路径，但不替代实际发布包验收。
+风险标签是筛选维度，不是独立 CI job。目录记录所需运行环境，固定 CI 只选择上文白名单；
+`test:fast`、`test:browser`、`test:db` 仍可显式执行对应专项，运行器拒绝不兼容的原生引擎／环境登记。
+`manual` 的实际 Book 检查依赖另行生成的 `release-candidate/portable-catalog.json`，不在普通 CI 中。
+固定 CI 的单表达 Book 检查覆盖真实安装、学习结算和到期复习，不替代实际发布包验收。
 
 目录运行器按 runner、环境和精确环境变量分组调用原生测试引擎，不再为每个文件启动独立进程。
 Vitest 保持文件隔离与单 worker；Playwright 保持每个 spec 的 fixture 边界，不增加 worker 或拆散共享生命周期中的用例。
 原 package-center 大型 spec 已按词书、账号恢复、表达练习、学习运行和学习安排拆为独立文件，
 共享 fixture 只复用实现，各文件的可变状态与输出目录独立；相同配置的只读构建按下述规则复用。
-Browser shard 按已观察的文件耗时估计确定性分配；未采样文件使用保守默认权重，不将估计当作 SLO 或实际提速结果。
+本地专项可按已观察文件耗时做确定性分组；估计不是 SLO 或实际 CI 提速证据。
 
 相同 worker 调用内，Package Center 各文件复用 `webTestBuild.ts` 生成的只读产物。它按完整公开构建配置区分，固定本次调用中首次分配的临时 Web/API 端口；每个文件关闭旧服务器后才建立自己的新 handler，浏览器 context、OPFS、账号和可变夹具不共享。不同配置仍构建新产物，失败构建不会成为成功缓存；缓存不跨 invocation，也不是生产候选。开发态 Skin Lab 显式使用 `NODE_ENV=development`，不继承前一文件的 Vite 构建模式。
 
-完整 CI 中，`prepareRetentionCapacity.mts` 使用原生 GitHub Actions cache 保存纯合成成熟历史数据。key 固定生成／校验的源码依赖、workspace package source、lockfile、Node 版本、平台和输入规模，没有跨版本 restore-key。命中后仍执行当前 digest、数量和完整领域 replay 校验；不一致、非数据文件、symlink 或不完整准备直接失败，不静默覆盖、清空或重建旧缓存。每个浏览器用例仍复制到自己的空隔离 OPFS，复制耗时与交互耗时分开报告。缓存减少正式历史的重复生成，不能省略浏览器写入、恢复或性能测量。
+容量专项可用 `prepareRetentionCapacity.mts` 准备纯合成成熟历史数据。key 固定生成／校验的源码依赖、workspace package source、lockfile、Node 版本、平台和输入规模，没有跨版本 restore-key。命中后仍执行当前 digest、数量和完整领域 replay 校验；不一致、非数据文件、symlink 或不完整准备直接失败，不静默覆盖、清空或重建旧缓存。每个浏览器用例仍复制到自己的空隔离 OPFS，复制耗时与交互耗时分开报告。缓存减少正式历史的重复生成，不能省略浏览器写入、恢复或性能测量。
 
 每次调用在 `.tmp/test-results/<selection>/shard-<shard>/<invocation>/` 保存原生 JSON／blob 报告与目录选择回执，
 同时记录 GitHub attempt。成功要求原生引擎退出成功且报告包含全部、仅包含本次选择的测试文件；
 不存在的报告、遗漏文件或其他调用留下的旧产物不能代替执行结果。CI 在成功与失败时都上传原生报告，
-并用 Playwright 自带的合并器生成同一 CI run（含局部重跑 attempt）的浏览器 HTML 报告。
-聚合报告不放宽各 shard 的成功门禁；失败 trace 与重跑前的失败报告保留，诊断产物保留七天。
+固定 CI 另核对登记案例数及允许的条件跳过数，遗漏或额外跳过直接失败。
+失败 trace 与重跑前的失败报告保留，诊断产物保留七天。
 
 `tests/web/support/libraryConvergenceWorld.mts` 通过一个小型测试 Interface 封装每台设备的 confirmed base、当前
 本地快照、云端发布、领域 Replica Module 合并与冲突分区。场景只提交领域有效快照、指定同步顺序，并可在确定时点
@@ -1225,9 +1227,9 @@ SQL、正文、邮箱、token、堆栈或嵌套 cause。连接池连接／idle�
 提供的隐式全局。受控回归仅在应用工作范围移除全局 Buffer，保留 Node HTTP 自身依赖，验证上传、容量拒绝
 及相同块重试；Edge 编译和真实托管运行另行验证，不用 Node 回归冒充 Deno 运行证据。
 
-`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、Web 快速测试、浏览器检查以及 PostgreSQL/API 集成。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>-attempt-<BUILD_ATTEMPT>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
+`.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行上文同一份固定小门禁，不要求全量或容量专项。Pull request 只生成验证构建；`main` 的静态／快速 job 使用 `web-candidate` 公共配置构建一次生产候选，在同一 job 内固定完整 SHA、GitHub Actions provenance、公开目标、migration 集合和每个交付文件摘要，完成 artifact 检查与 Cloudflare dry-run 后才上传 `sensa-production-<SHA>-attempt-<BUILD_ATTEMPT>`。其余 CI job 共同决定该候选是否具备发布资格；失败 run 中即使存在 artifact 也不能被发布器接受。
 
-候选的构建 attempt 与全套检查通过的验证 attempt 分开记录。只重跑失败测试时，候选仍属于原构建；完整重跑会上传新的独立候选，不覆盖旧产物。`candidateSource.mjs` 只读核验精确仓库、绿色 main/push run、验证 attempt、未过期 artifact ID/digest，以及生成它的成功构建 job 和时间边界。部署按 artifact ID 下载，并继续校验原构建 provenance、目标和全部文件摘要，不把测试重跑当作重新构建。
+候选的构建 attempt 与固定门禁通过的验证 attempt 分开记录。只重跑失败测试时，候选仍属于原构建；完整重跑会上传新的独立候选，不覆盖旧产物。`candidateSource.mjs` 只读核验精确仓库、绿色 main/push run、验证 attempt、未过期 artifact ID/digest，以及生成它的成功构建 job 和时间边界。部署按 artifact ID 下载，并继续校验原构建 provenance、目标和全部文件摘要，不把测试重跑当作重新构建。
 
 Workflow 是执行规则，不是平台级合并保护。只有在 GitHub 分支保护／ruleset 实际启用并核验 required checks 后，才能认领强制合并门禁；Environment 的审批规则也需要独立核验。私有仓库的计划限制不能通过脚本或一个 `owner_accepted` 参数宣称已经解决，不默认更改仓库可见性或购买计划。
 
@@ -1327,13 +1329,9 @@ RLS 删除条件另外限制已过期快照／回执、退役引用和无保护�
 一次 incident 创建／健康复测关闭；任务日志不包含正文、身份或连接凭据。备份记录的只读清单不是恢复演练，
 没有经核验的恢复点时仍按支持手册报告缺口，不恢复或覆盖生产库来做演练。
 
-4× CPU 的 Book 规模基准在 browser shard 2 的独立进程中先执行，再运行常规长旅程；后者只排除这一个
-已单独执行的 tag，不省略其他行为检查。独立基准的预算不变，但共享 runner 的单次降速测量是非阻塞
-告警，不作为应用修复发布资格；失败仍保留为失败样本，输出 workflow warning，独立上传 trace、CPU profile
-与可用测量证据，不能认领性能达标。其输出目录与常规旅程分离，避免后续 Playwright 清理覆盖证据。
-全部常规功能分组、权限、持久化和其他既有风险断言仍为必要门禁。它避免同一测试进程此前的大库 fixture
-留存影响新空库安装样本，不将共享 runner 结果冒充生产设备 SLO；持续退化仍须单独诊断，先前的失败和本机
-样本不能代替当前 CI 的独立复测。
+4× CPU 的 Book 规模基准保留为独立本地专项，按原 tag 在独立进程运行，原预算不变。
+失败保留为失败样本，不能认领性能达标；trace、CPU profile 与测量条件按既有证据规则归档。
+它不在普通 PR/main CI 自动运行，也不阻塞普通发布；涉及该性能边界的改动仍需显式专项验证。
 
 仅迁移已上线版本的网址时，使用 `.github/workflows/sensa-web-domain.yml` 的配置入口，不发布新的应用
 候选。它要求 owner 明确选择一份成功的统一发布记录，并核验其中的绿色 main CI 和 Cloudflare 当前

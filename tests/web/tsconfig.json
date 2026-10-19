@@ -159,6 +159,7 @@
     "database/library-sync-page.spec.ts",
     "quality/ci-selection.test.mts",
     "capacity/storage-scale.test.mts",
-    "../../scripts/ciScope.mts"
+    "ciWhitelist.mts",
+    "database/ci-core.spec.ts"
   ]
 }

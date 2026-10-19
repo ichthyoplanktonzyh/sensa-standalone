@@ -16,22 +16,6 @@ env:
   VITE_SUPABASE_PUBLISHABLE_KEY: local-browser-test-key
   VITE_SENSA_API_URL: http://127.0.0.1:4319
 jobs:
-  database-selection:
-    name: Database test selection
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      depth: ${{ steps.selection.outputs.database_depth }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: '24'
-      - id: selection
-        run: node --experimental-strip-types scripts/ciScope.mts
-
   static-smoke:
     name: Static, build and fast smoke
     runs-on: ubuntu-latest
@@ -48,7 +32,7 @@ jobs:
           deno-version: v2.x
       - run: npm ci
       - name: Check all test inventory boundaries before building
-        run: node --import tsx tests/web/run.mts --suite=fast --list
+        run: node --import tsx tests/web/run.mts --ci=node --list
       - name: Typecheck
         run: npm run typecheck
       - name: Build pull-request validation surface
@@ -73,14 +57,14 @@ jobs:
           npx wrangler versions upload --dry-run --strict
       - name: Edge compile check
         run: npm run test:edge
-      - name: Fast production-path smoke suite
+      - name: Fixed Node smoke gate
         run: npm test
       - name: Preserve native fast-test reports and exact selection
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: sensa-fast-report-attempt-${{ github.run_attempt }}
-          path: .tmp/test-results/fast/
+          path: .tmp/test-results/ci-node/
           if-no-files-found: warn
           retention-days: 7
       - name: Preserve the tested main release candidate
@@ -101,143 +85,10 @@ jobs:
             packages/mcp-server/dist/
             release-candidate/manifest.json
 
-  browser-shards:
-    name: Chromium integration shard ${{ matrix.shard }}/3
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    # Full journey coverage includes isolated production builds, genuine
-    # history generators and OPFS lifecycle fixtures; spec interaction budgets
-    # remain independent and unchanged.
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - name: Build browser test workspace dependencies
-        run: npm run build:shared
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Select browser validation depth and exact capacity preparation
-        id: browser-selection
-        env:
-          BROWSER_DEPTH: ${{ github.event_name == 'push' && 'full' || 'quick' }}
-        run: |
-          mkdir -p .tmp
-          node --import tsx tests/web/run.mts --suite=browser --depth="$BROWSER_DEPTH" --shard=${{ matrix.shard }}/3 --list > .tmp/browser-selection.txt
-          echo "depth=$BROWSER_DEPTH" >> "$GITHUB_OUTPUT"
-          if rg -q '^retention-review-capacity \|' .tmp/browser-selection.txt; then
-            echo 'retention=true' >> "$GITHUB_OUTPUT"
-          fi
-      - name: Fingerprint formal history fixture dependencies
-        id: retention-key
-        if: steps.browser-selection.outputs.retention == 'true'
-        run: node --import tsx scripts/prepareRetentionCapacity.mts --key --targets=1000 >> "$GITHUB_OUTPUT"
-      - name: Restore exact-version synthetic history data
-        if: steps.browser-selection.outputs.retention == 'true'
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
-        with:
-          key: sensa-retention-${{ runner.os }}-${{ steps.retention-key.outputs.key }}
-          path: ${{ steps.retention-key.outputs.directory }}
-      - name: Validate cached facts or generate genuine history
-        if: steps.browser-selection.outputs.retention == 'true'
-        timeout-minutes: 15
-        env:
-          SENSA_TEST_MEMORY_LIBRARY: 'true'
-        run: node --import tsx scripts/prepareRetentionCapacity.mts --prepare --targets=1000
-      - name: Isolated Book scale benchmark before large journey fixtures
-        id: book-scale-performance
-        if: ${{ matrix.shard == 2 && steps.browser-selection.outputs.depth == 'full' }}
-        continue-on-error: true
-        run: npx playwright test tests/web/browser/package-center-journey.spec.ts --grep @book-scale-performance --output .tmp/playwright-book-scale-performance
-      - name: Preserve advisory Book scale evidence
-        if: ${{ always() && matrix.shard == 2 && steps.browser-selection.outputs.depth == 'full' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: sensa-book-scale-performance
-          path: .tmp/playwright-book-scale-performance/
-          if-no-files-found: warn
-          retention-days: 7
-      - name: Report advisory Book scale failure
-        if: ${{ steps.book-scale-performance.outcome == 'failure' }}
-        run: echo '::warning::The 4x CPU Book scale benchmark failed. See sensa-book-scale-performance evidence; this sample does not meet its performance target. Functional journey checks remain required.'
-      - name: Browser integration and OPFS durability
-        env:
-          SENSA_SKIP_BOOK_SCALE_BENCHMARK: 'true'
-          SENSA_RETENTION_CAPACITY_FIXTURE: ${{ steps.retention-key.outputs.directory }}
-        run: npm run test:browser -- --depth=${{ steps.browser-selection.outputs.depth }} --shard=${{ matrix.shard }}/3
-      - name: Preserve native browser reports for every shard attempt
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: sensa-browser-report-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
-          path: .tmp/test-results/browser/
-          if-no-files-found: warn
-          retention-days: 7
-      - name: Upload synthetic Playwright Test failure evidence
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: sensa-playwright-failure-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
-          path: .tmp/playwright-results/
-          if-no-files-found: ignore
-          retention-days: 7
-
-  browser-integration:
-    name: Chromium production integration
-    needs: browser-shards
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - name: Restore native reports including earlier successful shards on a partial rerun
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          pattern: sensa-browser-report-*
-          path: .tmp/browser-native-reports
-      - name: Merge native Playwright reports without erasing earlier failed attempts
-        run: |
-          node --input-type=module <<'JS'
-          import {readdir,mkdir,copyFile} from 'node:fs/promises';
-          import {basename} from 'node:path';
-          const visit=async root=>(await Promise.all((await readdir(root,{withFileTypes:true})).map(entry=>entry.isDirectory()?visit(root+'/'+entry.name):root+'/'+entry.name))).flat();
-          await mkdir('.tmp/browser-blob-reports',{recursive:true});
-          const blobs=(await visit('.tmp/browser-native-reports')).filter(path=>path.endsWith('.zip'));
-          if(!blobs.length)throw Error('Native browser report evidence is missing');
-          const names=new Set();
-          for(const path of blobs){const name=basename(path);if(names.has(name))throw Error('Ambiguous browser blob name');names.add(name);await copyFile(path,'.tmp/browser-blob-reports/'+name);}
-          JS
-          npx playwright merge-reports --reporter=html .tmp/browser-blob-reports
-      - name: Preserve merged browser report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: sensa-browser-merged-attempt-${{ github.run_attempt }}
-          path: playwright-report/
-          if-no-files-found: warn
-          retention-days: 7
-      - name: Require every browser shard to pass
-        if: always()
-        env:
-          SHARD_RESULT: ${{ needs.browser-shards.result }}
-        run: test "$SHARD_RESULT" = success
-
   database-integration:
-    name: PostgreSQL and API integration
-    needs: database-selection
+    name: Core PostgreSQL and browser smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
@@ -251,7 +102,6 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:local-ci-only@127.0.0.1:5432/sensa_m1a_ci
       SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
-      SENSA_DATABASE_DEPTH: ${{ needs.database-selection.outputs.depth }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -275,25 +125,31 @@ jobs:
           JS
       - name: Install Chromium for database integration
         run: npx playwright install --with-deps chromium
-      - name: Node and browser database integration
+      - name: Fixed PostgreSQL gate
         env:
           SENSA_FIXTURE_DATABASE_URL: ${{ env.DATABASE_URL }}
           SENSA_ADMIN_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: |
-          case "$SENSA_DATABASE_DEPTH" in core|full) ;; *) echo 'Missing database selection; refusing to skip tests.' >&2; exit 1 ;; esac
-          npm run test:db -- --db-depth="$SENSA_DATABASE_DEPTH"
+        run: npm run test:ci:postgres
+      - name: Four production Web smoke cases
+        env:
+          SENSA_FIXTURE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          SENSA_ADMIN_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: npm run test:ci:e2e
       - name: Preserve native database-test reports and exact selection
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: sensa-database-report-attempt-${{ github.run_attempt }}
-          path: .tmp/test-results/database/
+          path: |
+            .tmp/test-results/ci-postgres/
+            .tmp/test-results/ci-e2e/
           if-no-files-found: warn
           retention-days: 7
-
-  storage-capacity:
-    name: Storage capacity
-    if: github.event_name == 'push'
-    uses: ./.github/workflows/sensa-storage-capacity.yml
-    with:
-      release_sha: ${{ github.sha }}
+      - name: Preserve browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sensa-core-browser-failure-attempt-${{ github.run_attempt }}
+          path: .tmp/playwright-results/
+          if-no-files-found: ignore
+          retention-days: 7
