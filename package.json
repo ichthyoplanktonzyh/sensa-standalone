@@ -15,14 +15,16 @@
   ],
   "scripts": {
     "check": "npm run typecheck && npm run build && npm test",
-    "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/mcp-server && npm run build -w @sensa/api && npm run build -w @sensa/web && npm run build -w @sensa/browser-extension",
-    "build:cloudflare": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/mcp-server && npm run build -w @sensa/web",
-    "build:api": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/api",
+    "build:shared": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime",
+    "build": "npm run build:shared && npm run build -w @sensa/mcp-server && npm run build -w @sensa/api && npm run build -w @sensa/web && npm run build -w @sensa/browser-extension",
+    "build:cloudflare": "npm run build:shared && npm run build -w @sensa/mcp-server && npm run build -w @sensa/web",
+    "build:api": "npm run build:shared && npm run build -w @sensa/api",
     "typecheck": "tsc -b --pretty false && tsc -p tests/web/tsconfig.json --pretty false && npm run typecheck -w @sensa/web && npm run typecheck -w @sensa/browser-extension",
-    "test": "npm run test:fast",
+    "test": "npm run test:ci:node",
     "test:web:foundation": "node --import tsx tests/web/run.mts",
     "test:web:db": "node --import tsx tests/web/run.mts --environment=browser-postgres",
     "test:fast": "node --import tsx tests/web/run.mts --suite=fast",
+    "test:capacity:storage": "node --import tsx tests/web/run.mts --suite=capacity",
     "test:vitest": "node --import tsx tests/web/run.mts --suite=fast --runner=vitest",
     "test:coverage": "vitest run --config vitest.config.ts --coverage tests/web/unit/home-readiness.test.ts",
     "test:edge": "deno check --config supabase/functions/sensa-api/deno.json supabase/functions/sensa-api/index.ts",
@@ -54,7 +56,11 @@
     "sensa:package": "npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && node --import tsx content/tools/sensa_package.mts",
     "sensa:package-schema": "npm run build -w @sensa/contracts && node --import tsx content/tools/export_portable_lightweight_schema.mts",
     "content:route-foundation": "node --import tsx content/tools/route_foundation.mts",
-    "content:prepare-local": "node --import tsx scripts/local/prepareLearningBook.mts content/preview/lightweight-resources-v8.json .sensa-local/lightweight-resources-v8.json"
+    "content:prepare-local": "node --import tsx scripts/local/prepareLearningBook.mts content/preview/lightweight-resources-v8.json .sensa-local/lightweight-resources-v8.json",
+    "test:ci": "node --import tsx tests/web/run.mts --ci=all",
+    "test:ci:node": "node --import tsx tests/web/run.mts --ci=node",
+    "test:ci:postgres": "node --import tsx tests/web/run.mts --ci=postgres",
+    "test:ci:e2e": "node --import tsx tests/web/run.mts --ci=e2e"
   },
   "engines": {
     "node": ">=24"

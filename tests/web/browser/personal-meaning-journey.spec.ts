@@ -1402,8 +1402,9 @@ test('World read recovery removes only its read error and preserves a failed pre
  await detail.getByRole('button',{name:'查看详情',exact:true}).click();
  const preparation=page.getByRole('region',{name:'个人内容学习准备',exact:true}).filter({has:page.getByRole('heading',{name:/^borrow ·/u})});
  await preparation.getByRole('button',{name:'加入学习',exact:true}).click();
- await expect(preparation.getByRole('status')).toContainText('请先登录 Sensa 在线服务');
- const operationNotice=(await preparation.getByRole('status').innerText()).trim();
+ const failedOperation=preparation.getByRole('status').filter({hasText:'请先登录 Sensa 在线服务'});
+ await expect(failedOperation).toHaveCount(1);await expect(failedOperation).toContainText('请先登录 Sensa 在线服务');
+ const operationNotice=(await failedOperation.innerText()).trim();
  const saved=await page.evaluate(async()=>({learning:await window.__sensaBrowserSmoke!.learningCheckpoint(),provisioning:await window.__sensaBrowserSmoke!.provisioningCheckpoint()}));
  expect(saved.provisioning).toHaveLength(1);expect(saved.provisioning[0]!.status).toBe('failed');expect(saved.learning.records).toEqual([]);expect(saved.learning.runtime).toBeNull();
  await page.goBack();await expect(detail).toBeVisible();
@@ -1707,17 +1708,22 @@ test('World retains only a verified full graph across language filters and relea
   const state=(window as any).__graphCacheTest={cores:[] as any[],maximumLive:0,observer:null as MutationObserver|null};
   const update=()=>{state.maximumLive=Math.max(state.maximumLive,state.cores.filter((cy:any)=>!cy.destroyed()).length);};
   state.observer=new MutationObserver(()=>{for(const el of document.querySelectorAll('[data-cy-surface]')){const cy=(el as any)._cyreg?.cy;if(cy&&!state.cores.includes(cy)){state.cores.push(cy);cy.on('destroy',update);update();}}});state.observer.observe(document,{childList:true,subtree:true});
-  const native=requestAnimationFrame,held:FrameRequestCallback[]=[];(window as any).__cacheFrames={native,held};window.requestAnimationFrame=callback=>native.call(window,at=>held.push(callback));
+  const native=requestAnimationFrame,held:FrameRequestCallback[]=[];
+  const gate=(window as any).__cacheFrames={native,held,holding:true};
+  // Native callbacks can still be in flight when the gate is released.
+  // They must execute then, rather than enter a queue that has already drained.
+  window.requestAnimationFrame=callback=>native.call(window,at=>gate.holding?held.push(callback):callback(at));
  });
  await world.getByRole('button',{name:'语义世界',exact:true}).evaluate(button=>(button as HTMLButtonElement).click());
  const graph=world.getByRole('region',{name:'词义图谱',exact:true,includeHidden:true}),frame=graph.locator('[data-graph-current="true"]'),canvas=frame.locator('[data-graph-camera]'),surface=frame.locator('[data-cy-surface]');
  try{
   await expect.poll(()=>surface.evaluate(el=>(el as any)._cyreg?.cy.nodes().length)).toBe(9);
+  await expect(canvas).not.toHaveAttribute('data-graph-ready','true');
   await surface.evaluate(el=>{(window as any).__graphCacheTest.unready=(el as any)._cyreg.cy;});
   await world.locator('.sensa-world-filters > summary').evaluate(summary=>(summary as HTMLElement).click());
   await languages.getByRole('button',{name:'fr',exact:true}).evaluate(button=>(button as HTMLButtonElement).click());
   await expect.poll(()=>page.evaluate(()=>(window as any).__graphCacheTest.unready.destroyed())).toBe(true);
- }finally{await page.evaluate(()=>{const {native,held}=(window as any).__cacheFrames;window.requestAnimationFrame=native;for(const fn of held)native.call(window,fn);delete (window as any).__cacheFrames;});}
+ }finally{await page.evaluate(()=>{const gate=(window as any).__cacheFrames;gate.holding=false;window.requestAnimationFrame=gate.native;for(const fn of gate.held)gate.native.call(window,fn);delete (window as any).__cacheFrames;});}
  await expect(canvas).toHaveAttribute('data-graph-ready','true');await expect(canvas).toHaveAttribute('data-graph-node-count','1');
  await languages.getByRole('button',{name:'全部语言',exact:true}).click();await expect(canvas).toHaveAttribute('data-graph-ready','true');await expect(canvas).toHaveAttribute('data-graph-node-count','9');
  await surface.evaluate(el=>{const cy=(el as any)._cyreg.cy,s=(window as any).__graphCacheTest;s.full=cy;s.renderer=cy.renderer();s.positions=JSON.stringify(cy.nodes().map((node:any)=>[node.id(),node.position()]));});

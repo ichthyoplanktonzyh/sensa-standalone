@@ -21,7 +21,7 @@ export type WebTestRisk = (typeof webTestRisks)[number];
 export const webTestEnvironments = ['node', 'built-web-artifact', 'chromium', 'postgres', 'browser-postgres'] as const;
 export type WebTestEnvironment = (typeof webTestEnvironments)[number];
 
-export const webTestSuites = ['foundation', 'fast', 'browser', 'database', 'manual'] as const;
+export const webTestSuites = ['foundation', 'fast', 'browser', 'database', 'capacity', 'manual'] as const;
 export type WebTestSuite = (typeof webTestSuites)[number];
 
 export const defaultWebTestEnvironments = ['node', 'built-web-artifact'] as const satisfies readonly WebTestEnvironment[];
@@ -36,8 +36,10 @@ export type WebTestCatalogEntry = Readonly<{
   runner: WebTestRunner;
   memoryLibrary?: boolean;
   env?: Readonly<Record<string, string>>;
-  /** Full release validation only; default/local selection is still full. */
+  /** Excluded by explicit local quick selection; not a PR/main gate. */
   browserDepth?: 'full';
+  /** Optional local core selection; fixed PR/main gates use ciWhitelist.mts. */
+  databaseDepth?: 'core';
 }>;
 
 /**
@@ -46,6 +48,7 @@ export type WebTestCatalogEntry = Readonly<{
  * split into named behavior scenarios.
  */
 const foundationTests = [
+  {id:'ci-selection',file:'tests/web/quality/ci-selection.test.mts',kind:'quality',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'meaning-graph-emphasis',file:'tests/web/unit/meaning-graph-emphasis.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'meaning-graph-canvas-model',file:'tests/web/unit/meaning-graph-canvas-model.test.mts',kind:'unit',risks:['local-correctness','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'context-draft-journey',file:'tests/web/integration/context-draft-journey.test.mts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
@@ -70,23 +73,24 @@ const foundationTests = [
   {id:'library-initial-publication',file:'tests/web/database/library-initial-publication.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'library-retention',file:'tests/web/database/library-retention.spec.ts',kind:'integration',risks:['durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'library-storage-layout',file:'tests/web/database/library-storage-layout.spec.ts',kind:'integration',risks:['durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
-  {id:'library-membership-migration',file:'tests/web/database/library-membership-migration.test.mts',kind:'integration',risks:['durability','convergence'],environment:'postgres',suite:'database',runner:'vitest'},
+  {id:'library-membership-migration',file:'tests/web/database/library-membership-migration.test.mts',kind:'integration',risks:['durability','convergence'],environment:'postgres',suite:'database',databaseDepth:'core',runner:'vitest'},
   {id:'library-scheduled-retention',file:'tests/web/database/library-scheduled-retention.spec.ts',kind:'integration',risks:['durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'library-checkpoint',file:'tests/web/database/library-checkpoint.spec.ts',kind:'integration',risks:['durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'library-dirty-rebase-browser',file:'tests/web/database/library-dirty-rebase.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
-  {id:'library-cursor',file:'tests/web/database/library-cursor.spec.ts',kind:'integration',risks:['durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
+  {id:'library-cursor',file:'tests/web/database/library-cursor.spec.ts',kind:'integration',risks:['durability','convergence','scale'],environment:'browser-postgres',suite:'database',databaseDepth:'core',runner:'playwright'},
   {id:'library-delta-receive',file:'tests/web/database/library-delta-receive.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'library-sync-runtime',file:'tests/web/integration/library-sync-runtime.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'local-portable-snapshot',file:'tests/web/integration/local-portable-snapshot.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'sqlite-snapshot-source',file:'tests/web/unit/sqlite-snapshot-source.test.mts',kind:'unit',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'library-admitted-snapshot',file:'tests/web/integration/library-admitted-snapshot.test.mts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'node',suite:'fast',runner:'vitest'},
   {id:'library-snapshot-source-browser',file:'tests/web/browser/library-snapshot-source.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'chromium',suite:'browser',runner:'playwright'},
-  {id:'library-sync-page',file:'tests/web/database/library-sync-page.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'browser-postgres',suite:'database',runner:'playwright'},
+  {id:'ci-core-e2e',file:'tests/web/database/ci-core.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'browser-postgres',suite:'database',runner:'playwright'},
+  {id:'library-sync-page',file:'tests/web/database/library-sync-page.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence'],environment:'browser-postgres',suite:'database',databaseDepth:'core',runner:'playwright'},
   {id:'library-native-snapshot',file:'tests/web/database/library-native-snapshot.spec.ts',kind:'integration',risks:['local-correctness','durability','convergence','scale'],environment:'browser-postgres',suite:'database',runner:'playwright'},
   {id:'local-portable-snapshot-browser',file:'tests/web/browser/local-portable-snapshot.spec.ts',kind:'integration',risks:['local-correctness','durability'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'database-log-privacy',file:'tests/web/integration/database-log-privacy.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest'},
-  {id:'account-admission',file:'tests/web/database/account-admission.test.mts',kind:'integration',risks:['local-correctness','convergence'],environment:'postgres',suite:'database',runner:'vitest'},
-  {id:'operations-access-postgres',file:'tests/web/database/operations-access.test.mjs',kind:'integration',risks:['local-correctness','durability'],environment:'postgres',suite:'database',runner:'vitest'},
+  {id:'account-admission',file:'tests/web/database/account-admission.test.mts',kind:'integration',risks:['local-correctness','convergence'],environment:'postgres',suite:'database',databaseDepth:'core',runner:'vitest'},
+  {id:'operations-access-postgres',file:'tests/web/database/operations-access.test.mjs',kind:'integration',risks:['local-correctness','durability'],environment:'postgres',suite:'database',databaseDepth:'core',runner:'vitest'},
   {id:'guest-content-presence',file:'tests/web/integration/guest-content-presence.test.mts',kind:'integration',risks:['local-correctness'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
   {id:'web-entry-hmr',file:'tests/web/browser/web-entry-hmr.spec.ts',kind:'integration',risks:['local-correctness','durability'],environment:'chromium',suite:'browser',runner:'playwright'},
   {id:'library-bootstrap-recovery',file:'tests/web/integration/library-bootstrap-recovery.test.mts',kind:'integration',risks:['local-correctness','durability'],environment:'node',suite:'fast',runner:'vitest',memoryLibrary:true},
@@ -533,6 +537,7 @@ const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTest
     suite,
     runner: playwrightPaths.has(path) ? 'playwright' : 'vitest',
     ...(['browser/retention-review-capacity','browser/portable-book-capacity'].includes(path)?{browserDepth:'full' as const}:{}),
+    ...(['database/database-budget','database/account-deletion','database/model-request-state','database/intake-delivery'].includes(path) ? {databaseDepth:'core' as const} : {}),
     ...(memoryLibrary ? {memoryLibrary} : {}),
     ...(env ? {env} : {}),
   };
@@ -540,6 +545,7 @@ const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTest
 
 export const webTestCatalog: readonly WebTestCatalogEntry[] = [
   ...foundationTests,
+  {id:'storage-scale',file:'tests/web/capacity/storage-scale.test.mts',kind:'integration',risks:['local-correctness','durability','scale'],environment:'node',suite:'capacity',runner:'vitest',memoryLibrary:true},
   ...migrated.map(migratedEntry),
   {
     id: 'home-readiness',

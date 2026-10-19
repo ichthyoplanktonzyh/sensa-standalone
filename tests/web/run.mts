@@ -7,6 +7,7 @@ import {journeyTestIds,validateJourneyMapping,type LongJourneyId} from './journe
 import {partitionTestFiles,browserFileWeights,browserQuickFileWeights} from './support/testShards';
 import {executionGroups, reportCoversSelection} from './support/executionGroups';
 import {browserDepths,selectBrowserDepth,type BrowserDepth} from './support/browserDepth';
+import {ciLanes,ciCaseCounts,selectCiTests,type CiLane} from './ciWhitelist.mts';
 
 import {
   defaultWebTestEnvironments,
@@ -34,6 +35,8 @@ type Filters = Readonly<{
   journey?:LongJourneyId;
   shard?:string;
   depth?:BrowserDepth;
+  dbDepth?:'core'|'full';
+  ci?:CiLane;
   list: boolean;
 }>;
 
@@ -65,6 +68,8 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
   let journey:LongJourneyId|undefined;
   let shard:string|undefined;
   let depth:BrowserDepth|undefined;
+  let dbDepth:'core'|'full'|undefined;
+  let ci:CiLane|undefined;
   let list = false;
 
   for (const argument of arguments_) {
@@ -112,6 +117,10 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
     if(parsedShard!==undefined){shard=parsedShard;continue;}
     const parsedDepth=option(argument,'depth');
     if(parsedDepth!==undefined){depth=allowed('depth',parsedDepth,browserDepths);continue;}
+    const parsedDbDepth=option(argument,'db-depth');
+    if(parsedDbDepth!==undefined){dbDepth=allowed('db-depth',parsedDbDepth,['core','full'] as const);continue;}
+    const parsedCi=option(argument,'ci');
+    if(parsedCi!==undefined){ci=allowed('ci',parsedCi,ciLanes);continue;}
     throw new Error(`Unknown test selector ${JSON.stringify(argument)}`);
   }
 
@@ -125,18 +134,26 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
     journey,
     shard,
     depth,
+    dbDepth,
+    ci,
     list,
   };
 };
 
 const selectedTests = (filters: Filters): readonly WebTestCatalogEntry[] => {
+  if(filters.ci){
+    if([filters.kind,filters.risk,filters.environment,filters.suite,filters.runner,filters.id,filters.journey,filters.shard,filters.depth,filters.dbDepth].some(value=>value!==undefined))throw Error('--ci cannot be combined with other test selectors');
+    return selectCiTests(catalog,filters.ci);
+  }
   const journeyIds=filters.journey?new Set(journeyTestIds(filters.journey)):null;
   if(filters.depth!==undefined&&filters.suite!=='browser')throw Error('Validation depth only applies to the browser suite');
+  if(filters.dbDepth!==undefined&&filters.suite!=='database')throw Error('Database depth only applies to the database suite');
   return selectBrowserDepth(catalog.filter((entry) => (
     (filters.kind === undefined || entry.kind === filters.kind)
     && (filters.runner === undefined || entry.runner === filters.runner)
     && (filters.risk === undefined || entry.risks.includes(filters.risk))
     && (filters.id === undefined || entry.id === filters.id)
+    && (filters.dbDepth !== 'core' || entry.databaseDepth === 'core')
     && (journeyIds===null||journeyIds.has(entry.id))
     && (
       filters.suite !== undefined
@@ -178,6 +195,8 @@ for (const field of ['id', 'file'] as const) {
   if (new Set(values).size !== values.length) throw new Error(`Duplicate Web test catalog ${field}.`);
 }
 const cataloguedFiles = new Set(catalog.map((entry) => entry.file));
+const missingFiles = catalog.filter(entry => !existsSync(resolve(repositoryRoot, entry.file)));
+if (missingFiles.length) throw new Error(`Catalogued tests do not exist: ${missingFiles.map(entry => entry.file).join(', ')}`);
 const wrongRunner = catalog.filter((entry) => {
   const runner = entry.runner;
   if (runner === 'vitest') return !/\.test\.(?:ts|tsx|mts|mjs)$/u.test(entry.file) || !['node', 'built-web-artifact', 'postgres'].includes(entry.environment);
@@ -190,9 +209,10 @@ const unclassified = catalog.filter((entry) => entry.risks.length === 0);
 if (unclassified.length !== 0) throw new Error(`Tests missing risk tags: ${unclassified.map((entry) => entry.id).join(', ')}`);
 const wrongCiBoundary = catalog.filter((entry) => {
   if(entry.browserDepth!==undefined&&(entry.suite!=='browser'||entry.runner!=='playwright'))return true;
+  if(entry.databaseDepth!==undefined&&entry.suite!=='database')return true;
   if (entry.suite === 'manual') return false;
   if (entry.environment === 'node' || entry.environment === 'built-web-artifact') {
-    return entry.suite !== 'foundation' && entry.suite !== 'fast';
+    return entry.suite !== 'foundation' && entry.suite !== 'fast' && entry.suite !== 'capacity';
   }
   if (entry.environment === 'chromium') return entry.suite !== 'browser';
   return entry.suite !== 'database';
@@ -221,18 +241,19 @@ if (filters.list) {
   for (const entry of selected) console.log(formatEntry(entry));
 } else {
   const failures:string[]=[];
-  const selectionName=filters.suite??'selection';
+  if(filters.suite==='database')console.log(`Database depth: ${filters.dbDepth??'full'}${filters.dbDepth==='core'?' (representative boundaries; not full database evidence)':''}`);
+  const selectionName=filters.ci?`ci-${filters.ci}`:filters.suite??'selection';
   const shardName=(filters.shard??'all').replace('/','-');
   const executionId=randomUUID();
   const reportRoot=resolve(repositoryRoot,`.tmp/test-results/${selectionName}/shard-${shardName}/${executionId}`);
   mkdirSync(reportRoot,{recursive:true,mode:0o700});
-  const observations:{files:string[];runner:string;environment:string;exitCode:number|null;selectionReported:boolean;elapsedMs:number;report:string}[]=[];
+  const observations:{files:string[];runner:string;environment:string;exitCode:number|null;selectionReported:boolean;caseCount:number;skippedCases:string[];unexpectedSkips:string[];elapsedMs:number;report:string}[]=[];
   const runAttempt=process.env.GITHUB_RUN_ATTEMPT??'local';
   if(runAttempt!=='local'&&!/^[1-9][0-9]*$/.test(runAttempt))throw Error('Invalid test report attempt');
   for (const [index, group] of executionGroups(selected).entries()) {
     const ids=group.entries.map(entry=>entry.id),files=group.entries.map(entry=>entry.file);
     console.log(`\n[${group.runner}/${group.environment}] ${ids.join(', ')}`);
-    if(group.runner==='playwright')console.log(`Browser depth: ${filters.depth??'full'}${filters.depth==='quick'?' (capacity cases excluded; not full release evidence)':''}`);
+    if(group.runner==='playwright')console.log(filters.ci?`Fixed CI lane: ${filters.ci} (specialist suites not selected)`:`Browser depth: ${filters.depth??'full'}${filters.depth==='quick'?' (capacity cases excluded; not full release evidence)':''}`);
     const prefix=`shard-${shardName}-attempt-${runAttempt}-${executionId}-group-${index+1}`;
     const reportPath=join(reportRoot,`${prefix}.json`);
     const args = group.runner === 'vitest'
@@ -254,16 +275,37 @@ if (filters.list) {
       stdio: 'inherit',
     });
     let selectionReported=false;
-    try{selectionReported=reportCoversSelection(JSON.parse(readFileSync(reportPath,'utf8')),group.runner,group.entries,repositoryRoot);}catch{/* Missing native evidence is not a pass. */}
-    observations.push({files,runner:group.runner,environment:group.environment,exitCode:result.status,selectionReported,elapsedMs:Date.now()-started,report:reportPath});
+    let caseCount=0;
+    let skippedCases:string[]=[],unexpectedSkips:string[]=[];
+    try{
+      const report=JSON.parse(readFileSync(reportPath,'utf8'));
+      selectionReported=reportCoversSelection(report,group.runner,group.entries,repositoryRoot);
+      caseCount=group.runner==='vitest'?report.numTotalTests:report.stats.expected+report.stats.unexpected+report.stats.flaky+report.stats.skipped;
+      if(group.runner==='vitest'){
+        for(const file of report.testResults??[])for(const result of file.assertionResults??[]){
+          if(!['pending','skipped','todo','disabled'].includes(result.status))continue;
+          skippedCases.push(result.fullName??result.title);
+          const permitted=file.name.endsWith('/tests/web/unit/stored-record-codec.test.mts')&&[
+            'stored records roundtrip exact UTF-8 bytes with native base64 encode=false, decode=true',
+            'stored records roundtrip exact UTF-8 bytes with native base64 encode=true, decode=false',
+            'stored records roundtrip exact UTF-8 bytes with native base64 encode=true, decode=true',
+          ].includes(result.title);
+          if(!permitted)unexpectedSkips.push(result.fullName??result.title);
+        }
+      }else if(report.stats.skipped)unexpectedSkips.push(`${report.stats.skipped} browser cases skipped`);
+    }catch{/* Missing native evidence is not a pass. */}
+    observations.push({files,runner:group.runner,environment:group.environment,exitCode:result.status,selectionReported,caseCount,skippedCases,unexpectedSkips,elapsedMs:Date.now()-started,report:reportPath});
     if (result.error) console.error('Native runner could not start:',(result.error as NodeJS.ErrnoException).code??'unknown');
-    if (result.status !== 0 || !selectionReported) {
+    if (result.status !== 0 || !selectionReported || (filters.ci&&unexpectedSkips.length>0)) {
       process.exitCode = result.status ?? 1;
       if(process.exitCode===0)process.exitCode=1;
       failures.push(...ids);
       if(!selectionReported)console.error('Native report did not account for every selected file:',ids.join(', '));
+      if(filters.ci&&unexpectedSkips.length)console.error('Fixed CI cases unexpectedly skipped:',unexpectedSkips.join(', '));
     }
   }
-  writeFileSync(join(reportRoot,'selection-summary.json'),JSON.stringify({format:'sensa-test-execution-v1',depth:filters.depth??'full',excludedCaseTag:filters.depth==='quick'?'@capacity':null,selectedFiles:selected.map(entry=>entry.file),groups:observations},null,2)+'\n');
+  const caseCount=observations.reduce((sum,group)=>sum+group.caseCount,0);
+  if(filters.ci&&caseCount!==ciCaseCounts[filters.ci]){process.exitCode=1;console.error(`Fixed CI case count mismatch: expected ${ciCaseCounts[filters.ci]}, observed ${caseCount}`);}
+  writeFileSync(join(reportRoot,'selection-summary.json'),JSON.stringify({format:'sensa-test-execution-v1',ciLane:filters.ci??null,expectedCaseCount:filters.ci?ciCaseCounts[filters.ci]:null,caseCount,depth:filters.ci?null:filters.depth??'full',databaseDepth:filters.ci?null:filters.dbDepth??'full',excludedCaseTag:filters.depth==='quick'?'@capacity':null,selectedFiles:selected.map(entry=>entry.file),groups:observations},null,2)+'\n');
   if(failures.length)console.error(`Failed test files (${failures.length}/${selected.length}): ${failures.join(', ')}`);
 }

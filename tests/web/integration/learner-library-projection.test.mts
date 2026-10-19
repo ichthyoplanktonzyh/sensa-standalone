@@ -1,5 +1,5 @@
+import {checkLearnerProjectionScale} from '../support/learnerProjectionScale.mts';
 import {afterAll,expect,test} from 'vitest';
-import init from '@sqlite.org/sqlite-wasm';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {portablePackageFixture} from '../../../scripts/support/portablePackageFixture.mts';
 import {useNodeLearningCapacityStorage} from '../../../scripts/support/nodeLearningCapacity.mts';
@@ -9,8 +9,6 @@ import {personalContentSystem} from '../../../apps/web/src/personalContent/syste
 import {buildLearnerSemanticProjection,learnerSemanticProjectionSystem} from '../../../apps/web/src/learnerSemanticProjection/system/learnerSemanticProjectionSystem';
 import {openLibrary,readLibrary} from '../../../apps/web/src/data/library/store';
 import {sqliteRecordAdapter} from '../../../apps/web/src/data/library/sqliteAdapter';
-import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
-import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec';
 import {PRACTICE_SENSES} from '../../../apps/web/src/experience/practiceData';
 import {materialSourcePin} from '../../../apps/web/src/learning/runtime/learningIdentity';
 import type {LocalLearningTarget} from '../../../apps/web/src/learning/runtime/localProtocol';
@@ -105,35 +103,4 @@ test('retained Example visibility uses owner annotations and preserves an unavai
  await personalContentSystem.execute({kind:'set_saved_example',operationId:crypto.randomUUID(),exampleId:missingId,saved:false});
 });
 
-test('synthetic 10k read-projection stress keeps list payload bounded, opens one exact target, rebuilds metadata without rewriting facts, and rolls back a failed derived write',async()=>{
- if(!seed)throw Error('real source fixture missing');
- const sqlite=await init(),raw=new sqlite.oo1.DB(':memory:'),db=new SqliteRecordDatabase(sqlite,raw,'memory');db.initialize();
- try{
-  // Projection stress only: these direct clones are not a validated learner
-  // collection or evidence of 10k completed learning journeys.
-  const targets=Array.from({length:10_000},(_,index)=>{const target={...structuredClone(seed),id:crypto.randomUUID(),identity:{...seed.identity,senseId:crypto.randomUUID()},expression:`borrow-${index}`};for(const member of target.curriculumMemberships)member.material.content.resources.find(resource=>resource.materialRoleKey==='target_expression')!.contentPayload.surface=target.expression;return target;});
-  const puts=targets.map(target=>({table:'learningTargets' as const,key:target.id,encodedValue:JSON.stringify(encodeBackupValue(target))}));
-  db.commit({clears:[],deletes:[],puts,contentRevision:1});
-  const sourceFacts=()=>raw.exec({sql:"SELECT record_key,value_json FROM sensa_records WHERE table_name='learningTargets' ORDER BY record_key",rowMode:'object',returnValue:'resultRows'});
-  const facts=sourceFacts(),enrolled=db.personalEnrollmentIndex(),read=db.get.bind(db);let reads=0;
-  db.get=(table,key)=>{if(table==='learningTargets')reads++;return read(table,key);};
-  const started=performance.now(),headers=db.learningSemanticMemory(),elapsedMs=performance.now()-started;
-  expect(headers.targets).toHaveLength(10_000);expect(db.personalEnrollmentIndex()).toEqual(enrolled);expect(enrolled.targets).toHaveLength(10_000);expect(JSON.stringify(enrolled)).not.toMatch(/resources|materialization|protocolState/);expect(reads).toBe(0);
-  expect(headers.targets.every(item=>item.presentation.scene.length<=241&&item.presentation.meaning.length<=241)).toBe(true);
-  const bytes=Buffer.byteLength(JSON.stringify(headers));expect(bytes).toBeLessThan(12*1024*1024);
-  expect(JSON.stringify(headers)).not.toMatch(/data:audio|data:image|materialization|protocolState/);
-  const detailStart=performance.now();expect(db.learningSemanticMemory(targets[9999]!.id).targets[0]!.presentation.expression).toBe('borrow-9999');const detailMs=performance.now()-detailStart;
-  expect(reads).toBe(1);expect(elapsedMs).toBeLessThan(500);expect(detailMs).toBeLessThan(100);
-  console.log('Actual SQLite/Wasm / synthetic projection rows / warm 1x Node / no media transport:',JSON.stringify({count:10_000,listMs:elapsedMs,exactDetailMs:detailMs,bytes}));
-  db.get=read;
-  raw.exec({sql:'DELETE FROM sensa_learning_semantic_memory WHERE target_key=?',bind:[targets[0]!.id]});
-  expect(()=>db.learningSemanticMemory()).toThrow('localFlow.progressReadFailed');
-  expect(()=>db.learningSemanticMemory(targets[0]!.id)).toThrow('localFlow.progressReadFailed');
-  raw.exec('DROP TABLE sensa_learning_semantic_memory');
-  new SqliteRecordDatabase(sqlite,raw,'memory').initialize();
-  expect(sourceFacts()).toEqual(facts);expect(db.learningSemanticMemory()).toEqual(headers);expect(db.personalEnrollmentIndex()).toEqual(enrolled);
-  raw.exec("CREATE TEMP TRIGGER reject_semantic_header BEFORE UPDATE ON sensa_learning_semantic_memory BEGIN SELECT RAISE(ABORT,'controlled-semantic-header-failure'); END;");
-  expect(()=>db.commit({clears:[],deletes:[],puts:[{...puts[0]!,encodedValue:JSON.stringify(encodeBackupValue({...targets[0]!,expression:'must roll back'}))}],contentRevision:2})).toThrow('controlled-semantic-header-failure');
-  expect(sourceFacts()).toEqual(facts);expect(db.learningSemanticMemory()).toEqual(headers);expect(db.personalEnrollmentIndex()).toEqual(enrolled);
- }finally{db.close();}
-});
+test('bounded read projection preserves exact facts, rebuilds metadata and rolls back failed derived writes',()=>checkLearnerProjectionScale(seed,64));

@@ -1,6 +1,7 @@
 import {semanticRecords} from '../support/semanticWorldRecordFixture.mts';
 /** Actual SQLite/Wasm: bounded PRIVATE browsing, shared authority and atomic derivation. */
-import {test,expect,describe,beforeAll,afterAll} from 'vitest';
+import {test,expect} from 'vitest';
+import {checkWorldReadScale} from '../support/worldReadScale.mts';
 import init from '@sqlite.org/sqlite-wasm';
 import {SqliteRecordDatabase} from '../../../apps/web/src/data/library/sqliteDatabase';
 import {SqliteMeaningLookupProjection} from '../../../apps/web/src/data/library/meaningLookupProjection';
@@ -270,71 +271,7 @@ test('compact graph snapshots preserve every interpretation and filter without s
  }finally{database.close();}
 });
 
-describe('private World reads over a prepared synthetic 10k library',()=>{
- let raw:InstanceType<typeof sqlite.oo1.DB>,database:SqliteRecordDatabase;
- beforeAll(async()=>{
-  const started=performance.now();
-  raw=new sqlite.oo1.DB(':memory:');database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
-  const {state}=await seed(),world=syntheticSemanticWorld(state,10_000);
-  const puts=rows(world);
-  database.commit({clears:[],deletes:[],puts,contentRevision:1});
-  console.log('SQLite synthetic fixture preparation:',{meanings:10_000,records:puts.length,preparationMs:Math.round(performance.now()-started)});
- // This watchdog covers synthetic generation, encoding and bulk index setup,
- // not user-facing lookup latency. CI's initial full fixture exceeded 60s.
- },120_000);
- afterAll(()=>database?.close());
- test('10k World facts page/search without reading source rows or transporting private details/media',()=>{
-  const started=performance.now();
-  const originalGet=database.get.bind(database);let sourceReads=0;
-  database.get=(table,key)=>{if(table==='semanticMeanings'||table==='semanticRegistry')sourceReads++;return originalGet(table,key);};
-  const graph=database.worldGraph({query:'',filter:'all'});expect(graph.items).toHaveLength(10_000);expect(graph.expressionCount).toBe(10_000);expect(JSON.stringify(graph)).not.toMatch(/bodyText|capturedSources|semanticSpec|dataUrl/);
-  const page=database.worldBrowse({...query,limit:40}),last=database.worldBrowse({...query,offset:9960,limit:40});
-  const choices=database.worldLearningChoices({...query,targetLanguageTag:'en',limit:64});
-  expect(choices.total).toBe(10_000);expect(choices.items).toHaveLength(64);
-  expect(JSON.stringify(choices.items)).not.toContain('May asked');expect(choices.items.every(choice=>!('context'in choice)&&!('semanticSpec'in choice))).toBe(true);
-  expect(choices.items.every(choice=>!('practiceTarget'in choice))).toBe(true);
-  const materials=database.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:64});
-  expect(materials.total).toBe(10_000);expect(materials.items).toHaveLength(64);
-  expect(materials.items.every(item=>JSON.stringify(Object.keys(item).sort())===JSON.stringify(['id','languageTag','source','text']))).toBe(true);
-  expect(JSON.stringify(materials)).not.toContain('May asked');expect(JSON.stringify(materials)).not.toContain('senseVersion');
-  const identityPage=database.practiceExpressions({source:'personal',languageTag:'en',query:'',offset:0,limit:256,idsOnly:true});
-  expect(identityPage.items).toEqual([]);expect(identityPage.ids).toHaveLength(256);
-  expect(identityPage.ids.every(id=>id.length===36&&!id.includes('borrow'))).toBe(true);
-  expect(database.practiceExpressions({source:'personal',languageTag:'en',query:'ＢＯＲＲＯＷ-９９９９',offset:0,limit:1}).items.map(item=>item.text)).toEqual(['borrow-9999']);
-  expect(database.practiceExpressions({source:'personal',languageTag:'en',query:'',selectedIds:materials.ids.slice(0,2),offset:0,limit:1}).total).toBe(2);
-  expect(database.practiceExpressions({source:'personal',languageTag:'fr',query:'',offset:0,limit:1}).total).toBe(0);
-  expect(database.worldLearningChoices({...query,targetLanguageTag:'en',query:'ＢＯＲＲＯＷ-９９９９'}).items.map(choice=>choice.label)).toEqual(['borrow-9999']);
-  expect(database.worldLearningChoices({...query,targetLanguageTag:'en',offset:9960,limit:40}).items).toHaveLength(40);
-  expect(page.total).toBe(10_000);expect(page.items).toHaveLength(40);expect(last.items).toHaveLength(40);
-  expect(new Set([...page.items,...last.items].map(item=>item.personalMeaningId)).size).toBe(80);
-  // The learner's existing compact preview remains visible; the complete
-  // private Context and detail/media payload are not list transport data.
-  expect(page.items[0]?.primaryLabel).toBe('Private source: May aske…');
-  expect(JSON.stringify(page.items)).not.toContain('May asked to borrow an umbrella.');expect(page.items.every(item=>!('detail'in item))).toBe(true);
-  expect(database.worldBrowse({...query,query:'ＢＯＲＲＯＷ-９９９９'}).items.map(item=>item.label)).toEqual(['borrow-9999']);
-  expect(database.worldBrowse({...query,query:'临时'}).total).toBe(10_000);
-  expect(sourceReads,'page/search reads must not hydrate the full facts').toBe(0);
-  expect(database.worldBrowse({...query,filter:'pending'})).toMatchObject({items:[],total:0,pending:0});
-  const pendingPlan=raw.exec({sql:"EXPLAIN QUERY PLAN SELECT summary_json FROM sensa_world_browse INDEXED BY sensa_world_browse_pending WHERE visible=1 AND (formation<>'sense_confirmed' OR binding<>'bound') ORDER BY updated_at DESC,meaning_id LIMIT 40",rowMode:'object',returnValue:'resultRows'}) as {detail:string}[];
-  expect(pendingPlan.some(row=>row.detail.includes('sensa_world_browse_pending'))).toBe(true);
-  // Exercise both branches of the derived selector independently of domain
-  // construction. These controlled projection rows are not learner evidence.
-  const pendingRows=[{...page.items[0]!,senseFormation:{...page.items[0]!.senseFormation,phase:'clarifying'}},{...page.items[1]!,expressionBinding:{...page.items[1]!.expressionBinding,phase:'partial'}}];
-  for(const item of pendingRows)raw.exec({sql:'UPDATE sensa_world_browse SET formation=?,binding=?,summary_json=? WHERE meaning_id=?',bind:[item.senseFormation.phase,item.expressionBinding.phase,JSON.stringify(item),item.personalMeaningId]});
-  const pendingPage=database.worldBrowse({...query,filter:'pending',limit:1});
-  expect(pendingPage.total).toBe(2);expect(pendingPage.pending).toBe(2);expect(pendingPage.items).toHaveLength(1);
-  expect(database.worldBrowse({...query,filter:'pending',offset:1,limit:1}).items[0]!.personalMeaningId).not.toBe(pendingPage.items[0]!.personalMeaningId);
-  expect(sourceReads).toBe(0);
-  const identityBytes=Number(raw.selectValue("SELECT SUM(pgsize) FROM dbstat WHERE name LIKE 'sensa_journey_id%'"));
-  console.log('SQLite synthetic 10k / private identity reservations / physical cache bytes:',identityBytes);
-  expect(identityBytes,'identity cache should not repeat table/key/UUID text per reservation').toBeLessThan(32*1024*1024);
-  expect(raw.selectValue('SELECT MAX(length(identity_id)) FROM sensa_journey_identities')).toBe(16);
-  const plans=raw.exec({sql:'EXPLAIN QUERY PLAN SELECT summary_json FROM sensa_world_browse WHERE visible=1 ORDER BY updated_at DESC,meaning_id LIMIT 40',rowMode:'object',returnValue:'resultRows'}) as {detail:string}[];
-  expect(plans.some(row=>row.detail.includes('USING INDEX sensa_world_browse_order'))).toBe(true);
-  expect(()=>database.worldBrowse({...query,limit:257})).toThrow('world_query_invalid');
-  console.log('SQLite prepared synthetic 10k read assertions:',{queryAndAssertionMs:Math.round(performance.now()-started)});
- },60_000);
-});
+test('bounded World facts page/search without source reads or private detail transport',()=>checkWorldReadScale(256));
 
 test('Expression cache rebuild and failed updates preserve all source facts, with independent downloaded material',async()=>{
  const raw=new sqlite.oo1.DB(':memory:'),database=new SqliteRecordDatabase(sqlite,raw,'memory');database.initialize();
