@@ -8,7 +8,7 @@ import {portableBookDeliveryFixture} from '../../../scripts/support/portablePack
 import {expect,type Browser,type BrowserContext,type Page} from '@playwright/test';
 import {createLibraryCloudBrowserFixture,type LibraryCloudAccount} from './libraryCloudBrowserFixture.mts';
 import {webTestBuild,createWebTestBuildCache} from './webTestBuild';
-import {readRestoringSyncStatus} from './librarySyncStatus';
+import {observeLibrarySmoke,type SmokeRead} from './librarySmokeObservation';
 
 /** Shipped React pages and Supabase SDK; only external Auth HTTP is synthetic.
  * Facts, artifacts, receipts and OPFS cross the real loopback API/PG boundary. */
@@ -62,8 +62,21 @@ export async function createLibrarySyncPageFixture(browser:Browser,options:{sing
  return {api,origin,client,session,storageKey:`sb-${new URL(origin).hostname.split('.')[0]}-auth-token`,async close(){await Promise.all(contexts.map(async context=>{await context.unrouteAll({behavior:'ignoreErrors'});await context.close();}));await new Promise<void>(resolve=>server.close(()=>resolve()));await api.close();if(options.singleBook)await rm(dirname(directory),{recursive:true,force:true});}};
 }
 export async function loginSyncPage(page:Page,origin:string){
- await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();await page.locator('#settings-security').click();await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();
+ await page.goto(origin+'/profile');await waitForSyncPageBridge(page);await expect(page.locator('#s-profile')).toBeVisible();await page.locator('#settings-security').click();await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();
  await page.getByLabel('邮箱',{exact:true}).fill('sync@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible({timeout:60000});
 }
-export async function syncPanel(page:Page,origin:string){await page.goto(origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();await page.locator('#settings-data').click();return page.locator('.sensa-cloud-sync');}
-export const restoringSyncStatus=(page:Page)=>page.evaluate(readRestoringSyncStatus,undefined);
+export async function syncPanel(page:Page,origin:string){await page.goto(origin+'/profile');await waitForSyncPageBridge(page);await expect(page.locator('#s-profile')).toBeVisible();await page.locator('#settings-data').click();return page.locator('.sensa-cloud-sync');}
+type Bridge=NonNullable<Window['__sensaBrowserSmoke']>;
+async function readSyncPageValue<Value>(page:Page,operation:SmokeRead):Promise<Value>{
+ let value:Value|undefined;
+ await expect.poll(async()=>{const result=await page.evaluate(observeLibrarySmoke,{operation});if(result.state==='ready')value=result.value as Value;return result.state;}).toBe('ready');
+ return value!;
+}
+export const waitForSyncPageBridge=(page:Page)=>readSyncPageValue<true>(page,'ready');
+export const syncPageFacts=(page:Page)=>readSyncPageValue<Awaited<ReturnType<Bridge['durableBackupFactsForTest']>>>(page,'facts');
+export const syncPageCheckpoint=(page:Page)=>readSyncPageValue<Awaited<ReturnType<Bridge['cloudCheckpointForTest']>>>(page,'checkpoint');
+export async function syncPageStatus(page:Page,allowNativeReplacement=false){
+ const result=await page.evaluate(observeLibrarySmoke,{operation:'status' as const,allowNativeReplacement});
+ return result.state==='ready'?result.value as string:result.state;
+}
+export const restoringSyncStatus=(page:Page)=>syncPageStatus(page,true);
