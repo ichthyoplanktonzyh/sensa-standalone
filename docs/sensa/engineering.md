@@ -1300,7 +1300,7 @@ Planner 会要求 `scope=all` 的完整 bootstrap，而不是猜测线上组件�
 
 使用 Actions 的 **Re-run failed jobs**，保留成功 job 的原生 outputs；禁止 **Re-run all jobs** 或重新运行成功 plan。工作流对 attempt > 1 的 plan 失败关闭，避免同一 run 重新授权或重算基线。若成功 job 的输出／artifact 已过期或无法恢复，停止续跑并先核对实际生产状态；不能改用同名或“最新”产物。新的 dispatch 是新的发布请求，不是对部分部署的自动恢复。
 
-CI 构建 attempt、CI 验证 attempt、release ID 中的 plan attempt 与各组件执行／record attempt 分别记录。组件重跑后只用其返回的 artifact ID；预检跨 environment 对账也按精确 ID 下载，不用 wildcard 合并多次结果。系统清单的 `evidence.planWorkflowRunAttempt` 保留最初计划身份，`workflowRunAttempt` 表示实际记录执行；恢复基线继续核对 SHA/run/record attempt 与 artifact 名称。回退需另行明确授权：Web 只能选已核验旧版本且确认 API／迁移／内容仍兼容；内容只能恢复已验证 Registry 指针且保留不可变对象；数据库使用前向修复或经过验证的独立恢复流程，不自动反向执行迁移。
+CI 构建 attempt、CI 验证 attempt、release ID 中的 plan attempt 与各组件执行／record attempt 分别记录。组件重跑后只用其返回的 artifact ID；预检跨 environment 对账也按精确 ID 下载，不用 wildcard 合并多次结果。系统清单的 `evidence.planWorkflowRunAttempt` 保留最初计划身份，`workflowRunAttempt` 表示实际记录执行；恢复基线继续核对 SHA/run/record attempt 与 artifact 名称。历史 SHA-only 系统记录只接受精确同 SHA 的成功 main run、首次 attempt 及原 artifact 元数据，重跑不能沿用此历史格式。回退需另行明确授权：Web 只能选已核验旧版本且确认 API／迁移／内容仍兼容；内容只能恢复已验证 Registry 指针且保留不可变对象；数据库使用前向修复或经过验证的独立恢复流程，不自动反向执行迁移。
 
 固定版本临时入口 `sensa-owner-deploy-8957424f.yml` 已退役。2026-10-18 的一次性 owner CI 豁免保存在 [原始豁免回执](../release-exceptions/2026-10-18-8957424f.json) 和 [历史执行](https://github.com/ichthyoplanktonzyh/sensa-standalone/actions/runs/39134075890)；`ciPassed=false`、`ciGateWaived=true` 和未生成标准绿色系统清单的事实保留，不给后续 SHA 发布资格。正常自动授权策略、显式 owner 授权和 environment 行为维持原边界。
 

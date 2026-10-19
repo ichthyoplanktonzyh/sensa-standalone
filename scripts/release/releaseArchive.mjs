@@ -190,27 +190,43 @@ export async function restoreSystemBaseline(client,{runId,releaseTag}={}){
     const result=await client.request(`/actions/workflows/sensa-release.yml/runs?per_page=20${page===1?'':'&page='+page}`);
     if(!Array.isArray(result.workflow_runs))throw Error('Invalid system run listing');
     runs.push(...result.workflow_runs);
-    if(result.workflow_runs.length<20||selected&&result.workflow_runs.some(run=>Date.parse(run.updated_at)<=Date.parse(selected.completedAt)))break;
+    // Runs are ordered by creation, not last rerun; an old run may have a newer record.
+    if(result.workflow_runs.length<20)break;
     if(page===10)throw Error('System baseline lookup exhausted; select an exact verified system archive tag');
   }
   for(const run of runs??[]){
     if(run.path!=='.github/workflows/sensa-release.yml'||run.head_repository?.full_name!==client.repository)throw Error('System baseline run belongs to a different workflow or repository');
     if(selected&&Date.parse(run.updated_at)<=Date.parse(selected.completedAt))continue;
-    const artifacts=(await client.request(`/actions/runs/${run.id}/artifacts?per_page=100`)).artifacts
+    const listing=await client.request(`/actions/runs/${run.id}/artifacts?per_page=100`);
+    if(!Array.isArray(listing.artifacts)||listing.artifacts.length>=100)throw Error('System artifact lookup saturated; select an exact verified archive tag');
+    const artifacts=listing.artifacts
       .filter(artifact=>!artifact.expired&&artifact.name.startsWith('sensa-system-release-')).sort((a,b)=>b.id-a.id);
     for(const artifact of artifacts){
       if(!/^sha256:[a-f0-9]{64}$/.test(artifact.digest??''))throw Error('System artifact checksum unavailable');
       const zip=await client.bytes(`/actions/artifacts/${artifact.id}/zip`,{bytes:artifact.size_in_bytes,sha256:artifact.digest.slice(7)});
       const raw=await zipMember(zip,'system-release-manifest.json');
       const manifest=validManifest(JSON.parse(raw.toString()),client.repository);
-      if(manifest.evidence.workflowRunId!==String(run.id)
-        ||artifact.name!==`sensa-system-release-${manifest.source.commit}-${run.id}-${manifest.evidence.workflowRunAttempt}`)throw Error('System artifact run/attempt identity mismatch');
+      assertSystemArtifactIdentity(artifact,manifest,run);
       if(!selected||Date.parse(manifest.completedAt)>Date.parse(selected.completedAt))selected=manifest;
       break;
     }
   }
   if(runId&&!selected)throw Error('Selected system baseline has no recoverable complete manifest');
   return selected;
+}
+
+export function assertSystemArtifactIdentity(artifact,manifest,run){
+  const exact=artifact.name===`sensa-system-release-${manifest.source.commit}-${run.id}-${manifest.evidence.workflowRunAttempt}`;
+  // Before attempt-scoped names, the workflow emitted one SHA-only record.
+  // Accept it only for a completed first-attempt main run of that exact SHA;
+  // reruns and new plan-provenance records must use the current exact identity.
+  const legacy=artifact.name===`sensa-system-release-${manifest.source.commit}`
+    &&run.run_attempt===1&&manifest.evidence.workflowRunAttempt==='1'
+    &&manifest.evidence.planWorkflowRunAttempt===undefined
+    &&run.head_sha===manifest.source.commit&&run.head_branch==='main'
+    &&run.status==='completed'&&run.conclusion==='success'
+    &&artifact.workflow_run?.id===run.id&&artifact.workflow_run?.head_sha===run.head_sha;
+  if(manifest.evidence.workflowRunId!==String(run.id)||!exact&&!legacy)throw Error('System artifact run/attempt identity mismatch');
 }
 
 export async function downloadArchivedCandidate(archive,client){
