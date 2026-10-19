@@ -5,7 +5,12 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {createWebTestBuildCache,loopbackTestPort,rememberLoopbackTestPort} from '../support/webTestBuild';
 import {retentionCapacityCacheKey,prepareRetentionCapacityCache} from '../../../scripts/support/retentionCapacityCache.mts';
-import {readRestoringSyncStatus} from '../support/librarySyncStatus';
+import {observeLibrarySmoke} from '../support/librarySmokeObservation';
+const readRestoringSyncStatus=async(read:()=>Promise<string>)=>{
+ const bridge={syncStatus:read,cloudSyncStateForTest:async()=>undefined,cloudCheckpointForTest:async()=>({state:undefined,refs:[]}),durableBackupFactsForTest:async()=>({}),seedSemanticWorld:async()=>0};
+ const result=await observeLibrarySmoke({operation:'status',allowNativeReplacement:true},()=>bridge);
+ return result.state==='ready'?result.value:result.state;
+};
 
 test('restore observation retries only a retired read and never manufactures a successful state',async()=>{
  await expect(readRestoringSyncStatus(async()=>{throw Error('localFlow.libraryReplaced');})).resolves.toBe('library-replacing');

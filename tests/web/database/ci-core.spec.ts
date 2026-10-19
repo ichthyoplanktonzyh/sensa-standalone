@@ -2,7 +2,7 @@
  * one-expression Book and one valid Meaning are prepared. Long specialists
  * retain their original fixtures and assertions in their original files. */
 import {test,expect,type Page,type Locator} from '@playwright/test';
-import {createLibrarySyncPageFixture,loginSyncPage,syncPanel,restoringSyncStatus} from '../support/librarySyncPageFixture.mts';
+import {createLibrarySyncPageFixture,loginSyncPage,syncPanel,restoringSyncStatus,waitForSyncPageBridge,syncPageStatus,syncPageFacts,syncPageCheckpoint} from '../support/librarySyncPageFixture.mts';
 import {MemoryJourneyRepository} from '../../../apps/web/src/experience/personalMeaningJourney/repository';
 import {createJourneyModules} from '../../../apps/web/src/experience/personalMeaningJourney/gateway';
 import {semanticLookupPayload} from '../support/semanticLookupFixtures';
@@ -17,8 +17,8 @@ test.beforeAll(async({browser})=>{
  fixture=await createLibrarySyncPageFixture(browser,{singleBook:true});
 });
 test.afterAll(async()=>{await fixture?.close();});
-const checkpoint=(page:Page)=>page.evaluate(()=>window.__sensaBrowserSmoke!.cloudCheckpointForTest());
-const facts=(page:Page)=>page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+const checkpoint=syncPageCheckpoint;
+const facts=syncPageFacts;
 
 test('manual authoring at 0 Meanings needs Context and explicit acceptance, stays offline, and reopens',async({},testInfo)=>{
  const size=0,modelCalls:string[]=[];
@@ -276,10 +276,10 @@ test('an expired access token with a valid refresh token recovers in place on on
 
 test('real pages publish a native artifact, restore, edit, sync incrementally and reopen without rebuilding the artifact',async({},info)=>{
  const f=fixture;
- const account=await f.api.createAccount(),source=await f.client(account);await source.goto(f.origin+'/profile');await expect(source.locator('#s-profile')).toBeVisible();
+ const account=await f.api.createAccount(),source=await f.client(account);await source.goto(f.origin+'/profile');await waitForSyncPageBridge(source);await expect(source.locator('#s-profile')).toBeVisible();
   const repository=new MemoryJourneyRepository();await createJourneyModules({repository}).semanticIntake.submit(semanticLookupPayload());
   await source.evaluate(state=>window.__sensaBrowserSmoke!.seedSemanticWorld(state),await repository.load());
-  await loginSyncPage(source,f.origin);await expect.poll(()=>source.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');
+  await loginSyncPage(source,f.origin);await expect.poll(()=>syncPageStatus(source)).toBe('synced');
   const panel=await syncPanel(source,f.origin);await panel.getByRole('button',{name:'为新设备准备资料',exact:true}).click();await expect(panel.getByText('已为新设备准备好账号资料。',{exact:true})).toBeVisible({timeout:60000});
   const target=await f.client(account);await loginSyncPage(target,f.origin);await expect.poll(()=>restoringSyncStatus(target),{timeout:60000}).toBe('synced');
   const before=await checkpoint(source),restored=await checkpoint(target);expect(restored.state).toMatchObject({restore:{path:'native-v2'},status:'synced'});expect(restored.refs.length).toBeGreaterThan(0);expect(restored.refs).toEqual(before.refs);expect(await facts(target)).toEqual(await facts(source));
@@ -288,7 +288,9 @@ test('real pages publish a native artifact, restore, edit, sync incrementally an
   const sourcePanel=await syncPanel(source,f.origin);await sourcePanel.getByRole('button',{name:'立即同步',exact:true}).click();await expect.poll(async()=>(await checkpoint(source)).state?.revision).toBe((await checkpoint(target)).state!.revision);
   expect((await checkpoint(source)).state?.receive).toMatchObject({mode:'incremental',changedRecords:4,baselineBuildRecords:0});
   expect(f.api.requests().some(row=>row.path.endsWith('/compact'))).toBe(false);expect(await facts(target)).toEqual(await facts(source));expect((await checkpoint(target)).refs).toEqual((await checkpoint(source)).refs);
-  const stable=await facts(target);await target.reload();await expect.poll(()=>target.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');expect(await facts(target)).toEqual(stable);
+  const stable=await facts(target);await target.reload();
+  await waitForSyncPageBridge(target);
+  await expect.poll(()=>syncPageStatus(target)).toBe('synced');expect(await facts(target)).toEqual(stable);
   await info.attach('real-page-checkpoint.json',{body:JSON.stringify({auth:'synthetic HTTP; real SDK',source:before.state,receiver:restored.state,nonemptyRefs:restored.refs.length,incrementalRevision:(await checkpoint(target)).state?.revision,requests:f.api.requests()}),contentType:'application/json'});
 });
 

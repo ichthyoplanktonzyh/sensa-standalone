@@ -990,10 +990,10 @@ Personal Meaning 与 Package Center 重旅程的单次受控 UI 耗时区分产�
 
 PR 与 main 使用完全相同的固定小门禁，清单只在 `tests/web/ciWhitelist.mts` 维护：
 
-- 静态／构建 job：typecheck、完整 build、`test:edge`，以及 17 个 Node 文件的 85 个登记案例。
+- 静态／构建 job：typecheck、完整 build、`test:edge`，以及 18 个 Node 文件的 89 个登记案例。
 - 数据库／浏览器 job：7 个纯 PostgreSQL 案例，以及独立 `ci-core.spec.ts` 的 4 个真实 E2E 案例。
 
-共 96 个登记案例；Node 24 的 Base64 功能探测允许其中 3 个条件跳过，数据库与 E2E 不允许跳过。
+共 100 个登记案例；Node 24 的 Base64 功能探测允许其中 3 个条件跳过，数据库与 E2E 不允许跳过。
 E2E 使用单表达 Book、一个有效 Meaning 和空隔离 context，不导入大 spec 或生成成熟历史。
 它覆盖离线手动保存／重开、游客学习／真实调度到期复习、过期会话 online 恢复且不重放事实，
 以及真实 PostgreSQL 原生恢复／增量同步／重开。外部 Auth HTTP 受控；生产 Web、SDK、OPFS、Hono 和数据库实际执行。
@@ -1004,7 +1004,7 @@ npm run check             # 每次提交：typecheck、build、固定 Node 门�
 npm run test:edge
 npm run test:ci:postgres  # 需要已迁移的一次性 PostgreSQL 与受限测试角色
 npm run test:ci:e2e       # 同一数据库，并安装 Chromium
-npm run test:ci           # 固定 96 案例；不含 typecheck/build/edge
+npm run test:ci           # 固定 100 案例；不含 typecheck/build/edge
 ```
 
 其余目录测试默认是本地专项，按风险显式选择 `test:fast`、`test:browser`、`test:db` 或 `test:capacity:storage`；
