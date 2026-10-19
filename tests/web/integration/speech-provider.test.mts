@@ -135,6 +135,10 @@ test('server speech transport negotiates v2, saves bounded audio and rejects fai
   });
  });
  const dependencies={clock:()=>new Date('2026-10-19T07:15:00Z'),socket:(url:URL,options:import('ws').ClientOptions)=>{
+  assert.equal(url.origin,'wss://api.msedgeservices.com');
+  assert.equal(url.pathname,'/tts/cognitiveservices/websocket/v1');
+  assert.equal(url.searchParams.get('Ocp-Apim-Subscription-Key'),'6A5AA1D4EAFF4E9FB37E23D68491D6F4');
+  assert.equal(url.searchParams.has('TrustedClientToken'),false);
   assert.equal(url.searchParams.get('Sec-MS-GEC'),'E2219CFD3FDE9189-294A63DB992EDD3AA136D2D10E6F60D6833BFF9D930F00AE558D8D5CFA9DCDA7');
   return new WebSocket(`ws://127.0.0.1:${address.port}`,options);
  }};

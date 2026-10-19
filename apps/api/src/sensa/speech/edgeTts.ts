@@ -39,7 +39,15 @@ export async function synthesizeEdgeSpeech(input: {
 }, signal: AbortSignal, dependencies: {socket?: (url: URL, options: WebSocket.ClientOptions) => WebSocket; clock?: () => Date} = {}): Promise<Buffer> {
   const now = dependencies.clock?.() ?? new Date();
   signal.throwIfAborted();
-  const socket = (dependencies.socket ?? ((url, options) => new WebSocket(url, options)))(edgeSpeechConnectionUrl(now, randomUUID()), {
+  // Current Edge Speech service entry; the legacy consumer host can reject
+  // cloud-origin handshakes. Both entries use the same v2 token algorithm.
+  // Protocol migration: https://github.com/rany2/edge-tts/issues/490
+  const endpoint = edgeSpeechConnectionUrl(now, randomUUID());
+  endpoint.hostname = 'api.msedgeservices.com';
+  endpoint.pathname = '/tts/cognitiveservices/websocket/v1';
+  endpoint.searchParams.set('Ocp-Apim-Subscription-Key', endpoint.searchParams.get('TrustedClientToken')!);
+  endpoint.searchParams.delete('TrustedClientToken');
+  const socket = (dependencies.socket ?? ((url, options) => new WebSocket(url, options)))(endpoint, {
     headers: {
       Origin: 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
