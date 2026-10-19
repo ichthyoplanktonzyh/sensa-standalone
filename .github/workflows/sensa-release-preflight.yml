@@ -1,0 +1,194 @@
+name: Preflight Sensa release components
+on:
+  workflow_call:
+    inputs:
+      release_sha:
+        required: true
+        type: string
+      release_id:
+        required: true
+        type: string
+      plan_artifact_id:
+        required: true
+        type: string
+      deploy_application:
+        required: true
+        type: boolean
+      application_mode:
+        required: true
+        type: string
+      publish_learning_content:
+        required: true
+        type: boolean
+      media_release_tag:
+        type: string
+      media_pack_sha256:
+        type: string
+    outputs:
+      content_artifact_id:
+        value: ${{ jobs.content.outputs.artifact_id }}
+      content_build_attempt:
+        value: ${{ jobs.content.outputs.build_attempt }}
+permissions:
+  contents: read
+  actions: read
+jobs:
+  application:
+    if: inputs.deploy_application
+    environment: web-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    outputs:
+      receipt_id: ${{ steps.receipt.outputs.artifact-id }}
+    env:
+      SENSA_RELEASE_SHA: ${{ inputs.release_sha }}
+      SENSA_APPLICATION_MODE: ${{ inputs.application_mode }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      VITE_SUPABASE_URL: ${{ format('https://{0}.supabase.co', vars.SUPABASE_PROJECT_REF) }}
+      SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
+      VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+      CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/infra/certs/supabase-prod-ca-2021.crt
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.release_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build:shared
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ inputs.plan_artifact_id }}
+          merge-multiple: true
+          path: .tmp/system-release-plan
+      - name: Check access, targets, current content and migration ledger without writes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          SENSA_RUNTIME_DATABASE_URL: ${{ secrets.SENSA_RUNTIME_DATABASE_URL }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          SENSA_PROVIDER_VAULT_KEY: ${{ secrets.SENSA_PROVIDER_VAULT_KEY }}
+        run: node scripts/release/releasePreflight.mjs application
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: receipt
+        if: always()
+        with:
+          name: sensa-application-preflight-${{ inputs.release_id }}-attempt-${{ github.run_attempt }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: release-candidate/application-preflight.json
+
+  content:
+    if: inputs.publish_learning_content
+    environment: learning-content-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      artifact_id: ${{ steps.candidate.outputs.artifact-id }}
+      build_attempt: ${{ steps.identity.outputs.attempt }}
+      receipt_id: ${{ steps.receipt.outputs.artifact-id }}
+    env:
+      SENSA_RELEASE_SHA: ${{ inputs.release_sha }}
+      SENSA_MEDIA_RELEASE_TAG: ${{ inputs.media_release_tag }}
+      SENSA_MEDIA_PACK_SHA256: ${{ inputs.media_pack_sha256 }}
+      SENSA_AUTHORED_MEDIA_PACK: .tmp/authored-media-pack.json
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
+      SENSA_PACKAGE_OUTPUT: .tmp/learning-content/releases
+      SENSA_PACKAGE_CATALOG: release-candidate/portable-catalog.json
+      SENSA_PACKAGE_BASE_URL: ${{ vars.VITE_SUPABASE_URL }}/storage/v1/object/public/sensa-learning-content/releases/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.release_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ inputs.plan_artifact_id }}
+          merge-multiple: true
+          path: .tmp/system-release-plan
+      - run: npm run build:shared
+      - name: Check content access and target without changing bucket or secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: node scripts/release/releasePreflight.mjs content
+      - name: Fetch and verify the sealed authored media input
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/fetchAuthoredMedia.mjs
+      - name: Build and validate content once before application deployment
+        run: |
+          node --import tsx content/tools/route_foundation.mts expand content/authored/route-foundation-v1/prepared.json .tmp/release-book-sources
+          cp content/authored/*.json .tmp/release-book-sources/
+          SENSA_BOOK_RELEASE_SOURCE_DIRECTORY=.tmp/release-book-sources node --import tsx scripts/release/buildPortableBookRegistry.mts
+          node --import tsx content/tools/assert_english_lightweight_registry.mts release-candidate/portable-catalog.json
+          node --import tsx tests/web/run.mts --suite=fast --id=learning-registry
+          node --import tsx tests/web/run.mts --suite=fast --id=portable-learning-registry
+          node scripts/release/contentCandidate.mjs seal
+      - id: identity
+        run: echo "attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: candidate
+        with:
+          name: sensa-content-candidate-${{ inputs.release_id }}-attempt-${{ github.run_attempt }}
+          retention-days: 14
+          if-no-files-found: error
+          include-hidden-files: true
+          path: |
+            .tmp/learning-content/releases/
+            release-candidate/portable-catalog.json
+            release-candidate/content-candidate.json
+            packages/contracts/dist/
+            packages/learning-kernel/dist/
+            packages/content-validator/dist/
+            packages/model-runtime/dist/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: receipt
+        if: always()
+        with:
+          name: sensa-content-preflight-${{ inputs.release_id }}-attempt-${{ github.run_attempt }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: release-candidate/content-preflight.json
+
+  gate:
+    needs: [application, content]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every planned preflight to succeed
+        env:
+          APP_REQUIRED: ${{ inputs.deploy_application }}
+          CONTENT_REQUIRED: ${{ inputs.publish_learning_content }}
+          APP_RESULT: ${{ needs.application.result }}
+          CONTENT_RESULT: ${{ needs.content.result }}
+        run: |
+          test "$APP_REQUIRED" != true || test "$APP_RESULT" = success
+          test "$CONTENT_REQUIRED" != true || test "$CONTENT_RESULT" = success
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        if: ${{ inputs.deploy_application && inputs.publish_learning_content }}
+        with:
+          artifact-ids: ${{ needs.application.outputs.receipt_id }},${{ needs.content.outputs.receipt_id }}
+          path: .tmp/preflight-reports
+          merge-multiple: true
+      - name: Refuse cross-environment project or Web target drift
+        if: ${{ inputs.deploy_application && inputs.publish_learning_content }}
+        run: |
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const read=name=>JSON.parse(readFileSync(`.tmp/preflight-reports/${name}-preflight.json`,'utf8'));
+          const app=read('application'),content=read('content');
+          if(app.status!=='ready'||content.status!=='ready'||app.releaseId!==content.releaseId||app.planSha256!==content.planSha256||app.commit!==content.commit||JSON.stringify(app.targets)!==JSON.stringify(content.targets))throw Error('Production environments disagree on the candidate or target');
+          JS

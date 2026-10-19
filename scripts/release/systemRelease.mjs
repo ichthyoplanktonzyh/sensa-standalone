@@ -217,6 +217,7 @@ export function planSystemRelease({
     throw new Error("Release scope must be auto, application, content or all");
   }
   if (!releaseIdPattern.test(releaseId ?? "")) throw new Error("System release id is invalid");
+  if (releaseId.split('-')[2] !== targetCommit.slice(0, 12)) throw Error('Release plan revision identity mismatch');
   const previous = assertPreviousManifest(previousManifest);
   const classified = classifyReleaseChanges(changedPaths);
   if (releaseMode === "automatic" && requestedScope !== "auto") {
@@ -406,6 +407,8 @@ export function finalizeSystemRelease({
     || !/^[1-9][0-9]*$/u.test(String(workflowRunAttempt ?? ""))) {
     throw new Error("GitHub release evidence is incomplete");
   }
+  if (plan.releaseId.split('-').at(-2) !== String(workflowRunId)
+    || Number(plan.releaseId.split('-').at(-1)) > Number(workflowRunAttempt)) throw Error('Recording must preserve the original plan run and attempt');
   return {
     format: systemReleaseManifestFormat,
     releaseId: plan.releaseId,
@@ -421,6 +424,8 @@ export function finalizeSystemRelease({
     components: {application, learningContent},
     evidence: {
       repository,
+      planWorkflowRunId: plan.releaseId.split('-').at(-2),
+      planWorkflowRunAttempt: plan.releaseId.split('-').at(-1),
       workflowRunId: String(workflowRunId),
       workflowRunAttempt: String(workflowRunAttempt),
       workflowRunUrl: `https://github.com/${repository}/actions/runs/${workflowRunId}`,

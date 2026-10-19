@@ -64,10 +64,19 @@ jobs:
       candidate_artifact_id: ${{ steps.candidate.outputs.artifact_id }}
       candidate_validation_attempt: ${{ steps.ci.outputs.run_attempt }}
       authorization_outcome: ${{ steps.planner.outputs.authorization_outcome }}
+      plan_artifact_id: ${{ steps.plan_artifact.outputs.artifact-id }}
     env:
       SENSA_RELEASE_MODE: ${{ github.event_name == 'workflow_run' && 'automatic' || 'manual' }}
       SENSA_RELEASE_SHA: ${{ github.event.workflow_run.head_sha || inputs.release_sha || github.sha }}
     steps:
+      - name: Preserve original plan identity on retries
+        env:
+          RELEASE_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if test "$RELEASE_ATTEMPT" != 1; then
+            echo "Do not rerun a successful plan or rerun all jobs. Resume failed downstream jobs with original outputs; if planning itself failed, start a new release only after checking no mutation occurred." >&2
+            exit 1
+          fi
       - name: Require owner authorization
         if: ${{ github.event_name == 'workflow_dispatch' && !inputs.owner_accepted }}
         run: |
@@ -143,6 +152,7 @@ jobs:
           SENSA_VALIDATION_RUN_ATTEMPT: ${{ steps.ci.outputs.run_attempt }}
         run: node scripts/release/candidateSource.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        id: plan_artifact
         with:
           name: sensa-release-plan-${{ steps.planner.outputs.release_id }}
           retention-days: 30
@@ -151,12 +161,28 @@ jobs:
             release-candidate/system-release-plan.json
             release-candidate/ci-candidate-source.json
 
+  preflight:
+    needs: plan
+    if: ${{ needs.plan.outputs.authorization_outcome == 'approved' && (needs.plan.outputs.deploy_application == 'true' || needs.plan.outputs.publish_learning_content == 'true') }}
+    uses: ./.github/workflows/sensa-release-preflight.yml
+    with:
+      release_sha: ${{ needs.plan.outputs.release_sha }}
+      release_id: ${{ needs.plan.outputs.release_id }}
+      plan_artifact_id: ${{ needs.plan.outputs.plan_artifact_id }}
+      deploy_application: ${{ needs.plan.outputs.deploy_application == 'true' }}
+      application_mode: ${{ needs.plan.outputs.application_mode }}
+      publish_learning_content: ${{ needs.plan.outputs.publish_learning_content == 'true' }}
+      media_release_tag: ${{ inputs.media_release_tag }}
+      media_pack_sha256: ${{ inputs.media_pack_sha256 }}
+    secrets: inherit
+
   learning_content:
-    needs: [plan, application]
+    needs: [plan, preflight, application]
     if: >-
       ${{
         always() &&
         needs.plan.result == 'success' &&
+        needs.preflight.result == 'success' &&
         needs.plan.outputs.publish_learning_content == 'true' &&
         (needs.plan.outputs.deploy_application != 'true' || needs.application.result == 'success')
       }}
@@ -166,14 +192,18 @@ jobs:
       media_release_tag: ${{ inputs.media_release_tag }}
       media_pack_sha256: ${{ inputs.media_pack_sha256 }}
       release_id: ${{ needs.plan.outputs.release_id }}
+      plan_artifact_id: ${{ needs.plan.outputs.plan_artifact_id }}
+      content_artifact_id: ${{ needs.preflight.outputs.content_artifact_id }}
+      content_build_attempt: ${{ needs.preflight.outputs.content_build_attempt }}
     secrets: inherit
 
   application:
-    needs: plan
+    needs: [plan, preflight]
     if: >-
       ${{
         always() &&
         needs.plan.result == 'success' &&
+        needs.preflight.result == 'success' &&
         needs.plan.outputs.deploy_application == 'true'
       }}
     uses: ./.github/workflows/sensa-web-deploy.yml
@@ -185,6 +215,7 @@ jobs:
       candidate_validation_attempt: ${{ needs.plan.outputs.candidate_validation_attempt }}
       release_id: ${{ needs.plan.outputs.release_id }}
       application_mode: ${{ needs.plan.outputs.application_mode }}
+      plan_artifact_id: ${{ needs.plan.outputs.plan_artifact_id }}
     secrets: inherit
 
   record:
@@ -207,7 +238,8 @@ jobs:
           ref: ${{ needs.plan.outputs.release_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: sensa-release-plan-${{ needs.plan.outputs.release_id }}
+          artifact-ids: ${{ needs.plan.outputs.plan_artifact_id }}
+          merge-multiple: true
           path: .tmp/system-release-plan
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         if: ${{ needs.plan.outputs.deploy_application == 'true' }}
@@ -270,7 +302,7 @@ jobs:
             release-candidate/native-release-archive.json
 
   report:
-    needs: [plan, learning_content, application, record, archive]
+    needs: [plan, preflight, learning_content, application, record, archive]
     if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -280,11 +312,12 @@ jobs:
           ref: ${{ needs.plan.outputs.release_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: sensa-release-plan-${{ needs.plan.outputs.release_id }}
+          artifact-ids: ${{ needs.plan.outputs.plan_artifact_id }}
+          merge-multiple: true
           path: .tmp/system-release-plan
       - name: Distinguish authorization, completion and failed component execution
         env:
-          SENSA_RELEASE_JOBS: '{"application":"${{ needs.application.result }}","learning_content":"${{ needs.learning_content.result }}","record":"${{ needs.record.result }}","archive":"${{ needs.archive.result }}"}'
+          SENSA_RELEASE_JOBS: '{"preflight":"${{ needs.preflight.result }}","application":"${{ needs.application.result }}","learning_content":"${{ needs.learning_content.result }}","record":"${{ needs.record.result }}","archive":"${{ needs.archive.result }}"}'
         run: node scripts/release/releaseStatus.mjs system
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

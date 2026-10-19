@@ -81,6 +81,10 @@ export function archiveClient(environment,fetchImpl=fetch){
 function validManifest(manifest,repository){
   if(manifest?.format!=='sensa-system-release-manifest-v2'||!systemTag.test(manifest.releaseId??'')||!sha.test(manifest.source?.commit??'')
     ||manifest.evidence?.repository!==repository||!/^[1-9][0-9]*$/.test(manifest.evidence.workflowRunId??'')
+    ||!/^[1-9][0-9]*$/.test(manifest.evidence.workflowRunAttempt??'')
+    ||manifest.releaseId.split('-')[2]!==manifest.source.commit.slice(0,12)
+    ||manifest.releaseId.split('-').at(-2)!==manifest.evidence.workflowRunId
+    ||Number(manifest.releaseId.split('-').at(-1))>Number(manifest.evidence.workflowRunAttempt)
     ||!Number.isFinite(Date.parse(manifest.completedAt))||!manifest.components?.application||!manifest.components?.learningContent
     ||!['approved','no-op'].includes(manifest.authorization?.outcome))throw Error('Complete authorized same-repository system manifest required');
   return manifest;
@@ -181,7 +185,14 @@ export async function restoreSystemBaseline(client,{runId,releaseTag}={}){
   }
   // A verified release whose archive failed must remain the baseline. The next
   // run must not silently roll its state back to an older published archive.
-  const runs=runId?[await client.request('/actions/runs/'+runId)]:(await client.request('/actions/workflows/sensa-release.yml/runs?per_page=20')).workflow_runs;
+  const runs=runId?[await client.request('/actions/runs/'+runId)]:[];
+  if(!runId)for(let page=1;page<=10;page++){
+    const result=await client.request(`/actions/workflows/sensa-release.yml/runs?per_page=20${page===1?'':'&page='+page}`);
+    if(!Array.isArray(result.workflow_runs))throw Error('Invalid system run listing');
+    runs.push(...result.workflow_runs);
+    if(result.workflow_runs.length<20||selected&&result.workflow_runs.some(run=>Date.parse(run.updated_at)<=Date.parse(selected.completedAt)))break;
+    if(page===10)throw Error('System baseline lookup exhausted; select an exact verified system archive tag');
+  }
   for(const run of runs??[]){
     if(run.path!=='.github/workflows/sensa-release.yml'||run.head_repository?.full_name!==client.repository)throw Error('System baseline run belongs to a different workflow or repository');
     if(selected&&Date.parse(run.updated_at)<=Date.parse(selected.completedAt))continue;
@@ -192,7 +203,8 @@ export async function restoreSystemBaseline(client,{runId,releaseTag}={}){
       const zip=await client.bytes(`/actions/artifacts/${artifact.id}/zip`,{bytes:artifact.size_in_bytes,sha256:artifact.digest.slice(7)});
       const raw=await zipMember(zip,'system-release-manifest.json');
       const manifest=validManifest(JSON.parse(raw.toString()),client.repository);
-      if(manifest.evidence.workflowRunId!==String(run.id))throw Error('System artifact run identity mismatch');
+      if(manifest.evidence.workflowRunId!==String(run.id)
+        ||artifact.name!==`sensa-system-release-${manifest.source.commit}-${run.id}-${manifest.evidence.workflowRunAttempt}`)throw Error('System artifact run/attempt identity mismatch');
       if(!selected||Date.parse(manifest.completedAt)>Date.parse(selected.completedAt))selected=manifest;
       break;
     }

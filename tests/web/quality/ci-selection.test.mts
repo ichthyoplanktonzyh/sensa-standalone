@@ -7,7 +7,7 @@ import {webTestCatalog} from '../catalog.mts';
 const list=(...args:string[])=>execFileSync(process.execPath,['--import','tsx','tests/web/run.mts',...args,'--list'],{encoding:'utf8',stdio:'pipe'});
 test('fixed CI selection is complete, bounded and unaffected by new catalog files',()=>{
  const approved={
-  node:['canonical-digest','stored-record-codec','library-sync-blocks','consumer-auth-proof','email-link-boundary','operation-settlement','refresh-coordinator','version-store','learning-target-view','package-cache-projection','portable-lightweight-package','learning-authority','learning-command-receipt','candidate-source','api-release-identity','release-archive'],
+  node:['canonical-digest','stored-record-codec','library-sync-blocks','consumer-auth-proof','email-link-boundary','operation-settlement','refresh-coordinator','version-store','learning-target-view','package-cache-projection','portable-lightweight-package','learning-authority','learning-command-receipt','candidate-source','release-preflight','api-release-identity','release-archive'],
   postgres:['library-membership-migration','account-admission','operations-access-postgres','database-budget','account-deletion','model-request-state','intake-delivery'],
   e2e:['ci-core-e2e'],
  };
@@ -16,10 +16,10 @@ test('fixed CI selection is complete, bounded and unaffected by new catalog file
   expect(entry.runner).toBe(lane==='e2e'?'playwright':'vitest');
   expect(entry.environment).toBe(lane==='e2e'?'browser-postgres':lane==='postgres'?'postgres':'node');
  }
- expect(Object.values(ciWhitelist).map(ids=>ids.length)).toEqual([16,7,1]);
- expect(ciCaseCounts).toEqual({node:77,postgres:7,e2e:4,all:88});
+ expect(Object.values(ciWhitelist).map(ids=>ids.length)).toEqual([17,7,1]);
+ expect(ciCaseCounts).toEqual({node:85,postgres:7,e2e:4,all:96});
  const fixed=selectCiTests(webTestCatalog,'all');
- expect(new Set(fixed).size).toBe(24);
+ expect(new Set(fixed).size).toBe(25);
  expect(selectCiTests([...webTestCatalog,{...webTestCatalog[0]!,id:'unknown-runtime-test',file:'unknown.test.mts'}],'all')).toEqual(fixed);
  expect(()=>selectCiTests(webTestCatalog.filter(entry=>entry.id!=='canonical-digest'),'all')).toThrow('Missing fixed CI test');
  for(const lane of ['node','postgres','e2e','all'] as const){

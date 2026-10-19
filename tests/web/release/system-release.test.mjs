@@ -13,7 +13,7 @@ import {
 
 const sha = (character) => character.repeat(40);
 const digest = (character) => character.repeat(64);
-const releaseId = (commit = sha("b")) => `sensa-system-${commit.slice(0, 12)}-123-1`;
+const releaseId = (commit = sha("b"), runId = "123") => `sensa-system-${commit.slice(0, 12)}-${runId}-1`;
 const previous = {
   format: systemReleaseManifestFormat,
   releaseId: releaseId(sha("a")),
@@ -217,6 +217,8 @@ test("system release manifest records new evidence and carries an unchanged comp
   });
   assert.equal(manifest.format, systemReleaseManifestFormat);
   assert.equal(manifest.authorization.mode, "explicit-owner");
+  assert.equal(manifest.evidence.planWorkflowRunAttempt,"1");
+  assert.equal(manifest.evidence.planWorkflowRunId,"123");
   assert.equal(manifest.components.application.sourceCommit, sha("b"));
   assert.equal(manifest.components.application.candidate.workflowRunId, "100");
   assert.equal(manifest.components.application.candidate.validationRunAttempt, '2');
@@ -228,7 +230,7 @@ test("system release manifest records new evidence and carries an unchanged comp
   assert.equal(manifest.previousReleaseId, previous.releaseId);
   assert.match(manifest.evidence.workflowRunUrl, /actions\/runs\/123$/u);
   const nextCandidate={...candidate,commit:sha('c')};
-  const nextPlan=planSystemRelease({targetCommit:sha('c'),previousManifest:manifest,requestedScope:'auto',changedPaths:['apps/web/src/App.tsx'],releaseId:releaseId(sha('c'))});
+  const nextPlan=planSystemRelease({targetCommit:sha('c'),previousManifest:manifest,requestedScope:'auto',changedPaths:['apps/web/src/App.tsx'],releaseId:releaseId(sha('c'),'124')});
   assert.equal(nextPlan.decision.applicationMode,'web-only');
   const nextEvidence={plan:nextPlan,applicationCandidate:nextCandidate,
     ciCandidateSource:{format:'sensa-ci-candidate-source-v1',repository:'sensa/example',commit:sha('c'),workflowRunId:'100',buildAttempt:'1',validationAttempt:'2',artifactId:10,artifactName:`sensa-production-${sha('c')}-attempt-1`,artifactDigest:'sha256:'+digest('8')},
@@ -270,7 +272,7 @@ test("system release manifest rejects mismatched component evidence", () => {
 test("system release manifest records a content-only promotion", () => {
   const plan = planSystemRelease({
     targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
-    changedPaths: ["content/authored/book.json"], releaseId: releaseId(), ...media,
+    changedPaths: ["content/authored/book.json"], releaseId: releaseId(sha("b"), "124"), ...media,
   });
   const manifest = finalizeSystemRelease({
     plan,
@@ -311,9 +313,9 @@ test("production promotes the exact application candidate tested by main CI", as
     "the privileged workflow_run path must validate its same-repository main provenance before checkout");
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-web-deploy\.yml/u);
   assert.match(system, /uses: \.\/\.github\/workflows\/sensa-learning-content-publish\.yml/u);
-  assert.match(system, /application:\n\s+needs: plan/u,
+  assert.match(system, /application:\n\s+needs: \[plan, preflight\]/u,
     "the application must accept the current Registry before new content is promoted");
-  assert.match(system, /learning_content:\n\s+needs: \[plan, application\]/u);
+  assert.match(system, /learning_content:\n\s+needs: \[plan, preflight, application\]/u);
   assert.match(system, /needs\.plan\.outputs\.deploy_application != 'true' \|\| needs\.application\.result == 'success'/u,
     "content-only releases may proceed, while coupled content waits for a verified application");
   assert.match(system, /candidate_run_id: \$\{\{ steps\.ci\.outputs\.run_id \}\}/u);
