@@ -95,6 +95,7 @@ export type ConsumerRoutesOptions={
   semanticResolver?:SemanticResolver;
   readingCompletion?:ReadingCompletion;
   modelTurnCompletion?:ModelTurnCompletion;
+  speechSynthesis?:typeof synthesizeEdgeSpeech;
   publisherSubjects?:readonly string[];
   learningContentRegistry?:()=>ReturnType<typeof readLearningContentRegistry>;
 };
@@ -138,8 +139,8 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     if(!language?.asTarget||language.speechLocale!==input.locale
       ||!input.voice.startsWith(`${input.locale}-`))throw new ConsumerError(400,'speech_language_unavailable');
     let audio:Buffer;
-    try{audio=await synthesizeEdgeSpeech(input,AbortSignal.timeout(45_000));}
-    catch{throw new ConsumerError(503,'speech_unavailable');}
+    try{audio=await (options.speechSynthesis??synthesizeEdgeSpeech)(input,AbortSignal.timeout(45_000));}
+    catch(error){setTelemetryFailure(context,error);throw new ConsumerError(503,'speech_unavailable');}
     context.header('Cache-Control','no-store');
     return context.json({audioBase64:audio.toString('base64')});
   });

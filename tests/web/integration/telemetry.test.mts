@@ -77,3 +77,32 @@ test('a sync POST body, principal and nested cause never enter unexpected-failur
  assert.equal(records[1]?.surface,'sync');assert.equal(records[1]?.failureKind,'database');assert.equal(records[1]?.failureCode,'23505');
  assert(!JSON.stringify(records).includes(privateText));assert(!JSON.stringify(records).includes('private-fixture@example.invalid'));
 });
+
+test('speech failure preserves safe upstream classification while the public response stays bounded',async()=>{
+ const records:ServiceRequestRecord[]=[];
+ const privateText='private-utterance-key-url-and-upstream-body';
+ const failure=Object.assign(new Error(privateText),{code:'EDGE_TTS_HANDSHAKE_REJECTED',failurePhase:'connect',upstreamStatus:403,headers:{authorization:privateText},cause:new Error(privateText)});
+ const app=createConsumerRoutes({telemetry:record=>records.push(record),
+  verify:async()=>({issuer:'https://fixture.supabase.co/auth/v1',subject:crypto.randomUUID(),sessionId:crypto.randomUUID(),email:'fixture@example.invalid'}),
+  // Only the database admission port is controlled; route parsing, speech
+  // error conversion and the real telemetry middleware execute unchanged.
+  transaction:async()=>undefined as never,
+  speechSynthesis:async()=>{throw failure;},
+ });
+ const response=await app.request('/sensa/speech/edge-tts',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+privateText},body:JSON.stringify({surface:privateText,languageTag:'en',voice:'en-US-JennyNeural',locale:'en-US'})});
+ assert.equal(response.status,503);assert.deepEqual(await response.json(),{code:'speech_unavailable'});
+ assert.equal(records.length,1);
+ assert.equal(records[0]?.errorCode,'speech_unavailable');assert.equal(records[0]?.failureCode,'EDGE_TTS_HANDSHAKE_REJECTED');
+ assert.equal(records[0]?.failurePhase,'connect');assert.equal(records[0]?.upstreamStatus,403);
+ assert(!JSON.stringify(records).includes(privateText));assert(!JSON.stringify(records).includes('fixture@example.invalid'));
+});
+
+test('speech diagnostics reject arbitrary fields, invalid codes and getter side effects',()=>{
+ let reads=0;
+ const error=Object.assign(new Error('private'),{code:'EDGE_TTS_HANDSHAKE_REJECTED'});
+ for(const key of ['failurePhase','upstreamStatus','upstreamCloseCode'])Object.defineProperty(error,key,{get:()=>{reads++;throw Error('private');}});
+ assert.deepEqual(failureDiagnostics(error),{failureKind:'transport',failureCode:'EDGE_TTS_HANDSHAKE_REJECTED'});assert.equal(reads,0);
+ assert.deepEqual(failureDiagnostics({code:'EDGE_TTS_HANDSHAKE_REJECTED',failurePhase:'private',upstreamStatus:999,upstreamCloseCode:1011}),{failureKind:'transport',failureCode:'EDGE_TTS_HANDSHAKE_REJECTED'});
+ assert.deepEqual(failureDiagnostics({code:'EDGE_TTS_CONNECTION_CLOSED',failurePhase:'audio',upstreamCloseCode:1006,upstreamStatus:403}),{failureKind:'transport',failureCode:'EDGE_TTS_CONNECTION_CLOSED',failurePhase:'audio',upstreamCloseCode:1006});
+ assert.deepEqual(failureDiagnostics({code:'EDGE_TTS_PRIVATE_DATA',failurePhase:'connect',upstreamStatus:403}),{failureKind:'unexpected'});
+});

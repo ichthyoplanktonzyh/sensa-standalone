@@ -109,10 +109,11 @@ test('server speech transport negotiates v2, saves bounded audio and rejects fai
  const {WebSocket,WebSocketServer}=await import('ws');
  const {synthesizeEdgeSpeech}=await import('../../../apps/api/src/sensa/speech/edgeTts.js');
  const {once}=await import('node:events');
- const server=new WebSocketServer({host:'127.0.0.1',port:0});
+ const {failureDiagnostics}=await import('../../../apps/api/src/server/failureDiagnostics.js');
+ let mode:'audio'|'empty'|'oversized'|'closed'|'cancel'|'rejected'|'invalid'='audio';
+ const server=new WebSocketServer({host:'127.0.0.1',port:0,verifyClient:(_info,done)=>done(mode!=='rejected',403)});
  await once(server,'listening');
  const address=server.address();assert.ok(address&&typeof address!=='string');
- let mode:'audio'|'empty'|'oversized'|'closed'|'cancel'='audio';
  server.on('connection',(socket,request)=>{
   assert.match(request.headers.cookie??'',/^muid=[A-F0-9]{32};$/u);
   let messages=0;
@@ -123,7 +124,8 @@ test('server speech transport negotiates v2, saves bounded audio and rejects fai
    assert.match(String(data),/Time\)Z\r\nPath:ssml/u);
    assert.match(String(data),/phone &amp; &lt;test&gt;/u);
    if(mode==='cancel')return;
-   if(mode==='closed'){socket.close();return;}
+   if(mode==='closed'){socket.close(1011,'private provider reason must not be logged');return;}
+   if(mode==='invalid'){socket.send(Buffer.from([0]));return;}
    if(mode!=='empty'){
     const header=Buffer.from('Path:audio\r\nContent-Type:audio/mpeg\r\n');
     const audio=mode==='oversized'?Buffer.alloc(2_000_001):Buffer.from([0xff,0xfb,0x90,0x64]);
@@ -139,9 +141,11 @@ test('server speech transport negotiates v2, saves bounded audio and rejects fai
  const input={surface:'phone & <test>',voice:'en-US-AriaNeural',locale:'en-US'};
  try{
   assert.deepEqual(await synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),Buffer.from([0xff,0xfb,0x90,0x64]));
-  mode='empty';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),/empty_audio/);
+  mode='empty';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),error=>{assert.deepEqual(failureDiagnostics(error),{failureKind:'transport',failureCode:'EDGE_TTS_EMPTY_AUDIO',failurePhase:'synthesis'});return true;});
   mode='oversized';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),/audio_too_large/);
-  mode='closed';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),/connection_closed/);
-  mode='cancel';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(50),dependencies),/speech_cancelled/);
+  mode='closed';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),error=>{assert.deepEqual(failureDiagnostics(error),{failureKind:'transport',failureCode:'EDGE_TTS_CONNECTION_CLOSED',failurePhase:'synthesis',upstreamCloseCode:1011});return true;});
+  mode='rejected';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),error=>{assert.deepEqual(failureDiagnostics(error),{failureKind:'transport',failureCode:'EDGE_TTS_HANDSHAKE_REJECTED',failurePhase:'connect',upstreamStatus:403});return true;});
+  mode='invalid';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(3000),dependencies),error=>{assert.equal(failureDiagnostics(error).failureCode,'EDGE_TTS_INVALID_AUDIO');return true;});
+  mode='cancel';await assert.rejects(synthesizeEdgeSpeech(input,AbortSignal.timeout(50),dependencies),error=>{assert.equal(failureDiagnostics(error).failureCode,'EDGE_TTS_TIMEOUT');return true;});
  }finally{for(const socket of server.clients)socket.terminate();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });
