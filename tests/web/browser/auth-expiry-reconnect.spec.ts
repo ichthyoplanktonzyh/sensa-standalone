@@ -107,7 +107,7 @@ test('a rejected expired refresh token requires login while preserving offline f
  await expect(page.getByRole('button',{name:'登录 Sensa',exact:true})).toBeVisible();
  await expect(page.getByText('已连接账号',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();
- await expect(page.getByRole('button',{name:'发送登录邮件',exact:true})).toBeEnabled();
+ await expect(page.getByRole('button',{name:'发送验证码',exact:true})).toBeEnabled();
  expect(refreshes).toBe(1);
  expect({revision:fixture.cloudRevision,manifest:fixture.cloudManifest,blocks:[...fixture.cloudBlocks]}).toEqual(cloudBefore);
  expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(facts);

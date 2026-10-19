@@ -147,6 +147,7 @@ test("standing policy automatically releases ordinary application changes and bl
     ["apps/api/src/auth/principal.ts"],
     ["apps/api/src/sensa/access/auth.ts"],
     ["apps/api/src/server/environment.ts"],
+    ["scripts/release/betaAuthConfig.mjs"],
   ]) {
     const pending = planSystemRelease({
       targetCommit: sha("b"), previousManifest: previous, requestedScope: "auto",
@@ -232,6 +233,10 @@ test("system release manifest records new evidence and carries an unchanged comp
   const nextCandidate={...candidate,commit:sha('c')};
   const nextPlan=planSystemRelease({targetCommit:sha('c'),previousManifest:manifest,requestedScope:'auto',changedPaths:['apps/web/src/App.tsx'],releaseId:releaseId(sha('c'),'124')});
   assert.equal(nextPlan.decision.applicationMode,'web-only');
+  const betaPlan=planSystemRelease({targetCommit:sha('c'),previousManifest:manifest,requestedScope:'auto',changedPaths:['apps/web/src/App.tsx','scripts/release/betaAuthConfig.mjs'],releaseId:releaseId(sha('c'),'124')});
+  assert.equal(betaPlan.decision.applicationMode,'full');
+  assert.equal(betaPlan.decision.publishLearningContent,false);
+  assert.equal(betaPlan.source.changes.find(change=>change.path==='scripts/release/betaAuthConfig.mjs').impact,'application');
   const nextEvidence={plan:nextPlan,applicationCandidate:nextCandidate,
     ciCandidateSource:{format:'sensa-ci-candidate-source-v1',repository:'sensa/example',commit:sha('c'),workflowRunId:'100',buildAttempt:'1',validationAttempt:'2',artifactId:10,artifactName:`sensa-production-${sha('c')}-attempt-1`,artifactDigest:'sha256:'+digest('8')},
     cloudflareVersion:{format:'sensa-cloudflare-version-v1',releaseSha:sha('c'),versionId:'cloudflare-version-3'},

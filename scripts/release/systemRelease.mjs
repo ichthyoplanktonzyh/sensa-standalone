@@ -63,6 +63,7 @@ const applicationFiles = new Set([
   "wrangler.jsonc",
 ]);
 const automaticAuthorizationFiles = new Map([
+  ["scripts/release/betaAuthConfig.mjs", "production email authentication configuration"],
   ["wrangler.jsonc", "Cloudflare production configuration"],
   ["apps/api/src/server/environment.ts", "production service configuration contract"],
 ]);
@@ -117,6 +118,9 @@ export function classifyReleasePath(path) {
   if (contentReleaseScripts.has(path) || path.startsWith("content/") && path !== "content/README.md") {
     return "learning-content";
   }
+  // This executable changes hosted Auth state; it must run with the full
+  // application release rather than being treated as operational-only tooling.
+  if (path === "scripts/release/betaAuthConfig.mjs") return "application";
   if (operationalFiles.has(path) || operationalPrefixes.some((prefix) => path.startsWith(prefix))) {
     return "operational";
   }

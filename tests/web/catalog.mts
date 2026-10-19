@@ -333,7 +333,7 @@ const fastWithMemory = [
   'integration/portable-learning-registry',
   'integration/model-turn', 'integration/model-streaming', 'integration/model-execution',
   'quality/model-management', 'integration/semantic-agent-loop', 'integration/semantic-teacher-contract', 'integration/semantic-teacher-flow', 'integration/local-model-opt-in',
-  'release/release-candidate', 'release/supabase-auth-config', 'quality/source-syntax',
+  'release/release-candidate', 'release/supabase-auth-config', 'release/beta-invitation', 'quality/source-syntax',
   'integration/telemetry', 'integration/browser-reliability', 'integration/storage-capability',
   'integration/model-budget', 'quality/web-idle-work',
   'integration/agent-trace',
@@ -408,6 +408,7 @@ const playwrightPaths = new Set<string>([
 ]);
 
 const durabilityTests = new Set<string>([
+  'release/beta-invitation',
   'integration/backup-restore',
   'integration/personal-learning-scene',
   'integration/personal-meaning-correction',

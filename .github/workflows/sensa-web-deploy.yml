@@ -110,6 +110,9 @@ jobs:
           const bytes=readFileSync(process.env.RUNNER_TEMP+'/sensa-live-verification.mjs');
           writeFileSync('release-candidate/deployment-verifier-source.json',JSON.stringify({format:'sensa-deployment-verifier-source-v1',sourceCommit:sha,applicationCommit:process.env.SENSA_RELEASE_SHA,sha256:createHash('sha256').update(bytes).digest('hex')},null,2)+'\n');
           JS
+      - name: Verify invited email-code tooling for this application source
+        if: ${{ inputs.application_mode == 'full' && hashFiles('scripts/release/betaAuthConfig.mjs') != '' }}
+        run: node --import tsx tests/web/run.mts --suite=fast --id=beta-invitation
       - name: Refuse Web-only target or live backend drift before any mutation
         id: preflight
         env:
@@ -139,12 +142,18 @@ jobs:
           } catch { console.error('Migration database must match the approved Supabase project and require TLS.');process.exit(1); }
           JS
           npm run db:migrate
-      - name: Keep production Auth redirects aligned
+      - name: Keep production Auth redirects and invited email codes aligned
         id: auth_config
         if: ${{ inputs.application_mode == 'full' }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: node scripts/release/supabaseAuthConfig.mjs --apply
+          SENSA_FIRST_USER_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+        run: |
+          node scripts/release/supabaseAuthConfig.mjs --apply
+          # Historical candidates retain their own authentication implementation.
+          if [ -f scripts/release/betaAuthConfig.mjs ]; then
+            node scripts/release/betaAuthConfig.mjs --apply
+          fi
       - name: Configure accepted catalog and service boundaries
         id: service_config
         if: ${{ inputs.application_mode == 'full' }}

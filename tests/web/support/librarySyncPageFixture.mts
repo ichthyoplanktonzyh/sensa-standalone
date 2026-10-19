@@ -63,7 +63,7 @@ export async function createLibrarySyncPageFixture(browser:Browser,options:{sing
 }
 export async function loginSyncPage(page:Page,origin:string){
  await page.goto(origin+'/profile');await waitForSyncPageBridge(page);await expect(page.locator('#s-profile')).toBeVisible();await page.locator('#settings-security').click();await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();
- await page.getByLabel('邮箱',{exact:true}).fill('sync@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible({timeout:60000});
+ await page.getByLabel('邮箱',{exact:true}).fill('sync@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();await expect(page.locator('#s-profile')).toBeVisible({timeout:60000});
 }
 export async function syncPanel(page:Page,origin:string){await page.goto(origin+'/profile');await waitForSyncPageBridge(page);await expect(page.locator('#s-profile')).toBeVisible();await page.locator('#settings-data').click();return page.locator('.sensa-cloud-sync');}
 type Bridge=NonNullable<Window['__sensaBrowserSmoke']>;
