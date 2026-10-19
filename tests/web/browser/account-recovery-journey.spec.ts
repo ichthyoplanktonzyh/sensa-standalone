@@ -93,6 +93,31 @@ test('invited email code login rejects unopened emails, admits the invited owner
  await expect.poll(async()=>(await page.evaluate(()=>window.__sensaBrowserSmoke!.learningCheckpoint())).records.length).toBe(1);
 });
 
+test('an invited owner can sign in again with an email code after explicitly signing out',async({page,context})=>{
+ fixture.cloudManifest=null;fixture.cloudRevision=0;fixture.cloudBlocks.clear();
+ await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());
+ let verifications=0;
+ await page.route('**/auth/v1/otp*',route=>route.fulfill({json:{}}));
+ await page.route('**/auth/v1/verify*',async route=>{verifications++;await route.fulfill({json:fixture.session()});});
+ await page.route('**/auth/v1/logout*',route=>route.fulfill({status:204}));
+ const login=async()=>{
+  await page.getByRole('button',{name:'登录 Sensa',exact:true}).click();
+  await page.getByLabel('邮箱',{exact:true}).fill('package-center@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();
+  await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
+  await expect(page.getByText('已连接账号',{exact:true})).toBeVisible();
+ };
+ await page.goto(fixture.origin+'/profile');await expect(page.locator('#s-profile')).toBeVisible();
+ await page.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,0));
+ await page.locator('#settings-security').click();
+ await login();await expect.poll(()=>page.evaluate(()=>window.__sensaBrowserSmoke!.syncStatus())).toBe('synced');
+ const before=await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest());
+ await page.locator('#settings-security').click();await page.getByRole('button',{name:'退出账号',exact:true}).click();
+ await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key),fixture.storageKey)).toBeNull();
+ await login();
+ await page.reload();await expect(page.getByText('已连接账号',{exact:true})).toBeVisible();
+ expect(verifications).toBe(2);expect(await page.evaluate(()=>window.__sensaBrowserSmoke!.durableBackupFactsForTest())).toEqual(before);
+});
+
 test('previously issued email links still use a persisted PKCE challenge and preserve local facts after admission',async({page,context})=>{
  fixture.cloudManifest=null;fixture.cloudRevision=0;fixture.cloudBlocks.clear();
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.fallback():route.abort());

@@ -49,6 +49,9 @@ export default function AccountExperience({children,onReturnToLanding}:{children
  const extension=new URLSearchParams(location.search),extensionRequest=extension.get('extension')==='connect';
  const recover=async(freshSignIn?:{epoch:string|null})=>{
   if(deletionRef.current)return;
+  // The SDK's SIGNED_IN event schedules another recovery. Preserve this verified
+  // login before the first await so that recovery cannot retire its logout proof.
+  if(freshSignIn)explicitSignIn.current=freshSignIn.epoch;
   const gen=++generation.current;
   let needsInitialRestore=false,guestAttempt=false;
   let usableLocalFacts=false;
@@ -60,7 +63,6 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    const callback=await completeEmailLink(entryEpoch);
    if(gen!==generation.current)return;
    if(callback==='signed-in'&&!callbackAccepted.current){callbackAccepted.current=true;explicitSignIn.current=emailLinkSignoutEpoch();}
-   if(freshSignIn)explicitSignIn.current=freshSignIn.epoch;
    if(callback==='failed'&&!callbackDismissed.current)setNotice(localFlowText('emailLinkInvalid'));
    const cachedSubject=cachedAuthSubject();
    const inspect=()=>readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),epoch:await readAccountSignoutEpoch(tx),usable:checkpoint?.status==='synced'||await tx.get('meta','local-reset')==='local-clear'||await hasGuestLibraryContent(tx)};});
