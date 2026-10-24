@@ -23,7 +23,7 @@ jobs:
     environment: web-candidate
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -61,7 +61,7 @@ jobs:
         run: npm test
       - name: Preserve native fast-test reports and exact selection
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: sensa-fast-report-attempt-${{ github.run_attempt }}
           path: .tmp/test-results/ci-node/
@@ -69,7 +69,7 @@ jobs:
           retention-days: 7
       - name: Preserve the tested main release candidate
         if: ${{ github.event_name == 'push' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sensa-production-${{ github.sha }}-attempt-${{ github.run_attempt }}
           retention-days: 14
@@ -104,7 +104,7 @@ jobs:
       SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -137,7 +137,7 @@ jobs:
         run: npm run test:ci:e2e
       - name: Preserve native database-test reports and exact selection
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: sensa-database-report-attempt-${{ github.run_attempt }}
           path: |
@@ -147,7 +147,7 @@ jobs:
           retention-days: 7
       - name: Preserve browser failure evidence
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: sensa-core-browser-failure-attempt-${{ github.run_attempt }}
           path: .tmp/playwright-results/

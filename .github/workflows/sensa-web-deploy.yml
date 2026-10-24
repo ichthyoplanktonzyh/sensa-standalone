@@ -68,18 +68,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_sha }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
       - name: Restore the exact authorized application plan
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           artifact-ids: ${{ inputs.plan_artifact_id }}
           merge-multiple: true
           path: .tmp/application-release-plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ inputs.candidate_artifact_id }}
           merge-multiple: true
@@ -125,7 +125,7 @@ jobs:
           if(plan.decision.applicationMode!==process.env.SENSA_APPLICATION_MODE)throw Error('Application mode differs from the saved release plan');
           JS
           node "$RUNNER_TEMP/sensa-live-verification.mjs" preflight
-      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
         if: ${{ inputs.application_mode == 'full' }}
         with:
           version: 2.117.0
@@ -177,7 +177,7 @@ jobs:
         env:
           SENSA_RELEASE_STEPS: ${{ toJSON(steps) }}
         run: node scripts/release/releaseStatus.mjs backend
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         id: evidence
         if: always()
         with:
@@ -212,18 +212,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_sha }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
       - name: Restore the exact authorized application plan
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           artifact-ids: ${{ inputs.plan_artifact_id }}
           merge-multiple: true
           path: .tmp/application-release-plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ inputs.candidate_artifact_id }}
           merge-multiple: true
@@ -254,7 +254,7 @@ jobs:
           const bytes=readFileSync(process.env.RUNNER_TEMP+'/sensa-live-verification.mjs');
           writeFileSync('release-candidate/deployment-verifier-source.json',JSON.stringify({format:'sensa-deployment-verifier-source-v1',sourceCommit:sha,applicationCommit:process.env.SENSA_RELEASE_SHA,sha256:createHash('sha256').update(bytes).digest('hex')},null,2)+'\n');
           JS
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           artifact-ids: ${{ needs.backend.outputs.artifact_id }}
           merge-multiple: true
@@ -273,7 +273,7 @@ jobs:
         env:
           SENSA_RELEASE_STEPS: ${{ toJSON(steps) }}
         run: node scripts/release/releaseStatus.mjs web-upload
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         id: evidence
         if: always()
         with:
@@ -309,18 +309,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_sha }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
       - name: Restore the exact authorized application plan
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           artifact-ids: ${{ inputs.plan_artifact_id }}
           merge-multiple: true
           path: .tmp/application-release-plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ inputs.candidate_artifact_id }}
           merge-multiple: true
@@ -351,12 +351,12 @@ jobs:
           const bytes=readFileSync(process.env.RUNNER_TEMP+'/sensa-live-verification.mjs');
           writeFileSync('release-candidate/deployment-verifier-source.json',JSON.stringify({format:'sensa-deployment-verifier-source-v1',sourceCommit:sha,applicationCommit:process.env.SENSA_RELEASE_SHA,sha256:createHash('sha256').update(bytes).digest('hex')},null,2)+'\n');
           JS
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           artifact-ids: ${{ needs.backend.outputs.artifact_id }}
           merge-multiple: true
           path: .tmp/backend-evidence
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           artifact-ids: ${{ needs.upload.outputs.artifact_id }}
           merge-multiple: true
@@ -415,7 +415,7 @@ jobs:
         env:
           SENSA_RELEASE_STEPS: ${{ toJSON(steps) }}
         run: node scripts/release/releaseStatus.mjs application
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         id: evidence
         if: always()
         with:
